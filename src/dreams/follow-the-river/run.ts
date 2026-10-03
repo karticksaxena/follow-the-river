@@ -5,6 +5,7 @@ import type { AreaDef, PickupDef } from './areas/types';
 import type { Bow } from './bow';
 import type { Fish } from './fish';
 import type { Flashlight } from './flashlight';
+import type { Gun } from './gun';
 import type { HintId } from './hints';
 import type { Hud } from './hud';
 import type { PickupMeshes } from './pickups';
@@ -24,6 +25,7 @@ export interface Systems {
   horde: Horde;
   flashlight: Flashlight;
   bow: Bow;
+  gun: Gun;
   fish: Fish;
   pickups: PickupMeshes;
   hud: Hud;

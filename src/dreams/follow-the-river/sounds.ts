@@ -18,6 +18,12 @@ export interface Sounds {
   heartbeat: AudioBuffer;
   tapeVoice: AudioBuffer;
   click: AudioBuffer;
+  gunshot: AudioBuffer;
+  dryFire: AudioBuffer;
+  /** The orca's sad cry (2.5 s). */
+  orcaCry: AudioBuffer;
+  /** 12 s seamless pad for the ending. */
+  dawn: AudioBuffer;
 }
 
 const sound = (path: string): string => assetUrl(`sounds/${path}.m4a`);
@@ -137,6 +143,78 @@ export function clickSamples(rate: number, random: () => number): Float32Array<A
   return samples;
 }
 
+/** Pistol shot: a bright noise crack (fast decay) over a 60 Hz thump, 0.6 s. */
+export function gunshotSamples(rate: number, random: () => number): Float32Array<ArrayBuffer> {
+  const samples = new Float32Array(Math.floor(rate * 0.6));
+  let low = 0;
+  const smoothing = onePole(5000, rate);
+  for (let i = 0; i < samples.length; i++) {
+    const t = i / rate;
+    low += smoothing * (random() * 2 - 1 - low);
+    const crack = low * 2 * Math.exp(-t * 28);
+    const tail = low * 0.4 * Math.exp(-t * 6);
+    const thump = Math.sin(2 * Math.PI * 60 * t) * 0.9 * Math.exp(-t * 10);
+    samples[i] = clamp((crack + tail + thump) * Math.min(1, t / 0.001));
+  }
+  return samples;
+}
+
+/** Empty chamber: a dry 40 ms click with a 2.4 kHz ping. */
+export function dryFireSamples(rate: number, random: () => number): Float32Array<ArrayBuffer> {
+  const samples = new Float32Array(Math.round(rate * 0.04));
+  for (let i = 0; i < samples.length; i++) {
+    const t = i / rate;
+    const noise = (random() * 2 - 1) * Math.exp(-t * 300);
+    const ping = Math.sin(2 * Math.PI * 2400 * t) * Math.exp(-t * 150) * 0.6;
+    samples[i] = clamp(noise * 0.8 + ping);
+  }
+  return samples;
+}
+
+/** The orca's cry: a sine sweeping 220 → 140 Hz with slow vibrato, breath noise, soft fade in and out. */
+export function orcaCrySamples(
+  rate: number,
+  seconds: number,
+  random: () => number,
+): Float32Array<ArrayBuffer> {
+  const samples = new Float32Array(Math.floor(rate * seconds));
+  const smoothing = onePole(600, rate);
+  let phase = 0;
+  let breath = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const t = i / rate;
+    const progress = t / seconds;
+    const vibrato = 1 + 0.03 * Math.sin(2 * Math.PI * 4 * t);
+    phase += (2 * Math.PI * (220 - 80 * progress) * vibrato) / rate;
+    breath += smoothing * (random() * 2 - 1 - breath);
+    const fade = Math.sin(Math.PI * progress) ** 1.5;
+    samples[i] = clamp((Math.sin(phase) * 0.6 + breath * 0.25) * fade);
+  }
+  return samples;
+}
+
+/** Notes (Hz) of the dawn chord: C major spread over three octaves. */
+const DAWN_NOTES = [65.41, 130.81, 196, 261.63, 329.63, 392] as const;
+
+/**
+ * Dawn: a soft major-chord pad that swells in slowly. Every note is rounded to a whole number of
+ * cycles in the buffer and the swell is periodic, so the loop has no seam.
+ */
+export function dawnSamples(rate: number, seconds: number): Float32Array<ArrayBuffer> {
+  const samples = new Float32Array(Math.floor(rate * seconds));
+  const whole = DAWN_NOTES.map((f) => Math.max(1, Math.round(f * seconds)) / seconds);
+  for (let i = 0; i < samples.length; i++) {
+    const t = i / rate;
+    const swell = 0.4 + 0.6 * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / seconds));
+    let sum = 0;
+    for (const f of whole) {
+      sum += Math.sin(2 * Math.PI * f * t) + 0.5 * Math.sin(2 * Math.PI * (f + 1 / seconds) * t);
+    }
+    samples[i] = clamp((sum / (whole.length * 1.5)) * 1.2 * swell);
+  }
+  return samples;
+}
+
 /** Overlaps `count` groans at random offsets and gains, low-passed, normalised to a 0.8 peak. */
 export function mixHorde(
   rate: number,
@@ -212,5 +290,9 @@ export async function loadSounds(audio: AudioBus): Promise<Sounds> {
     heartbeat: toBuffer(context, heartbeatSamples(rate)),
     tapeVoice: toBuffer(context, tapeVoiceSamples(rate, 6, Math.random)),
     click: toBuffer(context, clickSamples(rate, Math.random)),
+    gunshot: toBuffer(context, gunshotSamples(rate, Math.random)),
+    dryFire: toBuffer(context, dryFireSamples(rate, Math.random)),
+    orcaCry: toBuffer(context, orcaCrySamples(rate, 2.5, Math.random)),
+    dawn: toBuffer(context, dawnSamples(rate, 12)),
   };
 }

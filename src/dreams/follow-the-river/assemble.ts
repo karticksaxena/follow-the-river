@@ -9,6 +9,7 @@ import { createBow, type Bow } from './bow';
 import { HORDE_CAPACITY } from './difficulty';
 import { createFish, type Fish } from './fish';
 import { createFlashlight } from './flashlight';
+import { createGun, type Gun } from './gun';
 import { createHud } from './hud';
 import { propUrl } from './kits';
 import { createPickupMeshes, type PickupMeshes } from './pickups';
@@ -30,6 +31,7 @@ export interface Assembled {
 interface Bodies {
   horde: Horde;
   bow: Bow;
+  gun: Gun;
   fish: Fish;
   pickups: PickupMeshes;
   boathouse: THREE.Object3D;
@@ -46,17 +48,26 @@ function loadBodies(
   return Promise.all([
     createHorde(scene, ctx.audio, grid, sounds.groans, HORDE_CAPACITY),
     createBow(ctx.stage.camera, scene, ctx.audio, sounds),
+    createGun(ctx.stage.camera, scene, ctx.audio, sounds),
     createFish(scene, ctx.audio, sounds),
     createPickupMeshes(scene),
     // The night's safe-spot building (the city's boathouse, the forest-edge camp…); Night 3 has none.
     area.safeProp ? loadModel(propUrl(area.safeProp.prop)) : Promise.resolve(new THREE.Group()),
-  ]).then(([horde, bow, fish, pickups, boathouse]) => ({ horde, bow, fish, pickups, boathouse }));
+  ]).then(([horde, bow, gun, fish, pickups, boathouse]) => ({
+    horde,
+    bow,
+    gun,
+    fish,
+    pickups,
+    boathouse,
+  }));
 }
 
 /** Frees what a cancelled build made. Only touches the camera if the scene still owns it. */
 function free(scene: THREE.Scene, camera: THREE.Camera, parts?: Partial<Systems>): void {
   parts?.horde?.dispose();
   parts?.bow?.dispose();
+  parts?.gun?.dispose();
   parts?.fish?.dispose();
   parts?.pickups?.dispose();
   parts?.flashlight?.dispose();
@@ -86,7 +97,7 @@ export async function assemble(
   }
   const grid = createBoxGrid(world.colliders);
   const bodies = await loadBodies(ctx, area, world, grid, sounds);
-  const { horde, bow, fish, pickups, boathouse } = bodies;
+  const { horde, bow, gun, fish, pickups, boathouse } = bodies;
   if (isCancelled()) {
     free(scene, camera, bodies);
     return null;
@@ -133,6 +144,7 @@ export async function assemble(
     sounds,
     horde,
     bow,
+    gun,
     fish,
     pickups,
     flashlight,

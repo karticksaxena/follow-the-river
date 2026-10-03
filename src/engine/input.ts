@@ -33,6 +33,12 @@ export class KeyState {
     this.held.delete(buttonCode(event));
   };
 
+  /** A wheel notch is a press of `WheelUp` or `WheelDown`. */
+  private readonly onWheel = (event: Event): void => {
+    const dy = 'deltaY' in event && typeof event.deltaY === 'number' ? event.deltaY : 0;
+    if (dy !== 0) this.pressed.add(dy < 0 ? 'WheelUp' : 'WheelDown');
+  };
+
   private readonly onBlur = (): void => {
     this.held.clear();
     this.pressed.clear();
@@ -45,6 +51,7 @@ export class KeyState {
     target.addEventListener('keyup', this.onUp);
     target.addEventListener('mousedown', this.onMouseDown);
     target.addEventListener('mouseup', this.onMouseUp);
+    target.addEventListener('wheel', this.onWheel);
     target.addEventListener('blur', this.onBlur);
   }
 
@@ -53,6 +60,7 @@ export class KeyState {
     this.target?.removeEventListener('keyup', this.onUp);
     this.target?.removeEventListener('mousedown', this.onMouseDown);
     this.target?.removeEventListener('mouseup', this.onMouseUp);
+    this.target?.removeEventListener('wheel', this.onWheel);
     this.target?.removeEventListener('blur', this.onBlur);
     this.target = null;
     this.onBlur();

@@ -43,6 +43,8 @@ export function stepArrow(arrow: Arrow, dt: number): void {
 
 export interface Bow {
   readonly ready: boolean;
+  /** The first-person model; controls toggle `visible` and lower it while switching. */
+  readonly view: THREE.Group;
   /** Looses an arrow from `eye` along unit `look`. Caller has already spent the arrow. */
   fire(eye: Vec3, look: Vec3): void;
   /** Flies arrows, kills what they hit, sticks misses into walls/ground; returns arrows recovered this frame. */
@@ -236,6 +238,7 @@ export async function createBow(
     get ready() {
       return s.cooldown <= 0;
     },
+    view: s.view,
     fire: (eye, look) => fireArrow(s, eye, look),
     update: (dt, horde, grid, player) => updateBow(s, dt, horde, grid, player),
     reset: () => resetBow(s),

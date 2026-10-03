@@ -14,7 +14,7 @@ export const PICKUP_GAIN: Readonly<
   arrows: { kind: 'arrows', amount: 3 },
   fishPack: { kind: 'fishPacks', amount: 1 },
   ammo: { kind: 'ammo', amount: 6 },
-  // The gun itself (Task 3 grants `hasGun`); it comes loaded with a few bullets.
+  // The gun itself (taking it also sets `hasGun`); it comes loaded with a few bullets.
   gun: { kind: 'ammo', amount: 8 },
   tape: null,
 };
@@ -54,6 +54,7 @@ export function collect(state: RunState, pickup: PickupDef): RunState {
     ...state,
     supplies: gain ? addSupply(state.supplies, gain.kind, gain.amount) : state.supplies,
     taken: [...state.taken, pickup.id],
+    hasGun: state.hasGun || pickup.kind === 'gun',
     tapes:
       pickup.kind === 'tape' && pickup.tape !== undefined
         ? [...state.tapes, pickup.tape]
@@ -61,10 +62,10 @@ export function collect(state: RunState, pickup: PickupDef): RunState {
   };
 }
 
-/** True when taking this pickup would add nothing because that supply is at its limit. */
+/** True when taking this pickup would add nothing because that supply is at its limit (the gun itself always counts). */
 export function isFull(pickup: PickupDef, supplies: Supplies): boolean {
   const gain = PICKUP_GAIN[pickup.kind];
-  return gain !== null && supplies[gain.kind] >= SUPPLY_LIMITS[gain.kind];
+  return pickup.kind !== 'gun' && gain !== null && supplies[gain.kind] >= SUPPLY_LIMITS[gain.kind];
 }
 
 export function promptFor(pickup: PickupDef, supplies: Supplies): string {
@@ -79,15 +80,14 @@ export interface PickupMeshes {
   dispose(): void;
 }
 
-// Ammo reuses the arrows model until the gun task supplies its own.
+// Ammo reuses the arrows model.
 const MODEL: Readonly<Record<PickupKind, string>> = {
   battery: 'battery',
   arrows: 'arrows',
   fishPack: 'fishpack',
   tape: 'tape',
   ammo: 'arrows',
-  // Task 3 swaps in the pistol model.
-  gun: 'arrows',
+  gun: 'pistol',
 };
 const HOVER = 0.5;
 const BOB = 0.04;

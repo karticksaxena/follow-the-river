@@ -7,6 +7,8 @@ export interface HudState {
   ammo: number;
   health: number;
   showAmmo: boolean;
+  /** The weapon in hand (the indicator shows with the ammo once you own the gun). */
+  weapon: 'bow' | 'gun';
 }
 export interface Hud {
   set(state: HudState): void;
@@ -31,6 +33,8 @@ interface HudEls {
   readonly arrows: HTMLElement;
   readonly fish: HTMLElement;
   readonly ammo: HTMLElement;
+  readonly weapons: Readonly<Record<'bow' | 'gun', HTMLElement>>;
+  readonly weaponRow: HTMLElement;
   readonly promptEl: HTMLElement;
   // Last written values, so the DOM is only touched when something changes.
   // `fresh` makes the first set() write everything; after that fields are copied in place.
@@ -46,7 +50,12 @@ function buildHud(root: HTMLElement): HudEls {
   const stats = el('div', 'hud-stats');
   const [battery, arrows, fish, ammo] = [el('div'), el('div'), el('div'), el('div')];
   const promptEl = el('div', 'hud-prompt');
-  stats.append(battery, arrows, fish, ammo);
+  const weapons = { bow: el('span'), gun: el('span') };
+  weapons.bow.textContent = '1 Bow';
+  weapons.gun.textContent = '2 Gun';
+  const weaponRow = el('div');
+  weaponRow.append(weapons.bow, ' · ', weapons.gun);
+  stats.append(battery, arrows, fish, ammo, weaponRow);
   hud.append(hurtEl, dot, stats, promptEl);
   root.append(hud);
   hurtEl.addEventListener('animationend', () => hurtEl.classList.remove('flash'));
@@ -57,6 +66,7 @@ function buildHud(root: HTMLElement): HudEls {
     ammo: 0,
     health: 0,
     showAmmo: false,
+    weapon: 'bow',
   };
   return {
     hud,
@@ -65,6 +75,8 @@ function buildHud(root: HTMLElement): HudEls {
     arrows,
     fish,
     ammo,
+    weapons,
+    weaponRow,
     promptEl,
     last,
     fresh: true,
@@ -78,7 +90,14 @@ function writeStats(h: HudEls, s: HudState): void {
   if (fresh || last.arrows !== s.arrows) h.arrows.textContent = `➶ ${s.arrows}`;
   if (fresh || last.fishPacks !== s.fishPacks) h.fish.textContent = `🐟 ${s.fishPacks}`;
   if (fresh || last.ammo !== s.ammo) h.ammo.textContent = `● ${s.ammo}`;
-  if (fresh || last.showAmmo !== s.showAmmo) h.ammo.hidden = !s.showAmmo;
+  if (fresh || last.showAmmo !== s.showAmmo) {
+    h.ammo.hidden = !s.showAmmo;
+    h.weaponRow.hidden = !s.showAmmo;
+  }
+  if (fresh || last.weapon !== s.weapon) {
+    h.weapons.bow.style.opacity = s.weapon === 'bow' ? '1' : '0.4';
+    h.weapons.gun.style.opacity = s.weapon === 'gun' ? '1' : '0.4';
+  }
   if (fresh || last.health !== s.health) {
     h.hurtEl.style.opacity = String(Math.max(0, Math.min(1, 1 - s.health / 100)));
   }
@@ -94,6 +113,7 @@ function setHud(h: HudEls, s: HudState): void {
   last.ammo = s.ammo;
   last.health = s.health;
   last.showAmmo = s.showAmmo;
+  last.weapon = s.weapon;
 }
 
 function flashHurt(h: HudEls): void {

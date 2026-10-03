@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { createControls, type Controls } from './controls';
-import { nightDifficulty, nightTuning } from './difficulty';
+import { nightDifficulty, nightTuning, spawnInterval } from './difficulty';
 import { BEAM, drainBattery } from './flashlight';
 import { atSafeSpot, nearSpot, takeDamage } from './flow';
 import type { HudState } from './hud';
@@ -9,7 +9,7 @@ import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
 import { addSupply, chapterOf, isNight } from './state';
 import type { PlayerSense } from './zombies/horde';
-import { nextSpawn, type Strip } from './zombies/spawner';
+import { nextSpawn, type Pace, type Strip } from './zombies/spawner';
 
 /** Shack darkness eases at this rate (per second); lights are touched only past `DIM_EPSILON`. */
 const DIM_RATE = 1.5;
@@ -39,6 +39,8 @@ interface State {
   look: THREE.Vector3;
   spawnTimer: { timer: number };
   strip: Strip;
+  /** The night's pace, refreshed each frame (a gunshot's noise halves the interval). */
+  pace: Pace;
   hudState: HudState;
   wasPaused: boolean;
   /** A non-lethal hit this frame: if the game pauses next (hint page), grace starts on resume. */
@@ -79,7 +81,16 @@ function createState(sys: Systems, run: Run, events: Events): State {
       minZ: area.safeZ + NIGHT_SAFE_BUFFER,
       maxZ: area.barricadeZ,
     },
-    hudState: { battery: 0, arrows: 0, fishPacks: 0, ammo: 0, health: 0, showAmmo: false },
+    hudState: {
+      battery: 0,
+      arrows: 0,
+      fishPacks: 0,
+      ammo: 0,
+      health: 0,
+      showAmmo: false,
+      weapon: 'bow',
+    },
+    pace: { ...nightDifficulty(chapterOf(run.phase)) },
     wasPaused: true,
     hitPause: false,
     grace: 0,
@@ -127,6 +138,7 @@ function tickWorld(p: State, dt: number): void {
   supplies.battery = drainBattery(supplies.battery, sys.flashlight.on, dt);
   sys.flashlight.apply(supplies.battery, run.time);
   sys.horde.update(dt, sense, p.onHit);
+  sys.gun.update(dt);
   const recovered = sys.bow.update(dt, sys.horde, sys.grid, sense);
   if (recovered > 0) run.live.supplies = addSupply(run.live.supplies, 'arrows', recovered);
   sys.fish.update(dt, sense, night ? sys.horde : null, night);
@@ -136,6 +148,9 @@ function tickWorld(p: State, dt: number): void {
 function spawnNight(p: State, dt: number): void {
   const { sys, sense } = p;
   const chapter = chapterOf(p.run.phase);
+  const base = nightDifficulty(chapter);
+  p.pace.cap = base.cap;
+  p.pace.interval = spawnInterval(base.interval, sys.gun.noiseLeft);
   const at = nextSpawn(
     p.spawnTimer,
     dt,
@@ -145,7 +160,7 @@ function spawnNight(p: State, dt: number): void {
     sys.area.safeZ,
     p.blocked,
     Math.random,
-    nightDifficulty(chapter),
+    p.pace,
   );
   if (!at) return;
   sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), nightTuning(chapter));
@@ -182,6 +197,8 @@ function tickView(p: State, dt: number): void {
   hudState.arrows = s.arrows;
   hudState.fishPacks = s.fishPacks;
   hudState.ammo = s.ammo;
+  hudState.showAmmo = run.live.hasGun;
+  hudState.weapon = p.controls.weapon();
   hudState.health = run.health;
   sys.hud.set(hudState);
   sys.hud.prompt(p.controls.prompt());
@@ -215,7 +232,7 @@ function tick(p: State, dt: number): void {
   }
   run.time += dt;
   updateSense(p);
-  p.controls.update();
+  p.controls.update(dt);
   tickWorld(p, dt);
   sys.scares.update(dt, sense, isNight(run.phase));
   if (isNight(run.phase)) spawnNight(p, dt);
@@ -235,6 +252,8 @@ export function createPlay(sys: Systems, run: Run, events: Events): Play {
       p.wasInShack = false;
       p.hitPause = false;
       p.grace = 0;
+      p.sys.gun.reset();
+      p.controls.reset();
       p.controls.drain(); // a stale click (e.g. on "Continue") must not fire an arrow
     },
     update: (dt) => tick(p, dt),

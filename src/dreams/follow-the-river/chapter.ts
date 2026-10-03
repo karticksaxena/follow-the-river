@@ -61,6 +61,7 @@ function teardown(sys: Systems, stop: () => void): void {
   sys.scares.dispose();
   stopTape();
   sys.bow.dispose();
+  sys.gun.dispose();
   sys.fish.dispose();
   sys.pickups.dispose();
   sys.hud.dispose();
