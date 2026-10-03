@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-03-kartiks-dreams-design.md`
 
-**Evidence:** Every code block below was lint-, type- and test-checked (63 tests) in a scratch prototype on 2026-10-03, then run in Chrome on WebGPU and `?webgl`. Copy the code exactly. If a newer package version breaks it, fix the code; don't drop the check.
+**Evidence:** Every code block below was lint-, type- and test-checked (70 tests) in a scratch prototype on 2026-10-03, then run in Chrome on WebGPU and `?webgl`. Copy the code exactly. If a newer package version breaks it, fix the code; don't drop the check.
 
 ## Global Constraints
 
@@ -70,6 +70,7 @@ Also covered: a dream whose code fails to download returns to the cards with a m
 | `src/engine/audio.ts` | Audio listener, unlock, volume, procedural room tone |
 | `src/engine/models.ts` | GLB loading, cache, unlit→lit material swap |
 | `src/engine/sky.ts` | Gradient sky dome |
+| `src/engine/post.ts` | Bloom, vignette and film grain on top of the render |
 | `src/dreams/types.ts` | `DreamInfo`, `DreamContext`, `DreamModule` |
 | `src/dreams/registry.ts` | List of dreams |
 | `src/dreams/load.ts` | Safe dream loading |
@@ -127,6 +128,9 @@ coverage/
 !.vscode/extensions.json
 !.vscode/settings.json
 !.vscode/tasks.json
+
+# Superpowers SDD scratch (ledger, briefs, review packages)
+.superpowers/
 ```
 
 - [ ] **Step 2: Confirm `.claude/settings.local.json` is ignored and nothing personal is staged**
@@ -1162,7 +1166,13 @@ describe('screenAfter', () => {
 `src/engine/pager.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { pagerActionForKey, startPager, stepPager } from './pager';
+import {
+  pagerActionForKey,
+  pagerActionForKeyEvent,
+  startPager,
+  stepPager,
+  type ReadingKey,
+} from './pager';
 
 describe('pager', () => {
   it('moves forward one page at a time and finishes after the last', () => {
@@ -1193,6 +1203,39 @@ describe('pager', () => {
     expect(pagerActionForKey('ArrowLeft')).toBe('prev');
     expect(pagerActionForKey('Backspace')).toBe('prev');
     expect(pagerActionForKey('KeyW')).toBeNull();
+  });
+});
+
+const key = (code: string, extra: Partial<ReadingKey> = {}): ReadingKey => ({
+  code,
+  repeat: false,
+  modifier: false,
+  onButton: false,
+  ...extra,
+});
+
+describe('pagerActionForKeyEvent', () => {
+  it('keeps arrows and Backspace working after a button was clicked', () => {
+    expect(pagerActionForKeyEvent(key('ArrowRight', { onButton: true }))).toBe('next');
+    expect(pagerActionForKeyEvent(key('ArrowLeft', { onButton: true }))).toBe('prev');
+    expect(pagerActionForKeyEvent(key('Backspace', { onButton: true }))).toBe('prev');
+  });
+
+  it('leaves Enter and Space on a focused button to the button itself', () => {
+    expect(pagerActionForKeyEvent(key('Enter', { onButton: true }))).toBeNull();
+    expect(pagerActionForKeyEvent(key('Space', { onButton: true }))).toBeNull();
+  });
+
+  it('ignores a held-down key so pages never race past', () => {
+    expect(pagerActionForKeyEvent(key('Enter', { repeat: true }))).toBeNull();
+  });
+
+  it('leaves browser shortcuts like Alt+Left alone', () => {
+    expect(pagerActionForKeyEvent(key('ArrowLeft', { modifier: true }))).toBeNull();
+  });
+
+  it('turns pages with Enter when no button has focus', () => {
+    expect(pagerActionForKeyEvent(key('Enter'))).toBe('next');
   });
 });
 ```
@@ -1260,12 +1303,40 @@ export function pagerActionForKey(code: string): PagerAction | null {
   if (code === 'ArrowLeft' || code === 'Backspace') return 'prev';
   return null;
 }
+
+export interface ReadingKey {
+  code: string;
+  /** The key is held down and the browser is auto-repeating it. */
+  repeat: boolean;
+  /** Alt, Ctrl or Cmd is held (a browser shortcut such as Alt+← back). */
+  modifier: boolean;
+  /** A button has focus; Enter and Space already click it natively. */
+  onButton: boolean;
+}
+
+/**
+ * The page action for a key press, or null to leave the key alone. Ignores held-down
+ * repeats (no racing through pages), browser shortcuts, and Enter/Space on a focused
+ * button (the button's own click handles those). Arrows and Backspace always work.
+ */
+export function pagerActionForKeyEvent(key: ReadingKey): PagerAction | null {
+  if (key.repeat || key.modifier) return null;
+  if (
+    key.onButton &&
+    key.code !== 'ArrowRight' &&
+    key.code !== 'ArrowLeft' &&
+    key.code !== 'Backspace'
+  ) {
+    return null;
+  }
+  return pagerActionForKey(key.code);
+}
 ```
 
 - [ ] **Step 4: Run the tests and watch them pass**
 
 Run: `pnpm vitest run src/engine/device.test.ts src/engine/lock.test.ts src/engine/pager.test.ts`
-Expected: PASS (11 tests).
+Expected: PASS (16 tests).
 
 - [ ] **Step 5: Implement the DOM modules**
 
@@ -1341,10 +1412,10 @@ export function toggleFullscreen(): void {
 }
 ```
 
-`src/engine/menus.ts`. `showPages` ignores keys aimed at a focused button, so Enter on a focused "Next" never turns two pages:
+`src/engine/menus.ts`. `showPages` reads keys through `pagerActionForKeyEvent`. The arrows and Backspace always work, even after a mouse click left a button focused. Enter and Space on a focused button are left to the button, so a page never turns twice. Held-down repeats and Alt/Ctrl/Cmd shortcuts are ignored. The listener removes itself if another screen replaces the pages:
 ```ts
 import { toggleFullscreen } from './fullscreen';
-import { pagerActionForKey, startPager, stepPager, type PagerAction } from './pager';
+import { pagerActionForKeyEvent, startPager, stepPager, type PagerAction } from './pager';
 import { SENSITIVITY_RANGE, type Settings } from './settings';
 import { button, el, type Overlay } from './ui';
 
@@ -1381,9 +1452,14 @@ export function showPages(overlay: Overlay, pages: readonly string[], onDone: ()
     next.textContent = state.index + 1 === state.total ? 'Continue ✓' : 'Next →';
   };
   const onKey = (event: KeyboardEvent): void => {
-    // A focused button already reacts to Enter/Space natively; don't count the key twice.
-    if (event.target instanceof HTMLButtonElement) return;
-    const action = pagerActionForKey(event.code);
+    // Another screen replaced these pages: stop listening instead of acting on stale state.
+    if (!panel.isConnected) return removeEventListener('keydown', onKey);
+    const action = pagerActionForKeyEvent({
+      code: event.code,
+      repeat: event.repeat,
+      modifier: event.altKey || event.ctrlKey || event.metaKey,
+      onButton: event.target instanceof HTMLButtonElement,
+    });
     if (!action) return;
     event.preventDefault();
     act(action);
@@ -1395,14 +1471,14 @@ export function showPages(overlay: Overlay, pages: readonly string[], onDone: ()
     overlay.closePanel();
     onDone();
   };
-  overlay.panel((panel) => {
+  const panel = overlay.panel((body) => {
     const row = el('div', 'row');
     row.append(
       back,
       next,
       button('Skip', () => act('skip'), 'btn quiet'),
     );
-    panel.append(text, count, row, el('p', 'keys', 'Enter / → next · ← back'));
+    body.append(text, count, row, el('p', 'keys', 'Enter / → next · ← back'));
   });
   addEventListener('keydown', onKey);
   render();
@@ -1466,7 +1542,7 @@ export function showPauseMenu(overlay: Overlay, options: PauseMenuOptions): void
 - [ ] **Step 6: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 27 passed`.
+Expected: all green, `Tests 32 passed`.
 
 - [ ] **Step 7: Commit**
 
@@ -1861,7 +1937,7 @@ export function createPlayer(
 - [ ] **Step 4: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 40 passed`.
+Expected: all green, `Tests 45 passed`.
 
 - [ ] **Step 5: Commit**
 
@@ -1975,7 +2051,7 @@ export function roomToneBuffer(context: BaseAudioContext, seconds = 6): AudioBuf
 - [ ] **Step 4: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 41 passed`.
+Expected: all green, `Tests 46 passed`.
 
 - [ ] **Step 5: Commit**
 
@@ -1993,7 +2069,7 @@ git commit -m "feat(engine): audio bus with click-to-unlock and brown-noise room
 - Test: `src/engine/models.test.ts`
 
 **Interfaces:**
-- Produces: `litFrom(material): THREE.Material`, `makeLit(root)`, `loadModel(url): Promise<THREE.Object3D>` (cached, returns a clone).
+- Produces: `litFrom(material): THREE.Material`, `makeLit(root)`, `enableShadows(root, cast = true)`, `loadModel(url): Promise<THREE.Object3D>` (cached, lit, shadowed; returns a clone).
 
 Facts verified on 2026-10-03:
 - Kenney Furniture Kit is CC0 (its `License.txt`) and ships GLBs under `Models/GLTF format/`.
@@ -2034,7 +2110,7 @@ Every file in `public/assets/` must be listed here. CC0 only.
 ```ts
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { litFrom, makeLit } from './models';
+import { enableShadows, litFrom, makeLit } from './models';
 
 describe('litFrom', () => {
   it('turns an unlit material into a lit one with the same colour and name', () => {
@@ -2058,6 +2134,22 @@ describe('litFrom', () => {
     const mesh = root.children[0];
     if (!(mesh instanceof THREE.Mesh)) throw new Error('expected a mesh');
     expect(mesh.material).toBeInstanceOf(THREE.MeshLambertMaterial);
+  });
+});
+
+describe('enableShadows', () => {
+  it('makes meshes cast and receive shadows', () => {
+    const root = new THREE.Group();
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshLambertMaterial());
+    root.add(mesh);
+    enableShadows(root);
+    expect([mesh.castShadow, mesh.receiveShadow]).toEqual([true, true]);
+  });
+
+  it('can make meshes receive only (for a lamp that holds its own light)', () => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshLambertMaterial());
+    enableShadows(mesh, false);
+    expect([mesh.castShadow, mesh.receiveShadow]).toEqual([false, true]);
   });
 });
 ```
@@ -2106,15 +2198,26 @@ export function makeLit(root: THREE.Object3D): void {
   });
 }
 
+/** Every mesh in `root` casts and receives shadows (`cast` false: receive only). */
+export function enableShadows(root: THREE.Object3D, cast = true): void {
+  root.traverse((node) => {
+    if (isMesh(node)) {
+      node.castShadow = cast;
+      node.receiveShadow = true;
+    }
+  });
+}
+
 const loader = new GLTFLoader();
 const cache = new Map<string, Promise<THREE.Object3D>>();
 
-/** Loads a .glb once (lit); every call returns a fresh clone sharing geometry and materials. */
+/** Loads a .glb once (lit, shadowed); every call returns a fresh clone sharing geometry and materials. */
 export async function loadModel(url: string): Promise<THREE.Object3D> {
   let pending = cache.get(url);
   if (!pending) {
     pending = loader.loadAsync(url).then((gltf) => {
       makeLit(gltf.scene);
+      enableShadows(gltf.scene);
       return gltf.scene;
     });
     pending.catch(() => cache.delete(url));
@@ -2127,7 +2230,7 @@ export async function loadModel(url: string): Promise<THREE.Object3D> {
 - [ ] **Step 6: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 44 passed`.
+Expected: all green, `Tests 51 passed`.
 
 - [ ] **Step 7: Commit**
 
@@ -2312,7 +2415,7 @@ export function createDream(): DreamModule {
 - [ ] **Step 4: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 48 passed`.
+Expected: all green, `Tests 55 passed`.
 
 - [ ] **Step 5: Commit**
 
@@ -2339,7 +2442,7 @@ git commit -m "feat(dreams): registry, dream contract and failure-safe loading" 
   - `Silhouette`, `BuildingModel`, `skylineLayout(seed, count, minX, maxX)`, `buildingFor(height): BuildingModel`, `addSkyline(scene): Promise<void>`
   - `FLASHLIGHT`, `createFlashlight(camera): THREE.SpotLight`
 
-This is a stand-in for Plan 2's real city. It still has to look like a place: a dark overcast sky dome, and ground and water running ~360 m into fog. Across the river are **Blender-built** concrete blocks, mostly dark windows with a few lit. Behind the bank is a **Blender-built** forest of pines and dead trees. There are grey-box crates on the bank and a flashlight cone on the ground.
+This is a stand-in for Plan 2's real city. It still has to look like a place: a dark overcast sky dome, and ground and water running ~360 m into fog. Across the river are **Blender-built** concrete blocks, mostly dark windows with a few lit. Behind the bank is a **Blender-built** forest of pines and dead trees. There are grey-box crates on the bank and a flashlight cone on the ground. The flashlight casts soft shadows (they switch on in Task 12). Trees are smooth-shaded, so they don't look jagged.
 
 The scenery is made by a committed headless Blender script, so anyone can rebuild it. The Blender Lab MCP (`.mcp.json`) is optional and only for previews; the script is the source of truth.
 
@@ -2379,7 +2482,6 @@ def reset() -> None:
 
 def material(name: str, color: tuple, emission: float = 0.0) -> bpy.types.Material:
     mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
-    mat.use_nodes = True
     bsdf = mat.node_tree.nodes["Principled BSDF"]
     bsdf.inputs["Base Color"].default_value = (*color, 1.0)
     bsdf.inputs["Roughness"].default_value = 1.0
@@ -2441,7 +2543,7 @@ def pine(name: str, height: float) -> None:
     bark = material("bark", (0.06, 0.04, 0.03))
     needles = material("needles", (0.04, 0.07, 0.04))
     bpy.ops.mesh.primitive_cylinder_add(
-        vertices=6, radius=0.18, depth=height * 0.3, location=(0, 0, height * 0.15)
+        vertices=10, radius=0.18, depth=height * 0.3, location=(0, 0, height * 0.15)
     )
     trunk = bpy.context.active_object
     trunk.data.materials.append(bark)
@@ -2450,13 +2552,14 @@ def pine(name: str, height: float) -> None:
         radius = height * (0.28 - i * 0.06)
         z = height * (0.3 + i * 0.22)
         bpy.ops.mesh.primitive_cone_add(
-            vertices=7, radius1=radius, depth=height * 0.4, location=(0, 0, z + height * 0.2)
+            vertices=12, radius1=radius, depth=height * 0.4, location=(0, 0, z + height * 0.2)
         )
         cone = bpy.context.active_object
         cone.rotation_euler[2] = random.random() * math.pi
         cone.data.materials.append(needles)
         parts.append(cone)
     join(parts, name)
+    bpy.ops.object.shade_smooth()
     export(name)
 
 
@@ -2464,14 +2567,14 @@ def dead_tree(name: str, height: float) -> None:
     """A leafless trunk with crooked branches."""
     reset()
     bark = material("bark", (0.05, 0.04, 0.035))
-    bpy.ops.mesh.primitive_cylinder_add(vertices=5, radius=0.15, depth=height, location=(0, 0, height / 2))
+    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.15, depth=height, location=(0, 0, height / 2))
     parts = [bpy.context.active_object]
     for i in range(4):
         angle = i * math.pi / 2 + random.random() * 0.6
         length = height * 0.35
         z = height * (0.5 + i * 0.1)
         bpy.ops.mesh.primitive_cylinder_add(
-            vertices=4,
+            vertices=6,
             radius=0.06,
             depth=length,
             location=(math.cos(angle) * length / 3, math.sin(angle) * length / 3, z),
@@ -2482,6 +2585,7 @@ def dead_tree(name: str, height: float) -> None:
     for part in parts:
         part.data.materials.append(bark)
     join(parts, name)
+    bpy.ops.object.shade_smooth()
     export(name)
 
 
@@ -2688,6 +2792,7 @@ export async function addSkyline(scene: THREE.Scene): Promise<void> {
 ```ts
 import * as THREE from 'three/webgpu';
 import { boxAt, type Box } from '../../engine/collide';
+import { enableShadows } from '../../engine/models';
 import { createSkyDome } from '../../engine/sky';
 import { addSkyline } from './skyline';
 
@@ -2743,12 +2848,14 @@ export async function buildRiverbank(): Promise<THREE.Scene> {
   farBank.position.set(RIVER_X + RIVER_WIDTH / 2 + 40, 0, middle);
   const water = plane(RIVER_WIDTH, 360, 0x0b161b);
   water.position.set(RIVER_X, -0.15, middle);
+  for (const surface of [ground, farBank, water]) surface.receiveShadow = true;
   scene.add(ground, farBank, water);
   await addSkyline(scene);
   const crateMaterial = new THREE.MeshLambertMaterial({ color: 0x4a3b2a });
   for (const [x, z, size] of CRATES) {
     const crate = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), crateMaterial);
     crate.position.set(x, size / 2, z);
+    enableShadows(crate);
     scene.add(crate);
   }
   return scene;
@@ -2773,6 +2880,9 @@ export function createFlashlight(camera: THREE.Camera): THREE.SpotLight {
     2,
   );
   light.position.set(0.2, -0.15, 0);
+  light.castShadow = true;
+  light.shadow.mapSize.set(1024, 1024);
+  light.shadow.bias = -0.0005;
   light.target.position.set(0, -0.3, -1);
   camera.add(light, light.target);
   return light;
@@ -2823,7 +2933,7 @@ export function createDream(): DreamModule {
 - [ ] **Step 7: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 53 passed`.
+Expected: all green, `Tests 60 passed`.
 
 - [ ] **Step 8: Commit**
 
@@ -3026,10 +3136,10 @@ export function createZzz(scene: THREE.Scene, origin: THREE.Vector3): ZzzEmitter
 }
 ```
 
-`src/home/bedroom.ts`. Placements were tuned by screenshot. The room is fully closed (four walls, ceiling, night sky dome outside the window), so there is no black void. The camera looks across the moonlit floor at the bed under the window, with the lamp glowing on the nightstand:
+`src/home/bedroom.ts`. Placements were tuned by screenshot. The room is fully closed (four walls, ceiling, night sky dome outside the window), so there is no black void. The sleeper uses smooth, high-segment shapes. The lamp casts shadows; the lamp model itself only receives them, because it surrounds its own light. The camera looks across the moonlit floor at the bed under the window, with the lamp glowing on the nightstand:
 ```ts
 import * as THREE from 'three/webgpu';
-import { loadModel } from '../engine/models';
+import { enableShadows, loadModel } from '../engine/models';
 import { createSkyDome } from '../engine/sky';
 
 /** Kenney furniture is modelled small; ×2 makes the bed ~2.3 m long and walls ~2.6 m tall. Tuning knob. */
@@ -3078,17 +3188,18 @@ export interface Bedroom {
 function sleeper(head: THREE.Vector3): THREE.Group {
   const group = new THREE.Group();
   const face = new THREE.Mesh(
-    new THREE.SphereGeometry(0.13, 10, 8),
+    new THREE.SphereGeometry(0.13, 24, 16),
     new THREE.MeshLambertMaterial({ color: 0xc49a7c }),
   );
   face.position.copy(head);
   const body = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.22, 1.1, 4, 8),
+    new THREE.CapsuleGeometry(0.22, 1.1, 8, 20),
     new THREE.MeshLambertMaterial({ color: 0x2f3d5c }),
   );
   body.rotation.x = Math.PI / 2;
   body.position.set(head.x, head.y - 0.04, head.z + 0.85);
   group.add(face, body);
+  enableShadows(group);
   return group;
 }
 
@@ -3108,8 +3219,11 @@ function lights(scene: THREE.Scene, head: THREE.Vector3): void {
   const moon = new THREE.DirectionalLight(0x9fb4ff, 0.2);
   moon.position.set(1, 4, -6);
   moon.target.position.copy(head);
-  const lamp = new THREE.PointLight(0xffc58a, 2, 4, 2);
+  const lamp = new THREE.PointLight(0xffc58a, 2, 5, 2);
   lamp.position.set(1.67, FLOOR_Y + 0.95, -3.74);
+  lamp.castShadow = true;
+  lamp.shadow.mapSize.set(512, 512);
+  lamp.shadow.bias = -0.002;
   scene.add(moon, moon.target, lamp);
 }
 
@@ -3123,6 +3237,8 @@ export async function buildBedroom(): Promise<Bedroom> {
     model.scale.setScalar(FURNITURE_SCALE);
     model.position.set(x, y, z);
     model.rotation.y = rotationY;
+    // The lamp holds its own light; letting it cast would black out the room.
+    if (PIECES[i][0] === 'lampRoundTable') enableShadows(model, false);
     scene.add(model);
   });
   const head = new THREE.Vector3(0.75, FLOOR_Y + 0.72, -3.55);
@@ -3242,7 +3358,7 @@ export function nextHomeState(state: HomeState, event: HomeEvent): HomeState {
 - [ ] **Step 4: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 63 passed`.
+Expected: all green, `Tests 70 passed`.
 
 - [ ] **Step 5: Commit**
 
@@ -3268,7 +3384,7 @@ git commit -m "feat(home): bedroom, rising Zzz, dream cloud and home flow" -m "C
   - Dev only: `window.kd` (the `App`) and the `?nolock` flag.
 
 Behaviour to keep:
-- Start enters fullscreen, unlocks audio and starts the room tone, all inside the click.
+- Start enters fullscreen, unlocks audio and starts the room tone, all inside the click. The dream-card screen and the pause menu both have a "Full screen on/off" button. Players can also use the browser's own full screen (⌃⌘F in Chrome and Safari on Mac, F11 on Windows).
 - `home.dispose()` must **not** close the overlay panel. The dream's intro pages are already open by then. (Found in the prototype: closing it here hid the intro.)
 - `?nolock` (dev builds only) lets automated checks walk without pointer lock; Esc then opens the pause menu directly. Production builds strip both it and `window.kd` (checked: neither string is in `dist/`).
 - Hidden tabs pause rendering (`requestAnimationFrame` stops), so the camera rise waits until the tab is visible. Keep the Chrome tab in front during browser checks.
@@ -3386,7 +3502,7 @@ import type { App } from '../app';
 import { DREAMS } from '../dreams/registry';
 import type { DreamInfo } from '../dreams/types';
 import { roomToneBuffer } from '../engine/audio';
-import { enterFullscreen } from '../engine/fullscreen';
+import { enterFullscreen, toggleFullscreen } from '../engine/fullscreen';
 import { button, el } from '../engine/ui';
 import { buildBedroom } from './bedroom';
 import { addDreamCloud, tweenCamera } from './cloud';
@@ -3429,6 +3545,7 @@ export async function startHome(app: App, play: Play): Promise<HomeHandle> {
         );
         panel.append(card);
       }
+      panel.append(button('Full screen on/off', toggleFullscreen, 'btn quiet'));
     });
   };
 
@@ -3566,7 +3683,7 @@ void boot();
 - [ ] **Step 2: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 63 passed`. The build shows a separate `follow-the-river-*.js` chunk.
+Expected: all green, `Tests 70 passed`. The build shows a separate `follow-the-river-*.js` chunk.
 
 - [ ] **Step 3: Confirm dev-only hooks are stripped from production**
 
@@ -3606,7 +3723,185 @@ git commit -m "feat: app shell, home screen flow and boot" -m "Co-Authored-By: C
 
 ---
 
-### Task 12: Release check and hand-off
+### Task 12: Graphics pass — sharper render, bloom, vignette, grain and shadows
+
+Kartik asked for better graphics that look "not too polygon-y". The prototype was checked in Chrome on 2026-10-03. Lamps and lit windows glow, edges darken, a light film grain adds texture, and the lamp and flashlight cast soft shadows. The render is less chunky: 540 rows instead of 360.
+
+**Files:**
+- Create: `src/engine/post.ts`
+- Modify: `src/engine/stage.ts` (whole file below)
+
+**Interfaces:**
+- Consumes: `Stage` (Task 2). Its interface does not change.
+- Produces: `POST` (tuning knobs), `Post { render(scene): void; dispose(): void }`, `createPost(renderer, camera): Post`. `RENDER_HEIGHT` becomes 540, and the stage enables PCF shadow maps.
+
+Facts verified against the installed three.js:
+- `THREE.RenderPipeline` replaced `PostProcessing`.
+- `bloom` comes from `three/addons/tsl/display/BloomNode.js`, `film` from `three/addons/tsl/display/FilmNode.js`, and `pass`, `screenUV`, `smoothstep`, `uniform`, `float` from `three/tsl`.
+- `PassNode.scene` is writable, so the stage can swap scenes.
+- `PCFSoftShadowMap` is deprecated, so use `PCFShadowMap`.
+
+- [ ] **Step 1: 🔎 Confirm the post-processing exports in the installed version**
+
+```bash
+test -f node_modules/three/examples/jsm/tsl/display/BloomNode.js && test -f node_modules/three/examples/jsm/tsl/display/FilmNode.js && echo nodes-ok
+grep -c "declare class RenderPipeline" node_modules/@types/three/src/renderers/common/RenderPipeline.d.ts
+grep -n "scene: Object3D" node_modules/@types/three/src/nodes/display/PassNode.d.ts
+```
+Expected: `nodes-ok`, `1`, and one line. If an export moved in a newer three.js, use the `webgpu-threejs-tsl` skill and Context7 to find its new home before writing code.
+
+- [ ] **Step 2: Write `src/engine/post.ts`**
+
+```ts
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { film } from 'three/addons/tsl/display/FilmNode.js';
+import { float, pass, screenUV, smoothstep, uniform } from 'three/tsl';
+import * as THREE from 'three/webgpu';
+
+/** Horror look. Tuning knobs. */
+export const POST = {
+  /** Glow around lamps, lit windows and the flashlight. */
+  bloomStrength: 0.55,
+  bloomRadius: 0.45,
+  /** Only pixels brighter than this glow. */
+  bloomThreshold: 0.7,
+  /** 0 = no dark edges; 1 = heavy tunnel vision. */
+  vignette: 0.85,
+  /** Film grain amount. */
+  grain: 0.18,
+} as const;
+
+export interface Post {
+  /** Draws `scene` through bloom, vignette and grain. */
+  render(scene: THREE.Scene): void;
+  dispose(): void;
+}
+
+/** Screen-space effects on top of the low-res render. Works on WebGPU and WebGL 2 (TSL). */
+export function createPost(renderer: THREE.WebGPURenderer, camera: THREE.Camera): Post {
+  const scenePass = pass(new THREE.Scene(), camera);
+  const color = scenePass.getTextureNode('output');
+  const glow = bloom(color, POST.bloomStrength, POST.bloomRadius, POST.bloomThreshold);
+  const edge = smoothstep(float(0.75), float(0.2), screenUV.sub(0.5).length());
+  const dark = float(1).sub(float(POST.vignette).mul(float(1).sub(edge)));
+  const pipeline = new THREE.RenderPipeline(renderer);
+  pipeline.outputNode = film(color.add(glow).mul(dark), uniform(POST.grain));
+  return {
+    render(scene) {
+      scenePass.scene = scene;
+      pipeline.render();
+    },
+    dispose() {
+      pipeline.dispose();
+    },
+  };
+}
+```
+
+- [ ] **Step 3: Replace `src/engine/stage.ts`**
+
+```ts
+import * as THREE from 'three/webgpu';
+import { createPost } from './post';
+import { internalResolution } from './resolution';
+import { clampDelta } from './time';
+
+/** Rows rendered per frame before upscaling. Lower = chunkier, retro look. Tuning knob. */
+export const RENDER_HEIGHT = 540;
+
+export type Backend = 'webgpu' | 'webgl2';
+export type Updater = (dt: number) => void;
+
+export interface Stage {
+  readonly renderer: THREE.WebGPURenderer;
+  readonly camera: THREE.PerspectiveCamera;
+  readonly backend: Backend;
+  /** The scene being drawn; home and dreams swap it. */
+  scene: THREE.Scene;
+  /** Run `fn(dt)` every frame; call the returned function to stop. */
+  addUpdater(fn: Updater): () => void;
+  dispose(): void;
+}
+
+function fit(renderer: THREE.WebGPURenderer, camera: THREE.PerspectiveCamera): void {
+  const { width, height } = internalResolution(innerWidth, innerHeight, RENDER_HEIGHT);
+  renderer.setSize(width, height, false);
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+}
+
+/** Creates the one renderer the whole app shares. `?webgl` in the URL forces the WebGL 2 backend. */
+export async function createStage(container: HTMLElement): Promise<Stage> {
+  const forceWebGL = new URLSearchParams(location.search).has('webgl');
+  const renderer = new THREE.WebGPURenderer({ antialias: false, forceWebGL });
+  await renderer.init();
+  renderer.setPixelRatio(1);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  container.append(renderer.domElement);
+  const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.05, 200);
+  const post = createPost(renderer, camera);
+  const updaters = new Set<Updater>();
+  const timer = new THREE.Timer();
+  timer.connect(document);
+  const onResize = (): void => fit(renderer, camera);
+  addEventListener('resize', onResize);
+  onResize();
+  const stage: Stage = {
+    renderer,
+    camera,
+    backend: 'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl2',
+    scene: new THREE.Scene(),
+    addUpdater(fn) {
+      updaters.add(fn);
+      return () => {
+        updaters.delete(fn);
+      };
+    },
+    dispose() {
+      void renderer.setAnimationLoop(null);
+      removeEventListener('resize', onResize);
+      timer.dispose();
+      post.dispose();
+      void renderer.dispose();
+      renderer.domElement.remove();
+    },
+  };
+  await renderer.setAnimationLoop((time) => {
+    timer.update(time);
+    const dt = clampDelta(timer.getDelta());
+    for (const fn of updaters) fn(dt);
+    post.render(stage.scene);
+  });
+  return stage;
+}
+```
+
+- [ ] **Step 4: Run the full check**
+
+Run: `pnpm run format && pnpm run check`
+Expected: all green, `Tests 70 passed`. The pure logic is untouched; rendering is checked in the next step.
+
+- [ ] **Step 5: [controller] Browser check on both backends**
+
+With `pnpm run dev` running, open `http://localhost:5173/?nolock`:
+1. Home screen: the lamp has a soft glow (bloom), the bed casts a shadow on the wall, the screen edges are darker, a faint grain is visible, and there are no console errors.
+2. Enter the dream and skip the intro, then run `kd.stage.camera.rotation.set(0.04, -1.15, 0, 'YXZ')`. Lit windows across the river glow.
+3. Run `kd.stage.camera.rotation.set(-0.05, 0.25, 0, 'YXZ')`. The crate in the flashlight cone is lit and casts a shadow.
+4. Repeat 1–3 on `?nolock&webgl`. The visuals match, and `document.documentElement.dataset.backend === 'webgl2'`.
+
+If anything is too bright for the "never bright" rule, lower `POST.bloomStrength` or raise `POST.bloomThreshold`, then re-check.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add -A
+git commit -m "feat(engine): graphics pass — 540p render, bloom, vignette, film grain, soft shadows" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 13: Release check and hand-off
 
 **Files:**
 - No new code unless a check fails.
@@ -3626,7 +3921,7 @@ rm -rf node_modules dist
 pnpm install --frozen-lockfile
 pnpm run check
 ```
-Expected: all green, 63 tests.
+Expected: all green, 70 tests.
 
 - [ ] **Step 3: Production preview smoke test [controller]**
 

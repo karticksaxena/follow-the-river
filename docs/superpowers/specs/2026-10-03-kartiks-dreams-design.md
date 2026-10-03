@@ -14,7 +14,7 @@ Success: a stranger opens the link in Chrome or Safari on a laptop, picks a drea
 |---|---|
 | Platform | Desktop/laptop browsers only (Chrome, Safari, also Firefox/Edge). Keyboard + mouse. Touch-only devices see a "play on a computer" screen. |
 | Rendering | 3D, three.js `WebGPURenderer` (WebGPU, automatic WebGL 2 fallback). `?webgl` URL flag forces WebGL 2. |
-| Look | Low-poly, PS1-style (reference: Crow Country). Low internal resolution scaled up with `image-rendering: pixelated`, fog, darkness. **Never bright** — even "day" is overcast, grey, smoky. |
+| Look | Stylised low-poly (reference: Crow Country), but not crude: 540-row render scaled up crisply, bloom on lamps/windows, vignette, light film grain, soft shadows from lamps and the flashlight, smooth-shaded organic shapes. Fog and darkness. **Never bright**: even "day" is overcast, grey and smoky. |
 | No world edge | Every outdoor scene has a gradient sky dome, ground/water running far past the play area, and distant silhouettes (skyline, tree lines, hills) that fade into fog. Play space is bounded by believable blockers, never a visible cliff or void. Blender builds richer scenery where needed. |
 | Full screen | Start enters browser full screen (hides the browser bars); the pause menu toggles it. |
 | Camera | First person. Few human characters (silhouettes, voices, tapes). |
