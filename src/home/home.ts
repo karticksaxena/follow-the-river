@@ -66,7 +66,10 @@ export async function startHome(app: App, play: Play): Promise<HomeHandle> {
     if (!send('confirm')) return;
     overlay.closePanel();
     await overlay.fade(true);
-    const error = await play(info);
+    overlay.panel((panel) => panel.append(el('p', 'big', 'Falling asleep…')));
+    const error = await play(info).catch(
+      () => `Something went wrong starting "${info.title}". Please try again.`,
+    );
     if (error === null) return void send('loaded');
     send('load-failed');
     await overlay.fade(false);

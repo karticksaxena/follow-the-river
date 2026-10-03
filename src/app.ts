@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { loadDream } from './dreams/load';
+import { LOAD_TIMEOUT_MS, loadDream } from './dreams/load';
 import type { DreamInfo } from './dreams/types';
 import type { AudioBus } from './engine/audio';
 import type { KeyState } from './engine/input';
@@ -8,6 +8,7 @@ import { showPages, showPauseMenu } from './engine/menus';
 import { createPlayer } from './engine/player';
 import type { Settings } from './engine/settings';
 import type { Stage } from './engine/stage';
+import { withTimeout } from './engine/time';
 import type { Overlay } from './engine/ui';
 
 export interface App {
@@ -37,6 +38,9 @@ export async function runDream(
   const result = await loadDream(info);
   if (!result.ok) return result.message;
   const { dream } = result;
+  // If the dream fails to start, put the home screen back exactly as it was.
+  const homeScene = app.stage.scene;
+  const homePose = app.stage.camera.matrix.clone();
   let screen: Screen = 'reader';
   let reading = false;
   const onLock = (event: LockEvent): void => {
@@ -89,7 +93,7 @@ export async function runDream(
     });
   };
   try {
-    await dream.start({
+    const starting = dream.start({
       stage: app.stage,
       overlay: app.overlay,
       audio: app.audio,
@@ -98,9 +102,16 @@ export async function runDream(
       read,
       isPaused: () => screen !== 'game',
     });
+    await withTimeout(starting, LOAD_TIMEOUT_MS);
   } catch {
-    // A model or sound failed to download: back to the dream cards with a message.
+    // A model or sound failed or stalled: back to the dream cards, over the bedroom, with a message.
     cleanUp();
+    app.stage.scene = homeScene;
+    homePose.decompose(
+      app.stage.camera.position,
+      app.stage.camera.quaternion,
+      app.stage.camera.scale,
+    );
     return `Couldn't start "${info.title}". Check your internet connection and try again.`;
   }
   await app.overlay.fade(false);

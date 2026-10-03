@@ -13,9 +13,11 @@ export function createDream(): DreamModule {
   let flashlight: THREE.SpotLight | null = null;
   let stop: (() => void) | null = null;
   let camera: THREE.Camera | null = null;
+  let disposed = false;
   return {
     async start(ctx: DreamContext) {
       const scene = await buildRiverbank();
+      if (disposed) return;
       const view = ctx.stage.camera;
       camera = view;
       scene.add(view);
@@ -26,6 +28,7 @@ export function createDream(): DreamModule {
       const light = createFlashlight(view);
       flashlight = light;
       const figure = await loadWatcherFigure();
+      if (disposed) return;
       figure.position.set(WATCHER.x, 0, WATCHER.z);
       scene.add(figure);
       const sting = stingBuffer(ctx.audio.listener.context);
@@ -58,6 +61,7 @@ export function createDream(): DreamModule {
       });
     },
     dispose() {
+      disposed = true;
       stop?.();
       if (flashlight && camera) camera.remove(flashlight, flashlight.target);
       camera?.rotation.set(0, camera.rotation.y, 0);

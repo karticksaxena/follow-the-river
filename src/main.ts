@@ -1,3 +1,5 @@
+import '@fontsource/im-fell-english/index.css';
+import '@fontsource/special-elite/index.css';
 import { runDream, type App } from './app';
 import { createAudioBus } from './engine/audio';
 import { isDesktop } from './engine/device';

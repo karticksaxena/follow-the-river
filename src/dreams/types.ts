@@ -31,7 +31,10 @@ export interface DreamContext {
 }
 
 export interface DreamModule {
-  /** Build the world: set `ctx.stage.scene`, colliders and spawn. */
+  /**
+   * Build the world: set `ctx.stage.scene`, colliders and spawn. If `dispose()` is called
+   * while this is still loading (a timeout), it must not touch the stage afterwards.
+   */
   start(ctx: DreamContext): Promise<void>;
   dispose(): void;
 }

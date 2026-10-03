@@ -2,12 +2,13 @@ import * as THREE from 'three/webgpu';
 import { createPost } from './post';
 import { internalResolution } from './resolution';
 import { clampDelta } from './time';
+import { runUpdaters, type Updater } from './updaters';
 
 /** Rows rendered per frame before upscaling. Lower = chunkier, retro look. Tuning knob. */
 export const RENDER_HEIGHT = 540;
 
 export type Backend = 'webgpu' | 'webgl2';
-export type Updater = (dt: number) => void;
+export type { Updater } from './updaters';
 
 export interface Stage {
   readonly renderer: THREE.WebGPURenderer;
@@ -67,7 +68,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   await renderer.setAnimationLoop((time) => {
     timer.update(time);
     const dt = clampDelta(timer.getDelta());
-    for (const fn of updaters) fn(dt);
+    runUpdaters(updaters, dt);
     post.render(stage.scene);
   });
   return stage;
