@@ -1,12 +1,58 @@
-import type * as THREE from 'three/webgpu';
+import * as THREE from 'three/webgpu';
+import { boxAt, type Box } from '../../engine/collide';
+import { enableShadows } from '../../engine/models';
 import { flickerOn, shakeAt, stingBuffer } from '../../engine/scare';
 import type { DreamContext, DreamModule } from '../types';
 import { createFlashlight, FLASHLIGHT } from './flashlight';
-import { buildRiverbank, riverbankColliders, SKY_NAME, SPAWN } from './riverbank';
+import { applyLighting, createWorldLights, LIGHTING, SKY_NAME } from './lighting';
+import { addRiver, EDGE_X, OVERRUN, plane, RIVER_WIDTH, RIVER_X } from './river';
+import { addSkyline } from './skyline';
 import { loadWatcherFigure, shouldStrike, WATCHER, type WatcherState } from './watcher';
 
 /** How hard the camera rolls during a scare jolt, in radians. Tuning knob. */
 const JOLT_ROLL = 0.06;
+const SPAWN = { x: 0, z: 0, yaw: 0 } as const;
+const BANK_LENGTH = 120;
+
+/** Grey-box crates: [x, z, size]. Plan 1 placeholders; Task 16 rewrites this dream. */
+const CRATES: ReadonlyArray<readonly [number, number, number]> = [
+  [-2, -6, 1.2],
+  [1.5, -11, 1],
+  [-3.5, -17, 1.6],
+  [0.5, -24, 1.1],
+  [-1.5, -32, 1.4],
+];
+
+function testColliders(): Box[] {
+  const middle = -BANK_LENGTH / 2 + 10;
+  return [
+    ...CRATES.map(([x, z, size]) => boxAt(x, z, size, size)),
+    boxAt(RIVER_X, middle, RIVER_WIDTH, BANK_LENGTH),
+    boxAt(-8, middle, 2, BANK_LENGTH),
+    boxAt(0, 11, 24, 2),
+    boxAt(0, -BANK_LENGTH + 9, 24, 2),
+  ];
+}
+
+async function buildTestScene(): Promise<THREE.Scene> {
+  const scene = new THREE.Scene();
+  applyLighting(createWorldLights(scene), LIGHTING.night);
+  const fromZ = 10;
+  const toZ = fromZ - BANK_LENGTH;
+  const ground = plane(120, fromZ - toZ + 2 * OVERRUN, 0x2b2f24);
+  ground.position.set(EDGE_X - 60, 0, (fromZ + toZ) / 2);
+  scene.add(ground);
+  addRiver(scene, fromZ, toZ);
+  await addSkyline(scene, 'city', fromZ, toZ);
+  const material = new THREE.MeshLambertMaterial({ color: 0x4a3b2a });
+  for (const [x, z, size] of CRATES) {
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), material);
+    crate.position.set(x, size / 2, z);
+    enableShadows(crate);
+    scene.add(crate);
+  }
+  return scene;
+}
 
 /** Plan 1 test dream: walking, collisions, darkness, the flashlight and one scare. Plan 2 replaces it. */
 export function createDream(): DreamModule {
@@ -16,14 +62,14 @@ export function createDream(): DreamModule {
   let disposed = false;
   return {
     async start(ctx: DreamContext) {
-      const scene = await buildRiverbank();
+      const scene = await buildTestScene();
       if (disposed) return;
       const view = ctx.stage.camera;
       camera = view;
       scene.add(view);
       ctx.stage.scene = scene;
       const sky = scene.getObjectByName(SKY_NAME);
-      ctx.player.setColliders(riverbankColliders());
+      ctx.player.setColliders(testColliders());
       ctx.player.teleport(SPAWN.x, SPAWN.z, SPAWN.yaw);
       const light = createFlashlight(view);
       flashlight = light;
