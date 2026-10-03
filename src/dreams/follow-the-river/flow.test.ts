@@ -4,12 +4,12 @@ import {
   atSafeSpot,
   MAX_HEALTH,
   nearSpot,
-  pastTheEnd,
   phaseTitle,
   spawnFor,
   takeDamage,
   waitQuestion,
 } from './flow';
+import { PHASES } from './state';
 
 describe('chapter flow', () => {
   it('takes damage down to zero, never below', () => {
@@ -28,8 +28,13 @@ describe('chapter flow', () => {
   });
 
   it('titles phases for the title cards', () => {
-    expect([phaseTitle('day1'), phaseTitle('night3'), phaseTitle('intro')]).toEqual([
+    expect(PHASES.map(phaseTitle)).toEqual([
+      '',
       'Day 1',
+      'Night 1',
+      'Day 2',
+      'Night 2',
+      'Day 3',
       'Night 3',
       '',
     ]);
@@ -45,11 +50,5 @@ describe('chapter flow', () => {
   it('checks closeness on the ground plane', () => {
     expect(nearSpot(1, 1, { x: 0, z: 0 }, 2)).toBe(true);
     expect(nearSpot(3, 0, { x: 0, z: 0 }, 2)).toBe(false);
-  });
-
-  it('never treats a fresh run (the intro) as past the end', () => {
-    expect(pastTheEnd('intro', ['day1', 'night1'])).toBe(false);
-    expect(pastTheEnd('night1', ['day1', 'night1'])).toBe(false);
-    expect(pastTheEnd('day2', ['day1', 'night1'])).toBe(true);
   });
 });

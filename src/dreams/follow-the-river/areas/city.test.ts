@@ -11,6 +11,12 @@ const inside = (
 ): boolean => x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ;
 
 describe('CITY', () => {
+  it('is chapter 1 with arrival pages and the boathouse at the safe spot', () => {
+    expect(CITY.chapter).toBe(1);
+    expect(CITY.arrival.length).toBeGreaterThan(0);
+    expect(CITY.safeProp).toEqual({ prop: 'boathouse', x: 0, z: CITY.safeZ - 2, yaw: 0 });
+  });
+
   it('has unique pickup ids and exactly one tape', () => {
     const ids = CITY.pickups.map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);

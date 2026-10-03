@@ -64,6 +64,8 @@ export interface RunState {
   taken: string[];
   tapes: number[];
   hints: string[];
+  /** Found the gun (Day 2); it stays for good. */
+  hasGun: boolean;
 }
 
 export interface RunSave extends RunState {
@@ -81,6 +83,7 @@ export function freshRun(): RunSave {
     taken: [],
     tapes: [],
     hints: [],
+    hasGun: false,
   };
 }
 
@@ -94,9 +97,11 @@ function isSupplies(v: unknown): v is Supplies {
   return record(v) && count(v.battery) && count(v.arrows) && count(v.ammo) && count(v.fishPacks);
 }
 
+/** Plan 2 saves have no `hasGun`; everything else must match exactly. */
 export function isRunSave(value: unknown): value is RunSave {
   if (!record(value) || value.version !== 1) return false;
   return (
+    (value.hasGun === undefined || typeof value.hasGun === 'boolean') &&
     typeof value.phase === 'string' &&
     (PHASES as readonly string[]).includes(value.phase) &&
     isSupplies(value.supplies) &&
@@ -107,6 +112,11 @@ export function isRunSave(value: unknown): value is RunSave {
   );
 }
 
+/** The save with every field present (fills `hasGun: false` for Plan 2 saves). */
+export function normalizeSave(save: RunSave): RunSave {
+  return { ...save, hasGun: save.hasGun ?? false };
+}
+
 /** The live state at the start of `save.phase` (deep copy), keeping hints already seen. */
 export function restartPhase(save: RunSave, hintsSeen: readonly string[] = []): RunState {
   return {
@@ -115,6 +125,7 @@ export function restartPhase(save: RunSave, hintsSeen: readonly string[] = []): 
     taken: [...save.taken],
     tapes: [...save.tapes],
     hints: [...new Set([...save.hints, ...hintsSeen])],
+    hasGun: save.hasGun,
   };
 }
 
@@ -129,5 +140,6 @@ export function completePhase(save: RunSave, live: RunState): RunSave {
     taken: [...live.taken],
     tapes: [...live.tapes],
     hints: [...live.hints],
+    hasGun: live.hasGun,
   };
 }

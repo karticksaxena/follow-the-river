@@ -4,24 +4,27 @@ import { browserStorage, createSaveStore, type SaveStore } from '../../engine/sa
 import { withTimeout } from '../../engine/time';
 import { LOAD_TIMEOUT_MS } from '../load';
 import type { DreamContext, DreamModule } from '../types';
-import { CITY } from './areas/city';
+import { areaFor } from './areas';
+import type { AreaDef } from './areas/types';
 import { startChapter, type Chapter } from './chapter';
-import { pastTheEnd, phaseTitle } from './flow';
+import { phaseTitle } from './flow';
 import { runIntro, type Intro } from './intro';
 import {
   completePhase,
   freshRun,
   isRunSave,
+  normalizeSave,
   restartPhase,
   type Phase,
   type RunSave,
 } from './state';
 
-/** Phases the city can play so far. Later phases arrive with the next areas (Plan 3). */
-const PLAYABLE: readonly Phase[] = ['day1', 'night1'];
+/** Every phase that has a chapter; the saved `end` has none. */
+const PLAYABLE: readonly Phase[] = ['day1', 'night1', 'day2', 'night2', 'day3', 'night3'];
 /** Show "Loading…" only when a scene swap takes longer than this. */
 const LOADING_DELAY_MS = 300;
-const THE_END = ['You made it to the boathouse.', 'Night 1 survived.', 'To be continued…'];
+/** Task 8 replaces these pages with the ending. */
+const FINALE = ['You reach the dam.', 'To be continued…'];
 const LOAD_FAILED = "Couldn't load the next part. Check your internet connection and try again.";
 
 /** The intro is played by `runIntro`; this fallback (a finished run restarting) skips it. */
@@ -46,15 +49,26 @@ export function createDream(): DreamModule {
   let resumable = false;
   let disposed = false;
 
+  let area: AreaDef | null = null;
+
+  /** The ending, then back to the dream cards. */
+  const onFinale = (): void => ctx?.read(FINALE, () => ctx?.finish());
+
+  /** A night is survived: show the area's arrival pages, then hand over to the next chapter. */
   const onDone = (done: RunSave): void => {
+    const arrival = area?.arrival ?? [];
     save = done;
-    ctx?.read(THE_END, () => ctx?.finish());
+    if (done.phase === 'end') return onFinale();
+    ctx?.read(arrival, () => void nextChapter());
   };
 
   /** Builds a chapter for `from`; null if the dream was disposed meanwhile. */
   async function build(from: RunSave): Promise<Chapter | null> {
     if (!ctx || !store) return null;
-    const built = await startChapter(ctx, CITY, playable(from), store, onDone, () => disposed);
+    const next = areaFor(from.phase);
+    if (!next) return null;
+    area = next;
+    const built = await startChapter(ctx, next, playable(from), store, onDone, () => disposed);
     if (!disposed) return built;
     built.dispose();
     return null;
@@ -64,7 +78,7 @@ export function createDream(): DreamModule {
   async function enter(from: RunSave): Promise<void> {
     if (!ctx) return;
     if (from.phase !== 'intro') {
-      // A save past what is playable gets "Start over" in begin(), not a Day 1 built behind it.
+      // A finished run gets the ending menu in begin(), not a chapter built behind it.
       if (PLAYABLE.includes(from.phase)) chapter = await build(from);
       return;
     }
@@ -130,6 +144,14 @@ export function createDream(): DreamModule {
     });
   }
 
+  /** Hand over to the chapter the new `save` points at (the old one is dropped first). */
+  function nextChapter(): Promise<void> {
+    return transition(async () => {
+      dropScene();
+      await enter(save);
+    });
+  }
+
   async function startOver(): Promise<void> {
     chapter?.freeze();
     await transition(async () => {
@@ -143,16 +165,19 @@ export function createDream(): DreamModule {
 
   async function begin(): Promise<void> {
     if (!ctx) return;
+    if (save.phase === 'end') {
+      const pick = await ctx.choose('You reached the dam.', [
+        'Watch the ending again',
+        'Start over',
+      ]);
+      if (disposed) return;
+      return pick === 0 ? onFinale() : startOver();
+    }
     if (resumable) {
       const label = `Continue from ${phaseTitle(save.phase)}?`;
       const pick = await ctx.choose(label, ['Continue', 'Start over']);
       if (disposed) return;
       if (pick === 1) return startOver();
-    }
-    if (pastTheEnd(save.phase, PLAYABLE)) {
-      const done = 'This is as far as the dream goes for now.';
-      const again = await ctx.choose(done, ['Start over', 'Back to dreams']);
-      return again === 0 ? startOver() : ctx.finish();
     }
     chapter?.announce(true);
   }
@@ -162,7 +187,8 @@ export function createDream(): DreamModule {
       ctx = context;
       store = createSaveStore(browserStorage(), 'follow-the-river', isRunSave);
       const forced = devOverride();
-      const loaded = forced ?? store.load();
+      const stored = store.load();
+      const loaded = forced ?? (stored && normalizeSave(stored));
       save = loaded ?? freshRun();
       resumable = !forced && loaded !== null && loaded.phase !== 'intro';
       await enter(save);

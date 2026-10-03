@@ -7,6 +7,7 @@ import {
   isNight,
   isRunSave,
   nextPhase,
+  normalizeSave,
   restartPhase,
   spend,
   START_SUPPLIES,
@@ -53,6 +54,28 @@ describe('saves', () => {
     expect(isRunSave(freshRun())).toBe(true);
   });
 
+  it('accepts a Plan 2 save without hasGun and normalizes it to false', () => {
+    const old = {
+      version: 1,
+      phase: 'night1',
+      supplies: { battery: 80, arrows: 3, ammo: 0, fishPacks: 0 },
+      fed: 1,
+      taken: ['a'],
+      tapes: [1],
+      hints: ['bow'],
+    };
+    expect(isRunSave(old)).toBe(true);
+    if (!isRunSave(old)) return;
+    const fixed = normalizeSave(old);
+    expect(fixed).toEqual({ ...old, hasGun: false });
+    expect(fixed).not.toBe(old);
+    expect(normalizeSave({ ...fixed, hasGun: true }).hasGun).toBe(true);
+  });
+
+  it('rejects a non-boolean hasGun', () => {
+    expect(isRunSave({ ...freshRun(), hasGun: 'yes' })).toBe(false);
+  });
+
   it.each([
     null,
     42,
@@ -65,6 +88,7 @@ describe('saves', () => {
     { ...freshRun(), taken: 'all' },
     { ...freshRun(), tapes: [1, 'two'] },
     { ...freshRun(), fed: Infinity },
+    { ...freshRun(), hasGun: 1 },
   ])('rejects a corrupt save %#', (value) => {
     expect(isRunSave(value)).toBe(false);
   });
@@ -96,5 +120,13 @@ describe('checkpoints', () => {
     const live = { ...restartPhase(day), taken: ['tape-1'], tapes: [1] };
     const night = completePhase(day, live);
     expect([night.taken, night.tapes]).toEqual([['tape-1'], [1]]);
+  });
+
+  it('carries the gun through restarts and completed phases', () => {
+    const day = { ...freshRun(), phase: 'day2' as const, hasGun: true };
+    expect(restartPhase(day).hasGun).toBe(true);
+    expect(completePhase(day, restartPhase(day)).hasGun).toBe(true);
+    const found = completePhase(freshRun(), { ...restartPhase(freshRun()), hasGun: true });
+    expect(found.hasGun).toBe(true);
   });
 });

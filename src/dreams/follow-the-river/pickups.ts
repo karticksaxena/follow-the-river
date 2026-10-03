@@ -14,6 +14,8 @@ export const PICKUP_GAIN: Readonly<
   arrows: { kind: 'arrows', amount: 3 },
   fishPack: { kind: 'fishPacks', amount: 1 },
   ammo: { kind: 'ammo', amount: 6 },
+  // The gun itself (Task 3 grants `hasGun`); it comes loaded with a few bullets.
+  gun: { kind: 'ammo', amount: 8 },
   tape: null,
 };
 
@@ -22,6 +24,7 @@ const PROMPT: Readonly<Record<PickupKind, { take: string; full: string }>> = {
   arrows: { take: 'E: pick up arrows', full: 'Arrows full' },
   fishPack: { take: 'E: pick up a fish pack', full: 'Fish packs full' },
   ammo: { take: 'E: pick up ammo', full: 'Ammo full' },
+  gun: { take: 'E: take the gun', full: 'Ammo full' },
   tape: { take: 'E: take the tape', full: '' },
 };
 
@@ -83,6 +86,8 @@ const MODEL: Readonly<Record<PickupKind, string>> = {
   fishPack: 'fishpack',
   tape: 'tape',
   ammo: 'arrows',
+  // Task 3 swaps in the pistol model.
+  gun: 'arrows',
 };
 const HOVER = 0.5;
 const BOB = 0.04;

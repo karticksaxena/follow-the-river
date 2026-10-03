@@ -169,6 +169,8 @@ const SCARES: readonly ScareDef[] = [
 
 export const CITY: AreaDef = {
   id: 'city',
+  chapter: 1,
+  arrival: ['You made it to the boathouse.', 'Night 1 survived.'],
   ground: 0x1d1f21,
   farBank: 0x15181b,
   skyline: 'city',
@@ -180,6 +182,7 @@ export const CITY: AreaDef = {
   barricadeZ: BARRICADE_Z,
   nightStart: { x: 1.5, z: -124, yaw: 0 },
   safeZ: -400,
+  safeProp: { prop: 'boathouse', x: 0, z: -402, yaw: 0 },
   props: PROPS,
   shacks: SHACKS,
   pickups: PICKUPS,

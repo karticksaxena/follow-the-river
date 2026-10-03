@@ -22,7 +22,7 @@ export interface ShackDef {
   width: number;
   depth: number;
 }
-export type PickupKind = 'battery' | 'arrows' | 'fishPack' | 'tape' | 'ammo';
+export type PickupKind = 'battery' | 'arrows' | 'fishPack' | 'tape' | 'ammo' | 'gun';
 export interface PickupDef {
   id: string;
   kind: PickupKind;
@@ -43,6 +43,10 @@ export type ScareDef =
   | { kind: 'alarm'; x: number; z: number; trigger: number };
 export interface AreaDef {
   id: 'city' | 'suburbs' | 'forest';
+  /** Which chapter (day and night) plays here. */
+  chapter: 1 | 2 | 3;
+  /** Pages shown when the night is survived. */
+  arrival: readonly string[];
   ground: number;
   farBank: number;
   skyline: 'city' | 'houses' | 'trees';
@@ -56,6 +60,12 @@ export interface AreaDef {
   barricadeZ: number;
   nightStart: Spot;
   safeZ: number;
+  /** The night's safe-spot prop (a model from the props folder), loaded by the chapter. */
+  safeProp?: { prop: string; x: number; z: number; yaw: number };
+  /** Night 3: reaching it starts the ending instead of the safe spot. */
+  endingAt?: { x: number; z: number; radius: number };
+  /** Fog far distance at night, overriding the area's default. */
+  nightFog?: number;
   props: readonly PropPlacement[];
   shacks: readonly ShackDef[];
   pickups: readonly PickupDef[];
