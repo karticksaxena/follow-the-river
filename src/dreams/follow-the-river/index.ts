@@ -31,7 +31,7 @@ function playable(save: RunSave): RunSave {
 function devOverride(): RunSave | null {
   if (!import.meta.env.DEV) return null;
   const phase = new URLSearchParams(location.search).get('phase');
-  const found = PLAYABLE.find((p) => p === phase);
+  const found = [...PLAYABLE, 'intro' as const].find((p) => p === phase);
   return found ? { ...freshRun(), phase: found } : null;
 }
 
