@@ -1,0 +1,166 @@
+export type ZombieState =
+  | 'lying'
+  | 'rising'
+  | 'idle'
+  | 'chase'
+  | 'attack'
+  | 'recover'
+  | 'stunned'
+  | 'dying'
+  | 'taken'
+  | 'dead';
+export type Intent =
+  'lie' | 'rise' | 'stand' | 'walk' | 'run' | 'strike' | 'stagger' | 'fall' | 'dragged';
+
+export interface Tuning {
+  /** Notices the player within this many metres. */
+  sight: number;
+  /** Chase speed, m/s. Above 2 the zombie runs (player walks 2.2, sprints 4.2). */
+  speed: number;
+  /** Loses interest beyond this many metres. */
+  giveUp: number;
+}
+
+/** Tuning knobs. Day: few, slow, half-asleep in the dark. Night: fast, they know where you are. */
+export const DAY_TUNING: Tuning = { sight: 7, speed: 1.1, giveUp: 22 };
+export const NIGHT_TUNING: Tuning = { sight: 45, speed: 3.5, giveUp: 80 };
+export const ATTACK = { range: 1.3, windup: 0.45, recover: 0.9, damage: 34 } as const;
+/** Seconds of steady light to stun, and how long the stun lasts. */
+export const STUN = { exposure: 0.4, seconds: 2.5 } as const;
+export const FALL_SECONDS = 3;
+export const TAKEN_SECONDS = 1.6;
+/** A lying zombie wakes when the player is this close (m) or makes noise, then takes RISE_SECONDS to get up. */
+export const WAKE = 4;
+export const RISE_SECONDS = 1.2;
+
+export interface Mind {
+  state: ZombieState;
+  timer: number;
+  exposure: number;
+}
+
+export interface Senses {
+  distance: number;
+  lit: boolean;
+  heard: boolean;
+}
+
+export interface Thought {
+  intent: Intent;
+  hit: boolean;
+}
+
+/** `lying`: starts on the ground (a corpse that isn't one — day scares). */
+export const newMind = (lying = false): Mind => ({
+  state: lying ? 'lying' : 'idle',
+  timer: 0,
+  exposure: 0,
+});
+
+export function isAlive(mind: Mind): boolean {
+  return mind.state !== 'dying' && mind.state !== 'taken' && mind.state !== 'dead';
+}
+
+export function kill(mind: Mind): void {
+  if (!isAlive(mind)) return;
+  mind.state = 'dying';
+  mind.timer = FALL_SECONDS;
+}
+
+export function takeByFish(mind: Mind): void {
+  if (!isAlive(mind)) return;
+  mind.state = 'taken';
+  mind.timer = TAKEN_SECONDS;
+}
+
+function set(out: Thought, intent: Intent, hit = false): Thought {
+  out.intent = intent;
+  out.hit = hit;
+  return out;
+}
+
+/** Light builds up exposure; anything short of a stun fades away. Returns true when stunned. */
+function lightUp(mind: Mind, lit: boolean, dt: number): boolean {
+  mind.exposure = lit ? mind.exposure + dt : Math.max(0, mind.exposure - dt);
+  if (mind.exposure < STUN.exposure) return false;
+  mind.state = 'stunned';
+  mind.timer = STUN.seconds;
+  mind.exposure = 0;
+  return true;
+}
+
+function ending(mind: Mind, dt: number, out: Thought): Thought {
+  mind.timer -= dt;
+  const intent = mind.state === 'taken' ? 'dragged' : 'fall';
+  if (mind.timer <= 0) mind.state = 'dead';
+  return set(out, intent);
+}
+
+function wake(mind: Mind, senses: Senses, out: Thought): Thought {
+  if (senses.distance >= WAKE && !senses.heard) return set(out, 'lie');
+  mind.state = 'rising';
+  mind.timer = RISE_SECONDS;
+  return set(out, 'rise');
+}
+
+function chase(mind: Mind, senses: Senses, tuning: Tuning, dt: number, out: Thought): Thought {
+  if (lightUp(mind, senses.lit, dt)) return set(out, 'stagger');
+  if (senses.distance > tuning.giveUp && !senses.heard) {
+    mind.state = 'idle';
+    return set(out, 'stand');
+  }
+  if (senses.distance <= ATTACK.range) {
+    mind.state = 'attack';
+    mind.timer = ATTACK.windup;
+    return set(out, 'strike');
+  }
+  return set(out, tuning.speed > 2 ? 'run' : 'walk');
+}
+
+function windup(mind: Mind, senses: Senses, dt: number, out: Thought): Thought {
+  if (lightUp(mind, senses.lit, dt)) return set(out, 'stagger');
+  mind.timer -= dt;
+  if (mind.timer > 0) return set(out, 'strike');
+  mind.state = 'recover';
+  mind.timer = ATTACK.recover;
+  return set(out, 'strike', senses.distance <= ATTACK.range * 1.4);
+}
+
+/** Counts the timer down; when it runs out the zombie goes back to chasing. */
+function waitThen(mind: Mind, dt: number, out: Thought, intent: Intent): Thought {
+  mind.timer -= dt;
+  if (mind.timer <= 0) mind.state = 'chase';
+  return set(out, intent);
+}
+
+/** Advance one mind by dt (mutates it — one per zombie, no allocation). Returns the intent and whether a blow landed this frame. */
+export function think(
+  mind: Mind,
+  senses: Senses,
+  tuning: Tuning,
+  dt: number,
+  out: Thought,
+): Thought {
+  switch (mind.state) {
+    case 'dead':
+      return set(out, 'fall');
+    case 'lying':
+      return wake(mind, senses, out);
+    case 'rising':
+      return waitThen(mind, dt, out, 'rise');
+    case 'dying':
+    case 'taken':
+      return ending(mind, dt, out);
+    case 'stunned':
+      return waitThen(mind, dt, out, 'stagger');
+    case 'idle':
+      if (senses.distance < tuning.sight || senses.heard) mind.state = 'chase';
+      return set(out, mind.state === 'chase' ? (tuning.speed > 2 ? 'run' : 'walk') : 'stand');
+    case 'chase':
+      return chase(mind, senses, tuning, dt, out);
+    case 'attack':
+      return windup(mind, senses, dt, out);
+    default:
+      return waitThen(mind, dt, out, 'stand');
+  }
+}
