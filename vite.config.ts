@@ -1,9 +1,13 @@
 import { configDefaults, defineConfig } from 'vitest/config';
 
+/** This checkout's folder (with a trailing slash). */
+const root = decodeURIComponent(new URL('.', import.meta.url).pathname);
+
 export default defineConfig({
   server: {
-    // Agents edit worktrees inside the repo; that must not reload the game being played.
-    watch: { ignored: ['**/.claude/**', '**/.superpowers/**'] },
+    // Agents edit worktrees inside this repo; that must not reload the game being played. Only
+    // this checkout's own folders: a worktree's server still watches its own files.
+    watch: { ignored: [`${root}.claude/**`, `${root}.superpowers/**`] },
   },
   build: {
     // three.js alone is ~850 kB minified; each dream is already split out with import().
