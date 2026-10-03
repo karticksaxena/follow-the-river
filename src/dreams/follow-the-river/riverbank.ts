@@ -3,11 +3,15 @@ import { boxAt, type Box } from '../../engine/collide';
 import { enableShadows } from '../../engine/models';
 import { createSkyDome } from '../../engine/sky';
 import { addSkyline } from './skyline';
+import { createRiverMaterial } from './water';
 
 /** Overcast dusk: dark grey-blue. Never bright. */
 export const SKY = 0x1b2026;
-export const RIVER_X = 7;
-export const RIVER_WIDTH = 8;
+/** The river: its near edge sits at x = 3, right beside the walkable bank. Tuning knobs. */
+export const RIVER_WIDTH = 14;
+export const RIVER_X = 3 + RIVER_WIDTH / 2;
+/** Dim blue moonlight: just enough to put a sheen on the water. Never bright. */
+const MOONLIGHT = 0.35;
 export const BANK_LENGTH = 120;
 
 /** Grey-box crates: [x, z, size]. Placeholder props until Plan 2's city kit. */
@@ -58,17 +62,23 @@ export async function buildRiverbank(): Promise<THREE.Scene> {
   scene.fog = new THREE.Fog(SKY, 6, 70);
   const sky = createSkyDome(0x07090c, SKY, SKY_DOME_RADIUS);
   sky.name = SKY_NAME;
-  scene.add(sky, new THREE.HemisphereLight(0x5a6470, 0x15180f, 0.6));
+  const moon = new THREE.DirectionalLight(0x9fb4ff, MOONLIGHT);
+  moon.position.set(40, 30, -80);
+  scene.add(sky, new THREE.HemisphereLight(0x5a6470, 0x15180f, 0.6), moon);
   const middle = -BANK_LENGTH / 2 + 10;
   // Ground and water run far past the walkable strip so fog, not an edge, ends the view.
   const ground = plane(120, 360, 0x2b2f24);
   ground.position.set(RIVER_X - RIVER_WIDTH / 2 - 60, 0, middle);
   const farBank = plane(80, 360, 0x24271f);
   farBank.position.set(RIVER_X + RIVER_WIDTH / 2 + 40, 0, middle);
-  const water = plane(RIVER_WIDTH, 360, 0x0b161b);
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(RIVER_WIDTH, 360), createRiverMaterial());
+  water.rotation.x = -Math.PI / 2;
   water.position.set(RIVER_X, -0.15, middle);
   for (const surface of [ground, farBank, water]) surface.receiveShadow = true;
-  scene.add(ground, farBank, water);
+  // A pale strip of wet mud marks where the bank drops into the water.
+  const edge = plane(0.6, 360, 0x4a4a3c);
+  edge.position.set(RIVER_X - RIVER_WIDTH / 2 - 0.3, 0.01, middle);
+  scene.add(ground, farBank, water, edge);
   await addSkyline(scene);
   const crateMaterial = new THREE.MeshLambertMaterial({ color: 0x4a3b2a });
   for (const [x, z, size] of CRATES) {

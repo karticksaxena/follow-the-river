@@ -129,9 +129,47 @@ def dead_tree(name: str, height: float) -> None:
     export(name)
 
 
+def limb(radius: float, length: float, location: tuple, tilt: tuple = (0, 0, 0)) -> bpy.types.Object:
+    bpy.ops.mesh.primitive_cylinder_add(vertices=10, radius=radius, depth=length, location=location)
+    part = bpy.context.active_object
+    part.rotation_euler = tilt
+    return part
+
+
+def watcher(name: str) -> None:
+    """Too tall and too thin: arms hang past the knees, the head tilts, two eyes glow faint red.
+    Faces Blender -Y, which exports as glTF +Z (towards a player walking down the bank)."""
+    reset()
+    shadow = material("shadow", (0.012, 0.012, 0.014))
+    glow = material("eyes", (0.7, 0.03, 0.03), emission=4.0)
+    parts = [limb(0.07, 1.2, (side * 0.11, 0, 0.6)) for side in (-1, 1)]
+    torso = limb(0.16, 1.0, (0, 0, 1.68))
+    torso.scale = (1.0, 0.6, 1.0)
+    parts.append(torso)
+    parts += [limb(0.045, 1.5, (side * 0.24, 0, 1.32), (0, side * 0.07, 0)) for side in (-1, 1)]
+    parts.append(limb(0.05, 0.22, (0.02, 0, 2.25), (0.2, 0.15, 0)))
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=14, radius=0.15, location=(0.05, -0.04, 2.45))
+    head = bpy.context.active_object
+    head.scale = (0.85, 0.95, 1.2)
+    head.rotation_euler = (0.25, 0.35, 0)
+    parts.append(head)
+    for part in parts:
+        part.data.materials.append(shadow)
+    for side in (-1, 1):
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=10, ring_count=6, radius=0.022, location=(0.05 + side * 0.055, -0.165, 2.47))
+        eye = bpy.context.active_object
+        eye.data.materials.append(glow)
+        parts.append(eye)
+    join(parts, name)
+    bpy.ops.object.transform_apply(scale=True, rotation=True)
+    bpy.ops.object.shade_smooth()
+    export(name)
+
+
 building("buildingTall", 6, 6, 27, 0.08)
 building("buildingMid", 8, 6, 15, 0.12)
 building("buildingLow", 10, 7, 9, 0.18)
 pine("pine", 9)
 dead_tree("deadTree", 7)
+watcher("watcher")
 print("EXPORTED", sorted(p.name for p in OUT.glob("*.glb")))

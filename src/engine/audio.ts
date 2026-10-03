@@ -6,6 +6,8 @@ export interface AudioBus {
   unlock(): Promise<void>;
   setVolume(volume: number): void;
   loop(buffer: AudioBuffer, volume: number): THREE.Audio;
+  /** Plays `buffer` once (a scare sting, a thud). */
+  once(buffer: AudioBuffer, volume: number): void;
 }
 
 export function createAudioBus(camera: THREE.Camera): AudioBus {
@@ -27,29 +29,17 @@ export function createAudioBus(camera: THREE.Camera): AudioBus {
       sound.play();
       return sound;
     },
+    once(buffer, volume) {
+      const sound = new THREE.Audio(listener);
+      sound.setBuffer(buffer);
+      sound.setVolume(volume);
+      // three's own onEnded resets isPlaying; keep it, then free the audio graph node.
+      const ended = sound.onEnded.bind(sound);
+      sound.onEnded = () => {
+        ended();
+        sound.disconnect();
+      };
+      sound.play();
+    },
   };
-}
-
-/** Brown noise (smoothed white noise): a low room rumble, no sound file needed. Values stay in -1..1. */
-export function brownNoise(
-  length: number,
-  random: () => number = Math.random,
-): Float32Array<ArrayBuffer> {
-  const samples = new Float32Array(length);
-  let last = 0;
-  for (let i = 0; i < length; i++) {
-    last = (last + 0.02 * (random() * 2 - 1)) / 1.02;
-    samples[i] = Math.max(-1, Math.min(1, last * 3.5));
-  }
-  return samples;
-}
-
-export function roomToneBuffer(context: BaseAudioContext, seconds = 6): AudioBuffer {
-  const buffer = context.createBuffer(
-    1,
-    Math.floor(context.sampleRate * seconds),
-    context.sampleRate,
-  );
-  buffer.copyToChannel(brownNoise(buffer.length), 0);
-  return buffer;
 }

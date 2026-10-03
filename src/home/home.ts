@@ -2,10 +2,10 @@ import type * as THREE from 'three/webgpu';
 import type { App } from '../app';
 import { DREAMS } from '../dreams/registry';
 import type { DreamInfo } from '../dreams/types';
-import { roomToneBuffer } from '../engine/audio';
 import { enterFullscreen, toggleFullscreen } from '../engine/fullscreen';
 import { button, el } from '../engine/ui';
 import { buildBedroom } from './bedroom';
+import { breathBuffer } from './breath';
 import { addDreamCloud, tweenCamera } from './cloud';
 import { nextHomeState, type HomeEvent, type HomeState } from './flow';
 import { createZzz } from './zzzSprites';
@@ -78,7 +78,8 @@ export async function startHome(app: App, play: Play): Promise<HomeHandle> {
     overlay.closePanel();
     enterFullscreen();
     audio.unlock().catch(() => undefined);
-    tone = audio.loop(roomToneBuffer(audio.listener.context), 0.25);
+    // Just the sleeper's slow breathing: the home screen should feel quiet.
+    tone = audio.loop(breathBuffer(audio.listener.context), 0.12);
     const center = room.head.clone().setY(6);
     addDreamCloud(room.scene, center);
     const to = {
