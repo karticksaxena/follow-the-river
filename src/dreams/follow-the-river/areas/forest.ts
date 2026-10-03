@@ -1,3 +1,4 @@
+import { shackBounds } from '../shack';
 import { seeded } from '../skyline';
 import type { AreaDef, LurkerDef, PickupDef, PropPlacement, ScareDef, ShackDef } from './types';
 
@@ -12,6 +13,8 @@ const PINE_SEED = 61;
 const SHACK_BACK_X = -16;
 const FACE_DOOR = -Math.PI / 2;
 const TAU = Math.PI * 2;
+/** Metres kept free of scenery around each shack (pine canopies are wide). */
+const SHACK_CLEARANCE = 1.5;
 const PINES = [
   'tree_pineTallA',
   'tree_pineTallB',
@@ -54,6 +57,8 @@ function dayForest(): PropPlacement[] {
   ];
 }
 
+const TALL_ROCKS = ['rock_tallA', 'rock_tallB', 'rock_tallC', 'rock_tallD', 'rock_tallE'];
+
 /** Night route: the forest thins to rocks, the far bank turns to cliffs, the river looks narrow. */
 function nightRoute(): PropPlacement[] {
   const out = [
@@ -61,10 +66,11 @@ function nightRoute(): PropPlacement[] {
     ...pines(PINE_SEED + 4, -124, -390, 30, 20, 30),
   ];
   const random = seeded(PINE_SEED + 5);
+  // Real rock shapes only: the cliff blocks read as plain brown boxes in the fog.
+  const tall = (): string => TALL_ROCKS[Math.floor(random() * TALL_ROCKS.length)] ?? 'rock_tallA';
   for (let z = -130; z > -388; z -= 14) {
-    const rock = Math.round(z / 14) % 2 === 0 ? 'rock_tallB' : 'cliff_block_rock';
-    out.push(at(rock, -17 - random() * 4, z, random() * TAU, 1 + random() * 0.6));
-    out.push(at('cliff_block_rock', 18 + random() * 6, z - 6, random() * TAU, 1.6 + random()));
+    out.push(at(tall(), -17 - random() * 4, z, random() * TAU, 1 + random() * 0.6));
+    out.push(at(tall(), 18 + random() * 6, z - 6, random() * TAU, 1.6 + random()));
     if (Math.round(z / 14) % 3 === 0) out.push(at('rock_largeC', 19 + random() * 4, z, 0, 1.4));
   }
   return out;
@@ -75,7 +81,7 @@ function barricade(): PropPlacement[] {
   const out: PropPlacement[] = [];
   for (let i = 0; i < 6; i++) {
     const x = LAND_X + 1.5 + i * 3.9;
-    out.push(at('log_large', x, BARRICADE_Z, Math.PI / 2 + (i % 2) * 0.12));
+    out.push(at('log_large', x, BARRICADE_Z, (i % 2) * 0.12));
     out.push(at(i % 2 ? 'rock_largeB' : 'rock_largeE', x + 1.9, BARRICADE_Z + 0.8, i, 0.8));
   }
   out.push(
@@ -122,17 +128,23 @@ function clutter(): PropPlacement[] {
   return out;
 }
 
+const SHACKS: readonly ShackDef[] = [{ id: 'cabin', x: -13.74, z: -70, width: 3, depth: 2 }];
+
+/** True when a prop stands clear of every shack (trees would otherwise grow through the roof). */
+function clearOfShacks(p: PropPlacement): boolean {
+  return SHACKS.every((s) => {
+    const b = shackBounds(s);
+    const out = p.x < b.minX - SHACK_CLEARANCE || p.x > b.maxX + SHACK_CLEARANCE;
+    return out || p.z < b.minZ - SHACK_CLEARANCE || p.z > b.maxZ + SHACK_CLEARANCE;
+  });
+}
+
 const PROPS: readonly PropPlacement[] = [
-  ...dayForest(),
-  ...nightRoute(),
-  ...campsite(),
-  ...clutter(),
+  ...[...dayForest(), ...nightRoute(), ...campsite(), ...clutter()].filter(clearOfShacks),
   ...barricade(),
   { kit: 'survival', model: 'campfire-pit', x: 0.3, z: -113 },
   { kit: 'survival', model: 'bedroll', x: -0.9, z: -113.5, yaw: 0.5 },
 ];
-
-const SHACKS: readonly ShackDef[] = [{ id: 'cabin', x: -13.74, z: -70, width: 3, depth: 2 }];
 
 const PICKUPS: readonly PickupDef[] = [
   { id: 'fish-1', kind: 'fishPack', x: -6, z: -4 },

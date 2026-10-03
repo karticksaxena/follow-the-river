@@ -103,7 +103,7 @@ function barricade(): PropPlacement[] {
   for (let i = 0; i < BARRICADE_PIECES; i++) {
     const x = first + i * step;
     const model = i % 3 === 1 ? 'fence_gate' : 'fence_planks';
-    out.push({ kit: 'nature', model, x, z: BARRICADE_Z, yaw: Math.PI / 2, scale: 0.6 });
+    out.push({ kit: 'nature', model, x, z: BARRICADE_Z, yaw: (i % 2) * 0.08, scale: 0.6 });
     if (i % 2 === 0) {
       out.push({
         kit: 'survival',

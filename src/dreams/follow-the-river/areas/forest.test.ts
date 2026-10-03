@@ -81,6 +81,11 @@ describe('FOREST', () => {
     expect(ambushes.every((id) => ids.has(id))).toBe(true);
   });
 
+  it('grows no trees or bushes inside the cabin', () => {
+    const cabin = shackBounds(FOREST.shacks[0]);
+    expect(FOREST.props.filter((p) => inside(p.x, p.z, cabin))).toEqual([]);
+  });
+
   it('keeps solid props off the river (the dam aside) and pickups clear of them', () => {
     const solids = FOREST.props.filter((p) => p.collide);
     expect(solids.every((p) => p.x <= EDGE_X - 0.2 || damSpan(p.z))).toBe(true);
