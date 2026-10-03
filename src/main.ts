@@ -10,6 +10,9 @@ import { createOverlay } from './engine/ui';
 import { startHome } from './home/home';
 import './style.css';
 
+const HOME_FAILED =
+  "Couldn't load the bedroom. Check your internet connection and reload the page.";
+
 async function tryStage(root: HTMLElement): Promise<Stage | null> {
   try {
     return await createStage(root);
@@ -53,11 +56,16 @@ async function boot(): Promise<void> {
   // Dev-only handle for browser checks, e.g. `kd.stage.camera.position`.
   if (import.meta.env.DEV) Object.assign(window, { kd: app });
   const goHome = async (): Promise<void> => {
-    const home = await startHome(app, async (info) => {
-      const error = await runDream(app, info, () => void goHome());
-      if (error === null) home.dispose();
-      return error;
-    });
+    try {
+      const home = await startHome(app, async (info) => {
+        const error = await runDream(app, info, () => void goHome());
+        if (error === null) home.dispose();
+        return error;
+      });
+    } catch {
+      showMessage(overlay, "Kartik's Dreams", HOME_FAILED);
+      await overlay.fade(false);
+    }
   };
   await goHome();
 }

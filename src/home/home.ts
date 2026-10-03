@@ -77,7 +77,7 @@ export async function startHome(app: App, play: Play): Promise<HomeHandle> {
     if (!send('start')) return;
     overlay.closePanel();
     enterFullscreen();
-    void audio.unlock();
+    audio.unlock().catch(() => undefined);
     tone = audio.loop(roomToneBuffer(audio.listener.context), 0.25);
     const center = room.head.clone().setY(6);
     addDreamCloud(room.scene, center);

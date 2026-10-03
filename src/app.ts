@@ -55,13 +55,16 @@ export async function runDream(
   const stopMove = app.stage.addUpdater((dt) => {
     if (screen === 'game') player.update(dt);
   });
-  const leave = (): void => {
+  const cleanUp = (): void => {
     removeEventListener('keydown', onEscape);
     stopMove();
     dream.dispose();
     player.dispose();
     app.overlay.closePanel();
     app.stage.scene = new THREE.Scene();
+  };
+  const leave = (): void => {
+    cleanUp();
     onQuit();
   };
   const showMenu = (): void =>
@@ -85,15 +88,21 @@ export async function runDream(
       lock();
     });
   };
-  await dream.start({
-    stage: app.stage,
-    overlay: app.overlay,
-    audio: app.audio,
-    keys: app.keys,
-    player,
-    read,
-    isPaused: () => screen !== 'game',
-  });
+  try {
+    await dream.start({
+      stage: app.stage,
+      overlay: app.overlay,
+      audio: app.audio,
+      keys: app.keys,
+      player,
+      read,
+      isPaused: () => screen !== 'game',
+    });
+  } catch {
+    // A model or sound failed to download: back to the dream cards with a message.
+    cleanUp();
+    return `Couldn't start "${info.title}". Check your internet connection and try again.`;
+  }
   await app.overlay.fade(false);
   read(info.intro);
   return null;
