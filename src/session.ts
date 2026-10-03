@@ -102,7 +102,10 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
     app.audio.setWorldPaused(false);
     app.stage.scene = new THREE.Scene();
   }
+  let ended = false;
   function leave(): void {
+    if (ended) return;
+    ended = true;
     cleanUp();
     onQuit();
   }
@@ -121,7 +124,10 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
         resolve(index);
       });
     });
-  const finish = (): void => void app.overlay.fade(true).then(leave);
+  const finish = (): void => {
+    gate.openReader(); // freeze input so the pause menu can't open during the fade
+    void app.overlay.fade(true).then(leave);
+  };
   return {
     context(dream) {
       current = dream;
