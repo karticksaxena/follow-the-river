@@ -65,15 +65,19 @@ const towardCentre = new THREE.Vector3();
 export function skyDirection(
   elevation: number,
   azimuth: number,
+  out: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 },
 ): { x: number; y: number; z: number } {
-  return {
-    x: Math.cos(elevation) * Math.sin(azimuth),
-    y: Math.sin(elevation),
-    z: Math.cos(elevation) * Math.cos(azimuth),
-  };
+  out.x = Math.cos(elevation) * Math.sin(azimuth);
+  out.y = Math.sin(elevation);
+  out.z = Math.cos(elevation) * Math.cos(azimuth);
+  return out;
 }
 
-/** One hemisphere light, one key light, the sky dome and the sun/moon disc (a child of the dome). */
+/**
+ * One hemisphere light, one key light, the sky dome and the sun/moon disc (a child of the dome).
+ * The key light stays put (a shadowless DirectionalLight only uses its direction);
+ * only the sky dome follows the camera.
+ */
 export function createWorldLights(scene: THREE.Scene): WorldLights {
   const hemi = new THREE.HemisphereLight();
   const key = new THREE.DirectionalLight();
@@ -89,11 +93,19 @@ export function createWorldLights(scene: THREE.Scene): WorldLights {
   return { hemi, key, disc, sky, scene };
 }
 
+/** Darkens hemi + key by `dim` 0..1 (inside shacks). Allocation-free: safe to call every frame. */
+export function applyDim(lights: WorldLights, preset: LightPreset, dim: number): void {
+  const factor = 1 - DIM_STRENGTH * dim;
+  lights.hemi.intensity = preset.hemi.intensity * factor;
+  lights.key.intensity = preset.key.intensity * factor;
+}
+
 /**
- * Colours, intensities, positions and fog only: never `visible` or the light count
- * (that would recompile shaders). `dim` 0..1 darkens hemi + key.
+ * Switches to a preset: colours, intensities, positions, fog and the sky repaint. Rare (allocates,
+ * repaints); never changes `visible` or the light count (that would recompile shaders). The key
+ * light stays put; only the sky dome follows the camera. Per-frame dimming is `applyDim`.
  */
-export function applyLighting(lights: WorldLights, preset: LightPreset, dim = 0): void {
+export function applyLighting(lights: WorldLights, preset: LightPreset): void {
   const { scene, hemi, key, disc, sky } = lights;
   if (scene.fog instanceof THREE.Fog) {
     scene.fog.color.set(preset.fog.color);
@@ -101,13 +113,11 @@ export function applyLighting(lights: WorldLights, preset: LightPreset, dim = 0)
     scene.fog.far = preset.fog.far;
   }
   paintSkyDome(sky, preset.skyTop, preset.skyHorizon);
-  const factor = 1 - DIM_STRENGTH * dim;
   hemi.color.set(preset.hemi.sky);
   hemi.groundColor.set(preset.hemi.ground);
-  hemi.intensity = preset.hemi.intensity * factor;
   const d = skyDirection(preset.key.elevation, preset.key.azimuth);
   key.color.set(preset.key.color);
-  key.intensity = preset.key.intensity * factor;
+  applyDim(lights, preset, 0);
   key.position.set(d.x * KEY_DISTANCE, d.y * KEY_DISTANCE, d.z * KEY_DISTANCE);
   if (disc.material instanceof THREE.MeshBasicMaterial) disc.material.color.set(preset.disc.color);
   disc.position.set(d.x * DISC_DISTANCE, d.y * DISC_DISTANCE, d.z * DISC_DISTANCE);
