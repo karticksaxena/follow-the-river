@@ -26,7 +26,7 @@ function exitInside(x: number, z: number, radius: number, box: Box): { x: number
 
 /**
  * Pushes a circle (the player, radius in metres) out of every box it overlaps.
- * ponytail: checks every box each frame — fine for a few hundred; add a grid if levels grow.
+ * Checks every box passed in: use `createBoxGrid` to pass only nearby boxes.
  */
 export function resolveCircle(
   x: number,

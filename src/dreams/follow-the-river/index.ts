@@ -23,7 +23,7 @@ export function createDream(): DreamModule {
       scene.add(view);
       ctx.stage.scene = scene;
       const sky = scene.getObjectByName(SKY_NAME);
-      ctx.player.colliders = riverbankColliders();
+      ctx.player.setColliders(riverbankColliders());
       ctx.player.teleport(SPAWN.x, SPAWN.z, SPAWN.yaw);
       const light = createFlashlight(view);
       flashlight = light;
