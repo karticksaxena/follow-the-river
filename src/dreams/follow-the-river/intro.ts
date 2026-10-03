@@ -61,7 +61,10 @@ export interface Intro {
 }
 
 const THROW_DELAY = 0.7; // Mom's wind-up before the pack leaves her hand
-const TAKE_WAIT = 4.6; // pack flight + the orca rising and sinking
+const TAKE_WAIT = 3.5; // pack flight + splash + the orca rising and sinking, watched unpaused
+const FILM_HOLD = 1.5; // Mom raises her phone before the last page
+const LOOK_TIME = 1.2; // the camera eases toward the water this long when the pack is thrown
+const TURN_RATE = 6; // 1/s: Mom's yaw (and the camera nudge) ease-out speed
 const WATER_VOLUME = 0.4;
 const HAND_REACH = 0.4;
 const HAND_HEIGHT = 1.2;
@@ -80,6 +83,10 @@ interface State {
   busy: boolean;
   disposed: boolean;
   time: number;
+  /** Mom's target yaw; the tick eases her toward it. */
+  momYaw: number;
+  /** Seconds left of easing the camera toward the river. */
+  look: number;
   waitLeft: number;
   waitDone: (() => void) | null;
   water: { stop(): unknown } | null;
@@ -145,6 +152,7 @@ type Actions = Record<ActiveStep, () => Promise<void>>;
 function makeActions(ctx: DreamContext, sc: IntroScene, st: State): Actions {
   const { read, wait, fade } = makeIo(ctx, st);
   const { mom } = sc;
+  const cam = ctx.stage.camera.position;
   return {
     news: () => read(INTRO_PAGES.news),
     'mom-leaves': async () => {
@@ -152,7 +160,7 @@ function makeActions(ctx: DreamContext, sc: IntroScene, st: State): Actions {
       await fade(true);
       if (st.disposed) return;
       mom.group.position.set(AT.momDoor.x, 0, AT.momDoor.z);
-      mom.group.rotation.y = Math.PI / 2;
+      mom.group.rotation.y = st.momYaw = Math.PI / 2;
       mom.pack.visible = true;
       await fade(false);
     },
@@ -166,6 +174,9 @@ function makeActions(ctx: DreamContext, sc: IntroScene, st: State): Actions {
       await read(INTRO_PAGES.outside);
     },
     throw: async () => {
+      await read(INTRO_PAGES.throw.slice(0, 1)); // "Here, girl." — then the beat plays unpaused
+      if (st.disposed) return;
+      st.look = LOOK_TIME;
       mom.play('Interact', true);
       await wait(THROW_DELAY);
       if (st.disposed) return;
@@ -174,11 +185,18 @@ function makeActions(ctx: DreamContext, sc: IntroScene, st: State): Actions {
       sc.fish.feed({ x: x + HAND_REACH, y: HAND_HEIGHT, z });
       await wait(TAKE_WAIT);
       if (st.disposed) return;
-      await read(INTRO_PAGES.throw);
+      await read(INTRO_PAGES.throw.slice(1));
     },
     goodbye: async () => {
+      const m = mom.group.position;
+      st.momYaw = Math.atan2(cam.x - m.x, cam.z - m.z); // turns to face you
+      await read(INTRO_PAGES.goodbye.slice(0, 3));
+      if (st.disposed) return;
+      st.momYaw = Math.PI / 2; // back to the water, phone up
       mom.play('Idle_Gun_Pointing');
-      await read(INTRO_PAGES.goodbye);
+      await wait(FILM_HOLD);
+      if (st.disposed) return;
+      await read(INTRO_PAGES.goodbye.slice(3));
     },
   };
 }
@@ -202,10 +220,24 @@ function makePerform(actions: Actions, st: State, hud: Hud, onDone: () => void) 
 }
 
 /** Per-frame motion: Mom, the TV picture and flicker, the orca, and the timed waits. */
-function makeTick(sc: IntroScene, st: State, cam: { x: number; z: number }) {
+const wrapAngle = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
+
+function makeTick(
+  sc: IntroScene,
+  st: State,
+  camera: { position: { x: number; z: number }; rotation: { y: number } },
+) {
+  const cam = camera.position;
   return (dt: number): void => {
     st.time += dt;
     sc.mom.update(dt);
+    const ease = 1 - Math.exp(-TURN_RATE * dt);
+    const body = sc.mom.group.rotation;
+    body.y += wrapAngle(st.momYaw - body.y) * ease;
+    if (st.look > 0) {
+      st.look -= dt;
+      camera.rotation.y += wrapAngle(YAW_EAST - camera.rotation.y) * ease;
+    }
     if (st.inside) {
       sc.news.update(st.time);
       const flicker = Math.abs(Math.sin(st.time * 23) * Math.sin(st.time * 7.3));
@@ -231,13 +263,15 @@ export async function runIntro(ctx: DreamContext, onDone: () => void): Promise<I
     busy: false,
     disposed: false,
     time: 0,
+    momYaw: 0,
+    look: 0,
     waitLeft: 0,
     waitDone: null,
     water: null,
   };
   const spots = makeSpots(sc);
   const perform = makePerform(makeActions(ctx, sc, st), st, hud, onDone);
-  const tick = makeTick(sc, st, cam);
+  const tick = makeTick(sc, st, ctx.stage.camera);
 
   const stop = ctx.stage.addUpdater((dt) => {
     const pressed = ctx.keys.consumePress('KeyE');
