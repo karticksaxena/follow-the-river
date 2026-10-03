@@ -43,5 +43,5 @@ Tooling mirrors `~/Code/base-repo-ts/SETUP.md`: oxlint type-aware (`.oxlintrc.js
 - Subagents run on Sonnet only (`model: "sonnet"`).
 - Browser checks: Claude in Chrome on `http://localhost:5173/?nolock` and `?nolock&webgl`; `window.kd` (dev only) exposes the app. Pointer lock and audio need a real click, so Kartik checks those and Safari by hand.
 - Rebuild assets (zombies, orca, props, sounds) with `tools/assets/README.md`.
-- Play-test: `?nolock`, `?phase=intro|day1|night1`, `?webgl`; `window.kd` and `window.kdRiver` (dev). Hidden tab: Chrome pauses rAF and THREE.Timer zeroes delta — override `document.hidden` and step `renderer._animation._animationLoop(t)` by hand.
+- Play-test: `?nolock`, `?phase=intro|day1|…|night3`, `?webgl`; `window.kd` and `window.kdRiver` (dev). Hidden tab: Chrome pauses rAF and THREE.Timer zeroes delta — override `document.hidden` and step `renderer._animation._animationLoop(t)` by hand, `await` between stepped seconds (pages/fades are promises), and shim `requestAnimationFrame` with `setTimeout` for `?webgl` (its shader compile polls rAF).
 - Blender: headless (`/Applications/Blender.app/Contents/MacOS/Blender --background --python …`) or the project Blender MCP (`.mcp.json`) for converting/posing models.
