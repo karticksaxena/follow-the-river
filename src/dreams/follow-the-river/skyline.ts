@@ -13,7 +13,7 @@ export interface Silhouette {
 export type BuildingModel = 'buildingTall' | 'buildingMid' | 'buildingLow';
 
 /** Repeatable pseudo-random numbers so the skyline is the same every visit. */
-function seeded(seed: number): () => number {
+export function seeded(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
     state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
