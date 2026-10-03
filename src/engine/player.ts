@@ -28,8 +28,11 @@ export function createPlayer(
   dom: HTMLElement,
   keys: KeyState,
   onLock: (event: LockEvent) => void,
+  freeLook = false,
 ): Player {
   const controls = new PointerLockControls(camera, dom);
+  // Dev `?nolock`: never locked, so let plain mouse movement turn the view anyway.
+  if (freeLook) controls.isLocked = true;
   const forward = new THREE.Vector3();
   const onLocked = (): void => onLock('locked');
   const onUnlocked = (): void => onLock('unlocked');

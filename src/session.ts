@@ -46,7 +46,13 @@ function createGate(app: App, showMenu: () => void): Gate {
     if (screen === 'game') app.overlay.closePanel();
     if (screen === 'pause-menu') showMenu();
   };
-  const player = createPlayer(app.stage.camera, app.stage.renderer.domElement, app.keys, onLock);
+  const player = createPlayer(
+    app.stage.camera,
+    app.stage.renderer.domElement,
+    app.keys,
+    onLock,
+    NO_LOCK,
+  );
   const lock = (): void => (NO_LOCK ? onLock('locked') : player.lock());
   // Without pointer lock the browser can't report Esc as an unlock, so do it here (dev only).
   const onEscape = (event: KeyboardEvent): void => {
