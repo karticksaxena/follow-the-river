@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { assetUrl } from '../engine/assets';
 import { enableShadows, loadModel } from '../engine/models';
 import { createSkyDome } from '../engine/sky';
 
@@ -91,7 +92,7 @@ export async function buildBedroom(): Promise<Bedroom> {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(NIGHT);
   scene.fog = new THREE.Fog(NIGHT, 5, 16);
-  const models = await Promise.all(PIECES.map(([file]) => loadModel(`/assets/home/${file}.glb`)));
+  const models = await Promise.all(PIECES.map(([file]) => loadModel(assetUrl(`home/${file}.glb`))));
   models.forEach((model, i) => {
     const [, x, y, z, rotationY] = PIECES[i];
     model.scale.setScalar(FURNITURE_SCALE);

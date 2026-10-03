@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { assetUrl } from '../../engine/assets';
 import { loadModel } from '../../engine/models';
 
 export interface Silhouette {
@@ -56,7 +57,7 @@ export function buildingFor(height: number): BuildingModel {
   return 'buildingLow';
 }
 
-const url = (name: string): string => `/assets/river/${name}.glb`;
+const url = (name: string): string => assetUrl(`river/${name}.glb`);
 
 /** Native heights of the Blender props, in metres. Keep in sync with river_props.py. */
 const PINE_HEIGHT = 9;

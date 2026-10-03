@@ -1,4 +1,5 @@
 import type * as THREE from 'three/webgpu';
+import { assetUrl } from '../../engine/assets';
 import { loadModel } from '../../engine/models';
 
 /**
@@ -19,5 +20,5 @@ export function shouldStrike(state: WatcherState, distance: number): boolean {
  * arms past the knees, a tilted head and two faintly glowing red eyes facing the player.
  */
 export function loadWatcherFigure(): Promise<THREE.Object3D> {
-  return loadModel('/assets/river/watcher.glb');
+  return loadModel(assetUrl('river/watcher.glb'));
 }

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   build: {
@@ -7,5 +7,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // Worktrees and SDD scratch copies live inside the repo; never run their tests.
+    exclude: [...configDefaults.exclude, '.claude/**', '.superpowers/**'],
   },
 });

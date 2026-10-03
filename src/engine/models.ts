@@ -43,6 +43,23 @@ export function enableShadows(root: THREE.Object3D, cast = true): void {
   });
 }
 
+/** Flags geometry, materials and textures as shared cache data that `disposeScene` must keep. */
+export function markCached(root: THREE.Object3D): void {
+  root.traverse((node) => {
+    if (!isMesh(node)) return;
+    node.geometry.userData.cached = true;
+    const materials: THREE.Material[] = Array.isArray(node.material)
+      ? node.material
+      : [node.material];
+    for (const material of materials) {
+      material.userData.cached = true;
+      for (const value of Object.values(material)) {
+        if (value instanceof THREE.Texture) value.userData.cached = true;
+      }
+    }
+  });
+}
+
 const loader = new GLTFLoader();
 const cache = new Map<string, Promise<THREE.Object3D>>();
 
@@ -53,6 +70,7 @@ export async function loadModel(url: string): Promise<THREE.Object3D> {
     pending = loader.loadAsync(url).then((gltf) => {
       makeLit(gltf.scene);
       enableShadows(gltf.scene);
+      markCached(gltf.scene);
       return gltf.scene;
     });
     pending.catch(() => cache.delete(url));

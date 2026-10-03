@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { LOAD_TIMEOUT_MS, loadDream } from './dreams/load';
 import type { DreamInfo } from './dreams/types';
 import type { AudioBus } from './engine/audio';
+import { disposeScene } from './engine/dispose';
 import type { KeyState } from './engine/input';
 import { screenAfter, type LockEvent, type Screen } from './engine/lock';
 import { showPages, showPauseMenu } from './engine/menus';
@@ -63,6 +64,8 @@ export async function runDream(
     removeEventListener('keydown', onEscape);
     stopMove();
     dream.dispose();
+    // A dream that failed before setting its own scene must not free the bedroom.
+    if (app.stage.scene !== homeScene) disposeScene(app.stage.scene);
     player.dispose();
     app.overlay.closePanel();
     app.stage.scene = new THREE.Scene();
