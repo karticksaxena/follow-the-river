@@ -1,3 +1,4 @@
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as THREE from 'three/webgpu';
 
@@ -61,6 +62,8 @@ export function markCached(root: THREE.Object3D): void {
 }
 
 const loader = new GLTFLoader();
+// Characters are meshopt-compressed (tools/assets/README.md); the decoder ships with three.
+loader.setMeshoptDecoder(MeshoptDecoder);
 const cache = new Map<string, Promise<THREE.Object3D>>();
 
 /** Loads a .glb once (lit, shadowed); every call returns a fresh clone sharing geometry and materials. */
