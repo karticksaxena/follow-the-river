@@ -6,6 +6,9 @@ export const GUN = { range: 40, cooldown: 0.35, alertRadius: 40, noiseSeconds: 8
 /** Seconds to lower the old weapon, then to raise the new one. */
 export const SWITCH_HALF = 0.125;
 
+/** After a switch, wheel notches are ignored this long (s) so one trackpad flick switches once. */
+export const WHEEL_LOCK = 0.5;
+
 export type WeaponKey = 'Digit1' | 'Digit2' | 'WheelUp' | 'WheelDown';
 export const WEAPON_KEYS: readonly WeaponKey[] = ['Digit1', 'Digit2', 'WheelUp', 'WheelDown'];
 
@@ -23,17 +26,20 @@ export interface Switcher {
   pending: Weapon;
   phase: 'idle' | 'lower' | 'raise';
   t: number;
+  /** Seconds left in which wheel presses are ignored. */
+  wheelLock: number;
 }
 
 export function newSwitcher(): Switcher {
-  return { current: 'bow', pending: 'bow', phase: 'idle', t: 0 };
+  return { current: 'bow', pending: 'bow', phase: 'idle', t: 0, wheelLock: 0 };
 }
 
 export const canFire = (s: Switcher): boolean => s.phase === 'idle';
 
 /** Starts lowering toward `to`; ignored when already there or mid-switch. */
-export function startSwitch(s: Switcher, to: Weapon): void {
+export function startSwitch(s: Switcher, to: Weapon, key?: WeaponKey): void {
   if (s.phase !== 'idle' || to === s.current) return;
+  if (s.wheelLock > 0 && (key === 'WheelUp' || key === 'WheelDown')) return;
   s.pending = to;
   s.phase = 'lower';
   s.t = 0;
@@ -45,11 +51,15 @@ export function resetSwitcher(s: Switcher): void {
   s.pending = 'bow';
   s.phase = 'idle';
   s.t = 0;
+  s.wheelLock = 0;
 }
 
 /** Advances the tween; returns how far down the viewmodel is (0 up, 1 fully lowered). */
 export function stepSwitch(s: Switcher, dt: number): number {
-  if (s.phase === 'idle') return 0;
+  if (s.phase === 'idle') {
+    s.wheelLock = Math.max(0, s.wheelLock - dt);
+    return 0;
+  }
   s.t += dt;
   if (s.phase === 'lower' && s.t >= SWITCH_HALF) {
     s.current = s.pending;
@@ -59,6 +69,7 @@ export function stepSwitch(s: Switcher, dt: number): number {
   if (s.phase === 'raise' && s.t >= SWITCH_HALF) {
     s.phase = 'idle';
     s.t = 0;
+    s.wheelLock = WHEEL_LOCK;
     return 0;
   }
   const f = Math.min(1, s.t / SWITCH_HALF);

@@ -1,5 +1,15 @@
 export type HintId =
-  'pickup' | 'shack' | 'bow' | 'fish' | 'wait' | 'night' | 'hurt' | 'tape' | 'gun';
+  | 'pickup'
+  | 'shack'
+  | 'bow'
+  | 'fish'
+  | 'wait'
+  | 'night'
+  | 'hurt'
+  | 'tape'
+  | 'gun'
+  | 'night2'
+  | 'night3';
 
 /** Player-paced pages, each shown once per run (ids are kept in `RunState.hints`). */
 export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
@@ -29,6 +39,8 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   ],
   hurt: ['You are hurt. Three hits and you are dead.'],
   tape: ["A video tape. Mom's handwriting on the label."],
+  night2: ['Corn hides them. Listen.'],
+  night3: ['The dam. Mom is at the dam.'],
   gun: [
     'A police gun. Press 2 for the gun, 1 for the bow.',
     'The gun stops anything — but every shot is loud, and they will come.',

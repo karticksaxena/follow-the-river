@@ -17,7 +17,7 @@ export const NIGHT_DIFFICULTY: Readonly<Record<1 | 2 | 3, NightDifficulty>> = {
 };
 
 /** Horde pool size: the largest cap of any night. */
-export const HORDE_CAPACITY = 22;
+export const HORDE_CAPACITY = Math.max(...Object.values(NIGHT_DIFFICULTY).map((d) => d.cap));
 
 /** Difficulty for a chapter; anything but 2 or 3 is Night 1. */
 export function nightDifficulty(chapter: number): NightDifficulty {

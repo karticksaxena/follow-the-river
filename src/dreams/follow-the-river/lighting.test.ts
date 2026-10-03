@@ -1,6 +1,14 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { applyDim, applyLighting, createWorldLights, LIGHTING, skyDirection } from './lighting';
+import {
+  applyDim,
+  applyLighting,
+  createWorldLights,
+  LIGHTING,
+  mixHex,
+  mixPreset,
+  skyDirection,
+} from './lighting';
 
 const brightness = (hex: number): number => ((hex >> 16) + ((hex >> 8) & 255) + (hex & 255)) / 765;
 
@@ -47,5 +55,24 @@ describe('skyDirection', () => {
   it('is a unit vector', () => {
     const d = skyDirection(0.4, 1.2);
     expect(Math.hypot(d.x, d.y, d.z)).toBeCloseTo(1);
+  });
+});
+
+describe('dawn', () => {
+  it('is brighter than night but still dim and grey', () => {
+    expect(LIGHTING.dawn.hemi.intensity).toBeGreaterThan(LIGHTING.night.hemi.intensity);
+    expect(LIGHTING.dawn.hemi.intensity).toBeLessThanOrEqual(LIGHTING.day.hemi.intensity);
+  });
+});
+
+describe('mixPreset', () => {
+  it('mixes colours per channel and numbers linearly', () => {
+    expect(mixHex(0x000000, 0xff8040, 0.5)).toBe(0x804020);
+    const { night, dawn } = LIGHTING;
+    expect(mixPreset(night, dawn, 0)).toEqual(night);
+    expect(mixPreset(night, dawn, 1)).toEqual(dawn);
+    const half = mixPreset(night, dawn, 0.5);
+    expect(half.hemi.intensity).toBeCloseTo((night.hemi.intensity + dawn.hemi.intensity) / 2);
+    expect(half.fog.far).toBeCloseTo((night.fog.far + dawn.fog.far) / 2);
   });
 });

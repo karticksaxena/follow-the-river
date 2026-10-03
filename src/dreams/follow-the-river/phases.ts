@@ -4,10 +4,10 @@ import type { PickupDef } from './areas/types';
 import { strikesFor } from './fish';
 import { MAX_HEALTH, phaseTitle, spawnFor, waitQuestion } from './flow';
 import { HINTS, type HintId } from './hints';
-import { applyLighting, LIGHTING } from './lighting';
+import { applyLighting, LIGHTING, setFogFar } from './lighting';
 import type { Run, Systems } from './run';
 import { shackAt } from './scares';
-import { completePhase, isNight, restartPhase, type RunSave } from './state';
+import { chapterOf, completePhase, isNight, restartPhase, type RunSave } from './state';
 import { playTape } from './tapes';
 import { DAY_TUNING } from './zombies/brain';
 
@@ -67,6 +67,7 @@ export function beginPhase(f: Flow): void {
   run.frozen = false;
   run.dying = 'no';
   applyLighting(sys.world.lights, night ? LIGHTING.night : LIGHTING.day);
+  if (night && sys.area.nightFog) setFogFar(sys.world.lights, sys.area.nightFog);
   f.lantern.intensity = night ? LANTERN_NIGHT : 0;
   horde.reset();
   bow.reset();
@@ -82,12 +83,24 @@ export function beginPhase(f: Flow): void {
   f.onReset();
 }
 
-/** The title card (optional), then the phase's first-time hint. */
+/** Days 2 and 3 name their place on the title card (Day 1 stays plain). */
+const DAY_CARD: Readonly<Record<string, string>> = {
+  day2: 'Day 2\nThe suburbs',
+  day3: 'Day 3\nThe forest',
+};
+
+/** First-time hints for a phase: the generic one, then the night's own (Night 2, Night 3). */
+function phaseHints(f: Flow): string[] {
+  const { phase } = f.save;
+  if (!isNight(phase)) return [...hintPages(f, 'pickup')];
+  const own = chapterOf(phase) === 2 ? 'night2' : chapterOf(phase) === 3 ? 'night3' : null;
+  return [...hintPages(f, 'night'), ...(own ? hintPages(f, own) : [])];
+}
+
+/** The title card (optional), then the phase's first-time hints. */
 export function announce(f: Flow, title: boolean): void {
-  const pages = [
-    ...(title ? [phaseTitle(f.save.phase)] : []),
-    ...hintPages(f, isNight(f.save.phase) ? 'night' : 'pickup'),
-  ];
+  const phase = f.save.phase;
+  const pages = [...(title ? [DAY_CARD[phase] ?? phaseTitle(phase)] : []), ...phaseHints(f)];
   if (pages.length > 0) f.sys.ctx.read(pages);
 }
 

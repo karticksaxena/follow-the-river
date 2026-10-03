@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { createSkyDome, paintSkyDome } from '../../engine/sky';
 
-export type LightingName = 'dusk' | 'day' | 'night';
+export type LightingName = 'dusk' | 'day' | 'night' | 'dawn';
 export interface LightPreset {
   skyTop: number;
   skyHorizon: number;
@@ -41,7 +41,55 @@ export const LIGHTING: Readonly<Record<LightingName, LightPreset>> = {
     key: { color: 0x9fb4ff, intensity: 0.35, elevation: 0.5, azimuth: -2.6 },
     disc: { color: 0xdfe8ff, size: 4, soft: 0.25 },
   },
+  // Ending: still grey and dim, a pale sun low over the dam.
+  dawn: {
+    skyTop: 0x2a3036,
+    skyHorizon: 0x625d5a,
+    fog: { color: 0x4e4a4a, near: 8, far: 85 },
+    hemi: { sky: 0x8a8a90, ground: 0x1c1c18, intensity: 0.6 },
+    key: { color: 0xe0d4c0, intensity: 0.45, elevation: 0.12, azimuth: 3.0 },
+    disc: { color: 0xa89c90, size: 6, soft: 0.9 },
+  },
 };
+
+const channel = (a: number, b: number, t: number, shift: number): number =>
+  Math.round(((a >> shift) & 255) * (1 - t) + ((b >> shift) & 255) * t);
+
+/** Per-channel blend of two 0xRRGGBB colours. */
+export function mixHex(a: number, b: number, t: number): number {
+  return (channel(a, b, t, 16) << 16) | (channel(a, b, t, 8) << 8) | channel(a, b, t, 0);
+}
+
+const mix = (a: number, b: number, t: number): number => a * (1 - t) + b * t;
+
+/** A preset `t` (0..1) of the way from `a` to `b`. Allocates: call it a few times a second, not per frame. */
+export function mixPreset(a: LightPreset, b: LightPreset, t: number): LightPreset {
+  return {
+    skyTop: mixHex(a.skyTop, b.skyTop, t),
+    skyHorizon: mixHex(a.skyHorizon, b.skyHorizon, t),
+    fog: {
+      color: mixHex(a.fog.color, b.fog.color, t),
+      near: mix(a.fog.near, b.fog.near, t),
+      far: mix(a.fog.far, b.fog.far, t),
+    },
+    hemi: {
+      sky: mixHex(a.hemi.sky, b.hemi.sky, t),
+      ground: mixHex(a.hemi.ground, b.hemi.ground, t),
+      intensity: mix(a.hemi.intensity, b.hemi.intensity, t),
+    },
+    key: {
+      color: mixHex(a.key.color, b.key.color, t),
+      intensity: mix(a.key.intensity, b.key.intensity, t),
+      elevation: mix(a.key.elevation, b.key.elevation, t),
+      azimuth: mix(a.key.azimuth, b.key.azimuth, t),
+    },
+    disc: {
+      color: mixHex(a.disc.color, b.disc.color, t),
+      size: mix(a.disc.size, b.disc.size, t),
+      soft: t < 0.5 ? a.disc.soft : b.disc.soft,
+    },
+  };
+}
 
 export interface WorldLights {
   hemi: THREE.HemisphereLight;
@@ -128,6 +176,11 @@ export function createWorldLights(scene: THREE.Scene): WorldLights {
 }
 
 /** Darkens hemi + key by `dim` 0..1 (inside shacks). Allocation-free: safe to call every frame. */
+/** Pulls the fog in (an area's tighter night). Rare: called when a phase starts. */
+export function setFogFar(lights: WorldLights, far: number): void {
+  if (lights.scene.fog instanceof THREE.Fog) lights.scene.fog.far = far;
+}
+
 export function applyDim(lights: WorldLights, preset: LightPreset, dim: number): void {
   const factor = 1 - DIM_STRENGTH * dim;
   lights.hemi.intensity = preset.hemi.intensity * factor;

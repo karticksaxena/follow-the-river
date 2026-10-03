@@ -1,7 +1,7 @@
 import type { AudioBus } from '../../engine/audio';
+import { nightDifficulty } from './difficulty';
 import { EDGE_X } from './river';
 import type { Sounds } from './sounds';
-import { SPAWNER } from './zombies/spawner';
 
 /** Loudness per layer, and how fast volumes ease (per second). Tuning knobs. */
 const VOLUME = { water: 0.5, wind: 0.25, drone: 0.3, horde: 0.6, heartbeat: 0.8 } as const;
@@ -10,7 +10,14 @@ const EASE_PER_SECOND = 1;
 
 export interface Ambience {
   /** Eases every layer toward its target; the loops themselves never stop. */
-  update(dt: number, x: number, night: boolean, zombies: number, hurt: boolean): void;
+  update(
+    dt: number,
+    x: number,
+    night: boolean,
+    zombies: number,
+    hurt: boolean,
+    chapter?: number,
+  ): void;
   /** Eases every layer to silence (frozen, dying). */
   hush(dt: number): void;
   dispose(): void;
@@ -42,12 +49,12 @@ export function createAmbience(audio: AudioBus, sounds: Sounds): Ambience {
   const heart = start(sounds.heartbeat, false);
   const layers = [water, wind, drone, horde, heart];
   return {
-    update(dt, x, night, zombies, hurt) {
+    update(dt, x, night, zombies, hurt, chapter) {
       const nearWater = Math.max(0, 1 - (EDGE_X - x) / WATER_FADE_DISTANCE);
       step(water, VOLUME.water * nearWater, dt);
       step(wind, night ? 0 : VOLUME.wind, dt);
       step(drone, night ? VOLUME.drone : 0, dt);
-      step(horde, night ? (VOLUME.horde * zombies) / SPAWNER.cap : 0, dt);
+      step(horde, night ? (VOLUME.horde * zombies) / nightDifficulty(chapter ?? 1).cap : 0, dt);
       step(heart, hurt ? VOLUME.heartbeat : 0, dt);
     },
     hush(dt) {

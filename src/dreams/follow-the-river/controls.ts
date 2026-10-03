@@ -131,7 +131,9 @@ function use(c: Ctl): void {
 function switchWeapons(c: Ctl, dt: number): void {
   const { keys } = c.sys.ctx;
   for (const key of WEAPON_KEYS) {
-    if (keys.consumePress(key)) startSwitch(c.sw, nextWeapon(c.sw.current, c.run.live.hasGun, key));
+    if (keys.consumePress(key)) {
+      startSwitch(c.sw, nextWeapon(c.sw.current, c.run.live.hasGun, key), key);
+    }
   }
   const drop = stepSwitch(c.sw, dt) * LOWER;
   const gun = c.sw.current === 'gun' && c.run.live.hasGun;

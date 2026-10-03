@@ -11,6 +11,7 @@ import {
   stepTimers,
   SWITCH_HALF,
   tryShot,
+  WHEEL_LOCK,
 } from './weapons';
 
 describe('nextWeapon', () => {
@@ -65,5 +66,29 @@ describe('gun', () => {
     const supplies = { battery: 0, arrows: 0, ammo: 0, fishPacks: 0 };
     expect(spend(supplies, 'ammo', 1)).toBeNull();
     expect(spend({ ...supplies, ammo: 1 }, 'ammo', 1)?.ammo).toBe(0);
+  });
+});
+
+describe('wheel lock', () => {
+  it('a long trackpad flick switches once; keys still switch at once', () => {
+    const s = newSwitcher();
+    startSwitch(s, 'gun', 'WheelUp');
+    stepSwitch(s, SWITCH_HALF);
+    stepSwitch(s, SWITCH_HALF);
+    expect(s.current).toBe('gun');
+    startSwitch(s, 'bow', 'WheelDown');
+    expect(s.phase).toBe('idle');
+    stepSwitch(s, WHEEL_LOCK);
+    startSwitch(s, 'bow', 'WheelDown');
+    expect(s.phase).toBe('lower');
+  });
+
+  it('number keys ignore the lock', () => {
+    const s = newSwitcher();
+    startSwitch(s, 'gun', 'Digit2');
+    stepSwitch(s, SWITCH_HALF);
+    stepSwitch(s, SWITCH_HALF);
+    startSwitch(s, 'bow', 'Digit1');
+    expect(s.phase).toBe('lower');
   });
 });
