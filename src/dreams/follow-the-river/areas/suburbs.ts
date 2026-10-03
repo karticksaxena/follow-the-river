@@ -195,6 +195,7 @@ export const SUBURBS: AreaDef = {
   ground: 0x1a2016,
   farBank: 0x13170f,
   skyline: 'houses',
+  bank: 'natural',
   landX: LAND_X,
   startZ: START_Z,
   endZ: END_Z,

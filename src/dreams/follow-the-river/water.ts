@@ -36,3 +36,17 @@ export function createRiverMaterial(look: WaterLook = RIVER_FLOW): THREE.MeshSta
   material.emissiveNode = color(look.glow).mul(streaks);
   return material;
 }
+
+/**
+ * A flat water surface `width` (x) by `length` (z), lying in the xz plane, centred on its origin.
+ * The caller only positions it. Everything about how water looks (reflections included) lives here.
+ */
+export function createWaterMesh(
+  width: number,
+  length: number,
+  look: WaterLook = RIVER_FLOW,
+): THREE.Mesh {
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, length), createRiverMaterial(look));
+  mesh.rotation.x = -Math.PI / 2;
+  return mesh;
+}

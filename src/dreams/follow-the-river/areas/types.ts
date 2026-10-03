@@ -50,6 +50,8 @@ export interface AreaDef {
   ground: number;
   farBank: number;
   skyline: 'city' | 'houses' | 'trees';
+  /** How the land meets the water: a concrete wall (city) or a sloping mud bank (country). */
+  bank: 'embankment' | 'natural';
   /** Land side of the play strip (x), the river edge is EDGE_X. */
   landX: number;
   /** Strip ends: the start blocker (z, positive) and the far end (z, negative). */

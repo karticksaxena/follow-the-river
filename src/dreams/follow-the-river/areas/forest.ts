@@ -214,6 +214,7 @@ export const FOREST: AreaDef = {
   ground: 0x14170f,
   farBank: 0x0f130d,
   skyline: 'trees',
+  bank: 'natural',
   landX: LAND_X,
   startZ: START_Z,
   endZ: END_Z,

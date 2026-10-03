@@ -174,6 +174,7 @@ export const CITY: AreaDef = {
   ground: 0x1d1f21,
   farBank: 0x15181b,
   skyline: 'city',
+  bank: 'embankment',
   landX: LAND_X,
   startZ: START_Z,
   endZ: END_Z,

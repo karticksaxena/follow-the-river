@@ -1,10 +1,14 @@
 import * as THREE from 'three/webgpu';
-import { createRiverMaterial, LAKE_FLOW } from './water';
+import { createWaterMesh, LAKE_FLOW } from './water';
 
 /** The river: its near edge sits at x = 3, right beside the walkable bank. Tuning knobs. */
 export const RIVER_WIDTH = 14;
 export const RIVER_X = 3 + RIVER_WIDTH / 2;
 export const EDGE_X = 3;
+/** The far bank's edge (x). Anything on the far bank is placed relative to this, never a literal. */
+export const FAR_EDGE_X = EDGE_X + RIVER_WIDTH;
+/** The water surface height (y); the walkable ground is y 0. One value for rivers, lakes and banks. */
+export const WATER_Y = -0.15;
 /** Ground and water run this far past each end of the strip so fog, not an edge, ends the view. */
 export const OVERRUN = 120;
 
@@ -36,7 +40,6 @@ export const LAKE = {
 } as const;
 export const PEBBLE_COLOR = 0x5a5348;
 const PEBBLE_Y = 0.02;
-const WATER_Y = -0.15;
 
 /** Pure: every plane of a lake whose shore meets the water at `z`. Nothing overlaps. */
 export function lakeRects(
@@ -73,11 +76,7 @@ const rectPlane = (r: Rect, color: number): THREE.Mesh => plane(r.x1 - r.x0, r.z
 /** The lake: still dark water, pebbles on the near shore, land on both flanks. */
 export function addLake(scene: THREE.Scene, z: number, landColor: number, bankColor: number): void {
   const r = lakeRects(z);
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(r.water.x1 - r.water.x0, r.water.z0 - r.water.z1),
-    createRiverMaterial(LAKE_FLOW),
-  );
-  water.rotation.x = -Math.PI / 2;
+  const water = createWaterMesh(r.water.x1 - r.water.x0, r.water.z0 - r.water.z1, LAKE_FLOW);
   scene.add(
     placed(water, r.water, WATER_Y),
     placed(rectPlane(r.flankWest, landColor), r.flankWest, 0),
@@ -104,8 +103,7 @@ export function addRiver(
   const middle = (z0 + z1) / 2;
   const farBank = plane(80, length, farBankColor);
   farBank.position.set(RIVER_X + RIVER_WIDTH / 2 + 40, 0, middle);
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(RIVER_WIDTH, length), createRiverMaterial());
-  water.rotation.x = -Math.PI / 2;
+  const water = createWaterMesh(RIVER_WIDTH, length);
   water.position.set(RIVER_X, WATER_Y, middle);
   const edge = plane(0.6, length, 0x4a4a3c);
   edge.position.set(EDGE_X - 0.3, 0.01, middle);
