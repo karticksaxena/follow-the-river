@@ -27,7 +27,11 @@ export interface DreamContext {
   /** True while the pause menu or a page is open. Dreams freeze their logic then. */
   isPaused: () => boolean;
   /** Show player-paced pages (pauses the game until the player finishes reading). */
-  read: (pages: readonly string[]) => void;
+  read: (pages: readonly string[], onDone?: () => void) => void;
+  /** Player-paced question with buttons; resolves with the chosen index. Pauses the game. */
+  choose: (text: string, labels: readonly string[]) => Promise<number>;
+  /** End the dream and return to the dream cards (fades out first). */
+  finish: () => void;
 }
 
 export interface DreamModule {

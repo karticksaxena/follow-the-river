@@ -68,6 +68,31 @@ export function showPages(overlay: Overlay, pages: readonly string[], onDone: ()
   render();
 }
 
+/** A player-paced question. Buttons only; the first one gets focus so Enter picks it. */
+export function showChoice(
+  overlay: Overlay,
+  text: string,
+  labels: readonly string[],
+  onPick: (index: number) => void,
+): void {
+  const buttons = labels.map((label, index) =>
+    button(
+      label,
+      () => {
+        overlay.closePanel();
+        onPick(index);
+      },
+      index === 0 ? 'btn primary' : 'btn',
+    ),
+  );
+  overlay.panel((panel) => {
+    const row = el('div', 'row');
+    row.append(...buttons);
+    panel.append(el('p', 'page-text', text), row);
+  });
+  buttons[0]?.focus();
+}
+
 export interface PauseMenuOptions {
   title: string;
   howToPlay: readonly string[];
