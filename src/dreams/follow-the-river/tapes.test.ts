@@ -10,4 +10,11 @@ describe('tapes', () => {
     expect(lengths.length).toBeGreaterThan(0);
     expect(lengths.every((n) => n > 2)).toBe(true);
   });
+
+  it.each([1, 2, 3])('tape %i has a label first and short player-paced pages', (n) => {
+    const pages = TAPES[n] ?? [];
+    expect(pages.length).toBeGreaterThanOrEqual(5);
+    expect(pages[0]).toMatch(/^The label says/);
+    expect(pages.every((p) => p.length <= 180)).toBe(true);
+  });
 });
