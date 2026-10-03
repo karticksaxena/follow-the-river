@@ -4,7 +4,7 @@ import type { AudioBus } from '../../../engine/audio';
 import { resolveCircle } from '../../../engine/collide';
 import type { BoxGrid } from '../../../engine/grid';
 import { loadSkinned, type SkinnedAsset } from '../../../engine/models';
-import { inCone, raySphere, type Vec3 } from '../../../engine/ray';
+import { inCone, type Vec3 } from '../../../engine/ray';
 import { characterUrl } from '../kits';
 import {
   ATTACK,
@@ -19,7 +19,7 @@ import {
   type Thought,
   type Tuning,
 } from './brain';
-import { CLIP_FOR, pickOutfit, timeScaleFor } from './look';
+import { bodyHit, CLIP_FOR, LOOPING, pickOutfit, timeScaleFor } from './look';
 import { steer } from './steer';
 
 export interface PlayerSense {
@@ -62,10 +62,6 @@ const GROAN_RANGE = 25;
 const GROAN_MIN = 1.2;
 const GROAN_MAX = 3.5;
 const CHEST_Y = 1.1;
-const HEAD = { y: 1.6, r: 0.2 } as const;
-const CHEST = { y: 1.15, r: 0.38 } as const;
-const LYING = { y: 0.25, r: 0.5 } as const;
-const ONCE = new Set(['Death', 'GetUp', 'Hit', 'Attack']);
 
 interface Body {
   root: THREE.Object3D;
@@ -101,7 +97,7 @@ function createBody(i: number, assets: Record<'m' | 'f', SkinnedAsset>): Body {
   const actions = new Map<string, THREE.AnimationAction>();
   for (const clip of asset.clips) {
     const action = mixer.clipAction(clip);
-    if (ONCE.has(clip.name)) {
+    if (!LOOPING.has(clip.name)) {
       action.setLoop(THREE.LoopOnce, 1);
       action.clampWhenFinished = true;
     }
@@ -197,8 +193,127 @@ function move(b: Body, dt: number, player: PlayerSense, grid: BoxGrid, s: Scratc
     b.y -= SINK_SPEED * dt;
   }
   b.yaw = turn(b.yaw, face, TURN_RATE * dt);
-  if (intent === 'walk' || intent === 'run') {
-    b.action?.setEffectiveTimeScale(timeScaleFor(CLIP_FOR[intent], b.tuning.speed));
+}
+
+interface Voices {
+  /** Plays a groan on zombie `id`. `steal`: take over its own voice or the oldest one instead of skipping. */
+  say(id: number, volume: number, steal: boolean): void;
+  /** Stops and frees any voice owned by zombie `id`. */
+  release(id: number): void;
+  groanSomeone(player: PlayerSense): void;
+  stopAll(): void;
+  dispose(): void;
+}
+
+function createVoices(
+  audio: AudioBus,
+  groans: readonly AudioBuffer[],
+  bodies: readonly Body[],
+): Voices {
+  const voices = Array.from({ length: VOICES }, () => audio.positional(bodies[0].root, 3));
+  const owners = new Int32Array(VOICES).fill(-1);
+  const started = new Float64Array(VOICES);
+  let clock = 0;
+
+  /** Voice index to use for `id`: its own if playing (steal only), else a free one, else the oldest (steal only). */
+  function pick(id: number, steal: boolean): number {
+    let free = -1;
+    let oldest = 0;
+    for (let v = 0; v < VOICES; v++) {
+      if (!voices[v].isPlaying) {
+        if (free < 0) free = v;
+        continue;
+      }
+      if (owners[v] === id) return steal ? v : -1;
+      if (started[v] < started[oldest]) oldest = v;
+    }
+    if (free >= 0) return free;
+    return steal ? oldest : -1;
+  }
+
+  function say(id: number, volume: number, steal: boolean): void {
+    if (groans.length === 0) return;
+    const v = pick(id, steal);
+    if (v < 0) return;
+    const sound = voices[v];
+    if (sound.isPlaying) sound.stop();
+    bodies[id].root.add(sound);
+    sound.setBuffer(groans[Math.floor(Math.random() * groans.length)]);
+    sound.setVolume(volume);
+    owners[v] = id;
+    started[v] = ++clock;
+    sound.play();
+  }
+
+  function release(id: number): void {
+    for (let v = 0; v < VOICES; v++) {
+      if (owners[v] !== id) continue;
+      if (voices[v].isPlaying) voices[v].stop();
+      owners[v] = -1;
+    }
+  }
+
+  function groanSomeone(player: PlayerSense): void {
+    let n = 0;
+    for (let pass = 0; pass < 2; pass++) {
+      let target = pass === 1 ? Math.floor(Math.random() * n) : -1;
+      for (let id = 0; id < bodies.length; id++) {
+        const b = bodies[id];
+        if (!b.active || !isAlive(b.mind)) continue;
+        if (Math.hypot(b.x - player.x, b.z - player.z) > GROAN_RANGE) continue;
+        if (pass === 0) n++;
+        else if (target-- === 0) return say(id, 0.8, false);
+      }
+      if (n === 0) return;
+    }
+  }
+
+  const stopAll = (): void => {
+    owners.fill(-1);
+    for (const sound of voices) if (sound.isPlaying) sound.stop();
+  };
+
+  return {
+    say,
+    release,
+    groanSomeone,
+    stopAll,
+    dispose() {
+      stopAll();
+      for (const sound of voices) {
+        sound.disconnect();
+        sound.removeFromParent();
+      }
+    },
+  };
+}
+
+/** Marks the SHADOW_COUNT nearest alive zombies within SHADOW_RANGE of the player as shadow casters. */
+function pickShadowCasters(
+  bodies: readonly Body[],
+  player: PlayerSense,
+  distances: Float32Array,
+  picked: Uint8Array,
+): void {
+  picked.fill(0);
+  for (let i = 0; i < bodies.length; i++) {
+    const b = bodies[i];
+    const d = Math.hypot(b.x - player.x, b.z - player.z);
+    distances[i] = b.active && isAlive(b.mind) && d <= SHADOW_RANGE ? d : Infinity;
+  }
+  for (let k = 0; k < SHADOW_COUNT; k++) {
+    let best = -1;
+    for (let i = 0; i < bodies.length; i++) {
+      if (!picked[i] && distances[i] < Infinity && (best < 0 || distances[i] < distances[best])) {
+        best = i;
+      }
+    }
+    if (best < 0) break;
+    picked[best] = 1;
+  }
+  for (let i = 0; i < bodies.length; i++) {
+    const mesh = bodies[i].mesh;
+    if (mesh) mesh.castShadow = picked[i] === 1;
   }
 }
 
@@ -222,45 +337,11 @@ export async function createHorde(
     neighbours: new Float32Array(capacity * 2),
     count: 0,
   };
-  const voices = Array.from({ length: VOICES }, () => audio.positional(bodies[0].root, 3));
-  const owners = new Int32Array(VOICES).fill(-1);
+  const voices = createVoices(audio, groans, bodies);
   const timers = { shadow: 0, groan: GROAN_MIN };
-  const dist2 = new Float32Array(capacity);
+  const shadowDistances = new Float32Array(capacity);
   const picked = new Uint8Array(capacity);
   let seq = 0;
-
-  /** Plays one groan from a free voice on zombie `id` (skipped when all 4 voices are busy or it already has one). */
-  function voice(id: number, volume: number): void {
-    if (groans.length === 0) return;
-    let free = -1;
-    for (let v = 0; v < VOICES; v++) {
-      if (voices[v].isPlaying) {
-        if (owners[v] === id) return;
-      } else if (free < 0) free = v;
-    }
-    if (free < 0) return;
-    const sound = voices[free];
-    bodies[id].root.add(sound);
-    sound.setBuffer(groans[Math.floor(Math.random() * groans.length)]);
-    sound.setVolume(volume);
-    owners[free] = id;
-    sound.play();
-  }
-
-  function groanSomeone(player: PlayerSense): void {
-    let n = 0;
-    for (let pass = 0; pass < 2; pass++) {
-      let pick = pass === 1 ? Math.floor(Math.random() * n) : -1;
-      for (let id = 0; id < bodies.length; id++) {
-        const b = bodies[id];
-        if (!b.active || !isAlive(b.mind)) continue;
-        if (Math.hypot(b.x - player.x, b.z - player.z) > GROAN_RANGE) continue;
-        if (pass === 0) n++;
-        else if (pick-- === 0) return voice(id, 0.8);
-      }
-      if (n === 0) return;
-    }
-  }
 
   function tick(
     b: Body,
@@ -280,35 +361,20 @@ export async function createHorde(
     const t = think(b.mind, senses, b.tuning, dt, b.thought);
     if (t.hit) onHit(ATTACK.damage);
     if (t.intent !== b.intent) {
-      if (t.intent === 'strike') voice(id, 1);
-      else if (t.intent === 'fall') voice(id, 0.8);
+      if (t.intent === 'strike') voices.say(id, 1, true);
+      else if (t.intent === 'fall') voices.say(id, 0.8, true);
     }
     move(b, dt, player, grid, s);
     play(b, t.intent);
+    if (t.intent === 'walk' || t.intent === 'run') {
+      b.action?.setEffectiveTimeScale(timeScaleFor(CLIP_FOR[t.intent], b.tuning.speed));
+    }
     b.mixer.update(dt);
     b.root.position.set(b.x, b.y, b.z);
     b.root.rotation.y = b.yaw;
-    if (t.intent === 'dragged' && b.mind.state === 'dead') park(b);
-  }
-
-  function pickShadowCasters(player: PlayerSense): void {
-    picked.fill(0);
-    for (let i = 0; i < bodies.length; i++) {
-      const b = bodies[i];
-      const d = Math.hypot(b.x - player.x, b.z - player.z);
-      dist2[i] = b.active && isAlive(b.mind) && d <= SHADOW_RANGE ? d : Infinity;
-    }
-    for (let k = 0; k < SHADOW_COUNT; k++) {
-      let best = -1;
-      for (let i = 0; i < bodies.length; i++) {
-        if (!picked[i] && dist2[i] < Infinity && (best < 0 || dist2[i] < dist2[best])) best = i;
-      }
-      if (best < 0) break;
-      picked[best] = 1;
-    }
-    for (let i = 0; i < bodies.length; i++) {
-      const mesh = bodies[i].mesh;
-      if (mesh) mesh.castShadow = picked[i] === 1;
+    if (t.intent === 'dragged' && b.mind.state === 'dead') {
+      voices.release(id);
+      park(b);
     }
   }
 
@@ -332,15 +398,12 @@ export async function createHorde(
     return oldest;
   }
 
-  const stopVoices = (): void => {
-    for (const sound of voices) if (sound.isPlaying) sound.stop();
-  };
-
   return {
     spawn(x, z, yaw, tuning, lying = false) {
       const id = freeSlot();
       if (id < 0) return -1;
       const b = bodies[id];
+      voices.release(id);
       park(b);
       b.active = true;
       b.order = ++seq;
@@ -369,12 +432,12 @@ export async function createHorde(
       timers.shadow -= dt;
       if (timers.shadow <= 0) {
         timers.shadow = SHADOW_EVERY;
-        pickShadowCasters(player);
+        pickShadowCasters(bodies, player, shadowDistances, picked);
       }
       timers.groan -= dt;
       if (timers.groan <= 0) {
         timers.groan = GROAN_MIN + Math.random() * (GROAN_MAX - GROAN_MIN);
-        groanSomeone(player);
+        voices.groanSomeone(player);
       }
     },
     rayHit(origin, dir, maxDistance) {
@@ -382,10 +445,7 @@ export async function createHorde(
       for (let id = 0; id < bodies.length; id++) {
         const b = bodies[id];
         if (!b.active || !isAlive(b.mind)) continue;
-        const lying = b.mind.state === 'lying';
-        const d = lying
-          ? hit(origin, dir, b, LYING)
-          : minOf(hit(origin, dir, b, HEAD), hit(origin, dir, b, CHEST));
+        const d = bodyHit(origin, dir, b.x, b.y, b.z, b.mind.state === 'lying');
         if (d !== null && d <= maxDistance && (!best || d < best.distance)) {
           best = { id, distance: d };
         }
@@ -411,42 +471,18 @@ export async function createHorde(
       return n;
     },
     reset() {
-      stopVoices();
+      voices.stopAll();
       for (const b of bodies) park(b);
+      timers.shadow = 0;
+      timers.groan = GROAN_MIN;
     },
     dispose() {
-      stopVoices();
-      for (const sound of voices) sound.removeFromParent();
+      voices.dispose();
       for (const b of bodies) {
         b.mixer.stopAllAction();
+        b.mixer.uncacheRoot(b.root);
         b.root.removeFromParent();
       }
     },
   };
-}
-
-function hit(
-  origin: Vec3,
-  dir: Vec3,
-  b: Body,
-  sphere: { readonly y: number; readonly r: number },
-): number | null {
-  return raySphere(
-    origin.x,
-    origin.y,
-    origin.z,
-    dir.x,
-    dir.y,
-    dir.z,
-    b.x,
-    sphere.y + b.y,
-    b.z,
-    sphere.r,
-  );
-}
-
-function minOf(a: number | null, b: number | null): number | null {
-  if (a === null) return b;
-  if (b === null) return a;
-  return Math.min(a, b);
 }

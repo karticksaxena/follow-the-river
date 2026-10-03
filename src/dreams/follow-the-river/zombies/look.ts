@@ -1,3 +1,4 @@
+import { raySphere, type Vec3 } from '../../../engine/ray';
 import type { Intent } from './brain';
 
 /** Outfit mesh names inside zombie-m.glb / zombie-f.glb. */
@@ -51,4 +52,26 @@ export function timeScaleFor(clip: string, speed: number): number {
   if (clip === 'Walk') return speed / CLIP_SPEED.Walk;
   if (clip === 'Run') return speed / CLIP_SPEED.Run;
   return 1;
+}
+
+const HEAD = { y: 1.6, r: 0.2 } as const;
+const CHEST = { y: 1.15, r: 0.38 } as const;
+const LYING = { y: 0.25, r: 0.5 } as const;
+
+/** Distance along a unit ray to a zombie standing at (x, y, z) (head and chest spheres; one sphere when lying), or null. */
+export function bodyHit(
+  origin: Vec3,
+  dir: Vec3,
+  x: number,
+  y: number,
+  z: number,
+  lying: boolean,
+): number | null {
+  const sphere = (s: { readonly y: number; readonly r: number }): number | null =>
+    raySphere(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, x, y + s.y, z, s.r);
+  if (lying) return sphere(LYING);
+  const head = sphere(HEAD);
+  const chest = sphere(CHEST);
+  if (head === null) return chest;
+  return chest === null ? head : Math.min(head, chest);
 }
