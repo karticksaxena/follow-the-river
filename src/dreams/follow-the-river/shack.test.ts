@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveCircle } from '../../engine/collide';
-import { SHACK_TILE, shackBounds, shackColliders } from './shack';
+import { DOOR_HEIGHT, SHACK_TILE, shackBounds, shackColliders } from './shack';
 
 const def = { id: 's1', x: -14, z: -20, width: 3, depth: 2 };
 
@@ -26,5 +26,9 @@ describe('shack', () => {
     let z = b.maxZ + 1;
     for (let i = 0; i < 40; i++) ({ z } = resolveCircle(def.x, z - 0.1, 0.3, walls));
     expect(z).toBeGreaterThan(b.maxZ);
+  });
+
+  it('has a doorway tall enough to walk through', () => {
+    expect(DOOR_HEIGHT).toBeGreaterThanOrEqual(2);
   });
 });

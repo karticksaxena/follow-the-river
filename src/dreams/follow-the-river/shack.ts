@@ -1,19 +1,27 @@
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as THREE from 'three/webgpu';
 import { boxAt, type Box } from '../../engine/collide';
-import { loadModel } from '../../engine/models';
 import type { ShackDef } from './areas/types';
-import { KIT_SCALE, kitUrl } from './kits';
+import { KIT_SCALE } from './kits';
 
 /** One survival-kit wall tile in metres (0.54 native × scale ≈ 3.24 m). */
 export const SHACK_TILE = 0.54 * KIT_SCALE.survival;
-/** Native wall height 0.5 × scale. */
-const WALL_HEIGHT = 0.5 * KIT_SCALE.survival;
+/** Wall height in metres. */
+const WALL_HEIGHT = 3;
+/** Doorway height; the lintel fills the rest. */
+export const DOOR_HEIGHT = 2.1;
 const COLLIDER_THICKNESS = 0.2;
-/** Wall pieces are ~0.54 m thick; colliders sit in the middle of that. */
+/** Colliders (and wall slabs) sit this far inside the footprint edge. */
 const WALL_INSET = 0.27;
 const DOOR_GAP = 1.4;
 const ROOF_THICKNESS = 0.25;
-const ROOF_COLOR = 0x2a2724;
+const ROOF_OVERHANG = 0.3;
+/** Roof tilt about z (radians): rises toward -X so rain runs off the door side. */
+const ROOF_SLOPE = 0.05;
+const WALL_COLOR = 0x3a3530;
+const STRIPE_COLOR = '#2a2622';
+/** Corrugation stripes are ~10 cm wide: the 64 px texture (8 px per stripe) covers 0.8 m. */
+const TEXTURE_METRES = 0.8;
 const FLOOR_COLOR = 0x1c1a18;
 
 /** Door tile index along z (the middle tile; the upper middle for even widths). */
@@ -55,75 +63,83 @@ export function shackColliders(def: ShackDef): Box[] {
   ];
 }
 
-/**
- * Survival-kit walls pivot at the tile's centre with the wall on its -Z edge (measured from the
- * GLB accessors), so rotating a piece about its tile centre keeps it on that edge.
- * Yaw per side: -Z 0, +Z π, +X -π/2, -X π/2.
- */
-async function wallPiece(
-  model: string,
-  x: number,
-  z: number,
-  yaw: number,
-): Promise<THREE.Object3D> {
-  const piece = await loadModel(kitUrl('survival', model));
-  piece.scale.setScalar(KIT_SCALE.survival);
-  piece.position.set(x, 0, z);
-  piece.rotation.y = yaw;
-  return piece;
-}
+let metal: THREE.MeshLambertMaterial | null = null;
 
-interface WallSlot {
-  x: number;
-  z: number;
-  yaw: number;
-  door: boolean;
-}
-
-function wallSlots(def: ShackDef): WallSlot[] {
-  const b = shackBounds(def);
-  const slots: WallSlot[] = [];
-  const cx = (i: number): number => b.minX + (i + 0.5) * SHACK_TILE;
-  const cz = (j: number): number => b.minZ + (j + 0.5) * SHACK_TILE;
-  for (let j = 0; j < def.width; j++) {
-    slots.push({ x: b.minX + SHACK_TILE / 2, z: cz(j), yaw: Math.PI / 2, door: false });
-    slots.push({
-      x: b.maxX - SHACK_TILE / 2,
-      z: cz(j),
-      yaw: -Math.PI / 2,
-      door: j === doorTile(def),
-    });
+/** One shared dark rusty corrugated-metal material, built on first use. */
+function metalMaterial(): THREE.MeshLambertMaterial {
+  if (metal) return metal;
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = `#${WALL_COLOR.toString(16)}`;
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = STRIPE_COLOR;
+    for (let x = 0; x < 64; x += 8) ctx.fillRect(x, 0, 2, 64);
   }
-  for (let i = 0; i < def.depth; i++) {
-    slots.push({ x: cx(i), z: b.minZ + SHACK_TILE / 2, yaw: 0, door: false });
-    slots.push({ x: cx(i), z: b.maxZ - SHACK_TILE / 2, yaw: Math.PI, door: false });
+  const map = new THREE.CanvasTexture(canvas);
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.colorSpace = THREE.SRGBColorSpace;
+  metal = new THREE.MeshLambertMaterial({ map });
+  return metal;
+}
+
+/** A slab covering `box` between heights y0 and y1; UVs are in metres so stripes stay ~10 cm. */
+function slab(box: Box, y0: number, y1: number): THREE.BufferGeometry {
+  const geometry = new THREE.BoxGeometry(box.maxX - box.minX, y1 - y0, box.maxZ - box.minZ);
+  geometry.translate((box.minX + box.maxX) / 2, (y0 + y1) / 2, (box.minZ + box.maxZ) / 2);
+  return metersToUv(geometry);
+}
+
+function metersToUv(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+  const position = geometry.getAttribute('position');
+  const uv = geometry.getAttribute('uv');
+  for (let i = 0; i < position.count; i++) {
+    uv.setXY(
+      i,
+      (position.getX(i) + position.getZ(i)) / TEXTURE_METRES,
+      position.getY(i) / TEXTURE_METRES,
+    );
   }
-  return slots;
+  return geometry;
+}
+
+function solid(geometries: THREE.BufferGeometry[], material: THREE.Material): THREE.Mesh {
+  const mesh = new THREE.Mesh(mergeGeometries(geometries), material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 /**
- * Walls and doorway are survival-kit pieces; the roof and floor are plain boxes because the kit's
- * roof/floor pieces are 3 m-tall props (native 0.5 high), not flat slabs.
+ * Solid corrugated-metal walls (the same slabs as the colliders, with a lintel over the door),
+ * a slightly sloped overhanging roof and a dark floor. One walls mesh, one roof mesh per shack.
+ * (The Kenney metal wall pieces are open scaffolding, so they are not used.)
  */
-export async function addShack(scene: THREE.Scene, def: ShackDef): Promise<void> {
-  const slots = wallSlots(def);
-  const pieces = await Promise.all(
-    slots.map((s) =>
-      wallPiece(s.door ? 'structure-metal-doorway' : 'structure-metal-wall', s.x, s.z, s.yaw),
-    ),
-  );
+export function addShack(scene: THREE.Scene, def: ShackDef): Promise<void> {
+  const material = metalMaterial();
+  const colliders = shackColliders(def);
+  const walls = colliders.map((box) => slab(box, 0, WALL_HEIGHT));
+  const door = colliders[3];
+  const above = { ...door, minZ: door.maxZ, maxZ: colliders[4].minZ };
+  walls.push(slab(above, DOOR_HEIGHT, WALL_HEIGHT));
   const b = shackBounds(def);
-  const size = { x: b.maxX - b.minX, z: b.maxZ - b.minZ };
-  const roof = new THREE.Mesh(
-    new THREE.BoxGeometry(size.x, ROOF_THICKNESS, size.z),
-    new THREE.MeshLambertMaterial({ color: ROOF_COLOR }),
+  const roofGeometry = new THREE.BoxGeometry(
+    b.maxX - b.minX + 2 * ROOF_OVERHANG,
+    ROOF_THICKNESS,
+    b.maxZ - b.minZ + 2 * ROOF_OVERHANG,
   );
-  roof.position.set(def.x, WALL_HEIGHT + ROOF_THICKNESS / 2, def.z);
+  roofGeometry.rotateZ(ROOF_SLOPE);
+  roofGeometry.translate(def.x, WALL_HEIGHT + ROOF_THICKNESS / 2, def.z);
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(size.x, size.z),
+    new THREE.PlaneGeometry(b.maxX - b.minX, b.maxZ - b.minZ),
     new THREE.MeshLambertMaterial({ color: FLOOR_COLOR }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(def.x, 0.02, def.z);
-  scene.add(...pieces, roof, floor);
+  floor.receiveShadow = true;
+  scene.add(solid(walls, material), solid([metersToUv(roofGeometry)], material), floor);
+  return Promise.resolve();
 }
