@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { canThrow, cruiseHeading, FISH, pickStrike, strikesFor } from './fish';
-import { nearestToEdge, sinkPose } from './fish-parts';
+import { nearestTo, sinkPose } from './fish-parts';
 
 describe('fish', () => {
   it('gets stronger with every pack thrown in by day', () => {
@@ -28,11 +28,13 @@ describe('fish', () => {
     expect(cruiseHeading(0, 2.5)).toBeCloseTo(Math.PI);
   });
 
-  it('takes the zombies nearest the water for the last lunge', () => {
+  it('takes the zombies nearest the player for the last lunge', () => {
+    // id, x, z — the player stands at (0, 0)
     const c = new Float32Array([1, -10, 0, 2, 2, -8, 3, 1.5, -2, 4, -3, 0]);
-    expect(nearestToEdge(c, 4, 3)).toEqual([2, 3, 4]);
-    expect(nearestToEdge(c, 2, 3)).toEqual([2, 1]);
-    expect(nearestToEdge(c, 0, 3)).toEqual([]);
+    const player = { x: 0, z: 0 };
+    expect(nearestTo(c, 4, 3, player)).toEqual([3, 4, 2]);
+    expect(nearestTo(c, 2, 3, player)).toEqual([2, 1]);
+    expect(nearestTo(c, 0, 3, player)).toEqual([]);
   });
 
   it('rolls over in the first half of the sink and is fully under at the end', () => {

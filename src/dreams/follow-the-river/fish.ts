@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu';
 import type { AudioBus } from '../../engine/audio';
 import { loadModel, loadSkinned, type SkinnedAsset } from '../../engine/models';
 import type { Vec3 } from '../../engine/ray';
-import { makeShadow, nearestToEdge, SINK_TIME, sinkPose } from './fish-parts';
+import { makeShadow, nearestTo, SINK_TIME, sinkPose } from './fish-parts';
 import { characterUrl, propUrl } from './kits';
 import { EDGE_X, RIVER_X } from './river';
 import type { Sounds } from './sounds';
@@ -280,7 +280,7 @@ function startTake(f: FishState): void {
 function startFinale(f: FishState, horde: Horde, player: { x: number; z: number }): void {
   f.count = 0;
   horde.forEachAlive(f.collect);
-  f.victims = nearestToEdge(f.buffer, f.count, FINALE_TAKES);
+  f.victims = nearestTo(f.buffer, f.count, FINALE_TAKES, player);
   let toX = EDGE_X + 1;
   let toZ = player.z;
   for (let i = 0; i < f.count; i++) {

@@ -4,12 +4,24 @@ const SHADOW_OPACITY = 0.35;
 /** Seconds the orca takes to roll over and sink at the end. */
 export const SINK_TIME = 6;
 
-/** The ids of the `n` candidates nearest the water (largest x), nearest first. Allocates: rare. */
-export function nearestToEdge(candidates: ArrayLike<number>, count: number, n: number): number[] {
-  const rows: { id: number; x: number }[] = [];
-  for (let i = 0; i < count; i++) rows.push({ id: candidates[i * 3], x: candidates[i * 3 + 1] });
+/**
+ * The ids of the `n` candidates nearest the player, nearest first: the last lunge takes the ones
+ * about to reach you, in plain view, not stragglers lost in the fog. Allocates: rare.
+ */
+export function nearestTo(
+  candidates: ArrayLike<number>,
+  count: number,
+  n: number,
+  player: { x: number; z: number },
+): number[] {
+  const rows: { id: number; d: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    const dx = candidates[i * 3 + 1] - player.x;
+    const dz = candidates[i * 3 + 2] - player.z;
+    rows.push({ id: candidates[i * 3], d: dx * dx + dz * dz });
+  }
   return rows
-    .toSorted((a, b) => b.x - a.x)
+    .toSorted((a, b) => a.d - b.d)
     .slice(0, n)
     .map((r) => r.id);
 }
