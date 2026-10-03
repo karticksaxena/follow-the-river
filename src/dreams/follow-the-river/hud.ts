@@ -55,6 +55,9 @@ function buildHud(root: HTMLElement): HudEls {
   weapons.gun.textContent = '2 Gun';
   const weaponRow = el('div');
   weaponRow.append(weapons.bow, ' · ', weapons.gun);
+  // Hidden until the first set() says the gun is owned (a chapter can be built during the intro).
+  ammo.hidden = true;
+  weaponRow.hidden = true;
   stats.append(battery, arrows, fish, ammo, weaponRow);
   hud.append(hurtEl, dot, stats, promptEl);
   root.append(hud);

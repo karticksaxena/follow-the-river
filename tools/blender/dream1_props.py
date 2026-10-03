@@ -216,7 +216,8 @@ def tv() -> None:
         parts.append(box("rim", (0.5, 0.03, 0.085), (0, -0.265, zc + sz * 0.2325), case))
     for dz in (-0.08, 0.08):
         parts.append(span("cyl", (0.3, -0.28, zc + dz), (0.3, -0.25, zc + dz), 0.022, case, 8))
-    bpy.ops.mesh.primitive_plane_add(size=1, location=(0, -0.25, zc), rotation=(math.pi / 2, 0, 0))
+    # 6 mm proud of the case front (y -0.25): flush, the two faces z-fight and the news vanishes.
+    bpy.ops.mesh.primitive_plane_add(size=1, location=(0, -0.256, zc), rotation=(math.pi / 2, 0, 0))
     screen = bpy.context.active_object
     screen.name = "Screen"
     screen.scale = (0.5, 0.38, 1)
