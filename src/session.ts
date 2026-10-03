@@ -35,8 +35,12 @@ interface Gate {
 function createGate(app: App, showMenu: () => void): Gate {
   let screen: Screen = 'reader';
   let reading = false;
+  const setScreen = (next: Screen): void => {
+    screen = next;
+    app.audio.setWorldPaused(next !== 'game');
+  };
   const onLock = (event: LockEvent): void => {
-    screen = screenAfter(event, reading);
+    setScreen(screenAfter(event, reading));
     if (screen === 'game') app.overlay.closePanel();
     if (screen === 'pause-menu') showMenu();
   };
@@ -57,7 +61,7 @@ function createGate(app: App, showMenu: () => void): Gate {
     isPaused: () => screen !== 'game',
     openReader: () => {
       reading = true;
-      screen = 'reader';
+      setScreen('reader');
       player.unlock();
     },
     closeReader: () => {
@@ -95,6 +99,7 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
     // A dream that failed before setting its own scene must not free the bedroom.
     if (app.stage.scene !== homeScene) disposeScene(app.stage.scene);
     app.overlay.closePanel();
+    app.audio.setWorldPaused(false);
     app.stage.scene = new THREE.Scene();
   }
   function leave(): void {
