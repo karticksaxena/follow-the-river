@@ -48,3 +48,8 @@ export function phaseTitle(phase: Phase): string {
 export function spawnFor(phase: Phase, area: AreaDef): Spot {
   return isNight(phase) ? area.nightStart : area.daySpawn;
 }
+
+/** True for a saved phase the game can't play yet (past the last shipped area). Never the intro. */
+export function pastTheEnd(phase: Phase, playable: readonly Phase[]): boolean {
+  return phase !== 'intro' && !playable.includes(phase);
+}

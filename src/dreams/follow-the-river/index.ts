@@ -6,7 +6,7 @@ import { LOAD_TIMEOUT_MS } from '../load';
 import type { DreamContext, DreamModule } from '../types';
 import { CITY } from './areas/city';
 import { startChapter, type Chapter } from './chapter';
-import { phaseTitle } from './flow';
+import { pastTheEnd, phaseTitle } from './flow';
 import { runIntro, type Intro } from './intro';
 import {
   completePhase,
@@ -149,7 +149,7 @@ export function createDream(): DreamModule {
       if (disposed) return;
       if (pick === 1) return startOver();
     }
-    if (!PLAYABLE.includes(save.phase)) {
+    if (pastTheEnd(save.phase, PLAYABLE)) {
       const done = 'This is as far as the dream goes for now.';
       const again = await ctx.choose(done, ['Start over', 'Back to dreams']);
       return again === 0 ? startOver() : ctx.finish();
