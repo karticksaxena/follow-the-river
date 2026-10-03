@@ -74,8 +74,8 @@ describe('the wave', () => {
 describe('nightEnd', () => {
   it('Nights 1 and 2 end at the safe spot', () => {
     for (const area of [CITY, SUBURBS]) {
-      expect(nightEnd(area, 0, area.safeZ + 20)).toBeNull();
-      expect(nightEnd(area, 0, area.safeZ + 2)).toBe('safe');
+      expect(nightEnd(area, area.safeZ + 20)).toBeNull();
+      expect(nightEnd(area, area.safeZ + 2)).toBe('safe');
     }
   });
 
@@ -83,10 +83,10 @@ describe('nightEnd', () => {
     const at = FOREST.endingAt;
     expect(at).toBeDefined();
     if (!at) return;
-    expect(nightEnd(FOREST, at.x, FOREST.safeZ - 1)).toBeNull(); // 8 m short of the shore
-    expect(nightEnd(FOREST, at.x, at.z + at.radius + 0.5)).toBeNull();
-    expect(nightEnd(FOREST, at.x, at.z + at.radius - 0.5)).toBe('ending');
-    expect(nightEnd(FOREST, at.x, at.z)).toBe('ending');
+    expect(nightEnd(FOREST, FOREST.safeZ - 1)).toBeNull(); // 8 m short of the shore
+    expect(nightEnd(FOREST, at.z + at.radius + 0.5)).toBeNull();
+    expect(nightEnd(FOREST, at.z + at.radius - 0.5)).toBe('ending');
+    expect(nightEnd(FOREST, at.z)).toBe('ending');
   });
 });
 

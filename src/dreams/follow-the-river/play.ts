@@ -254,7 +254,7 @@ function tick(p: State, dt: number): void {
 /** Night 1–2: the safe spot ends the night. Night 3: the lake shore starts the ending. */
 function endNight(p: State): void {
   if (p.run.dying !== 'no') return; // died this frame: the death restart wins over arriving
-  const end = nightEnd(p.sys.area, p.sense.x, p.sense.z);
+  const end = nightEnd(p.sys.area, p.sense.z);
   if (end === 'safe') p.events.arrive();
   else if (end === 'ending') p.events.ending();
 }

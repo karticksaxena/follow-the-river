@@ -2,7 +2,7 @@ import type * as THREE from 'three/webgpu';
 import type { AreaDef } from './areas/types';
 import { nightTuning } from './difficulty';
 import { buildEndingScene, facing, type EndingScene } from './ending-scene';
-import { atSafeSpot, nearSpot } from './flow';
+import { atSafeSpot } from './flow';
 import { applyLighting, LIGHTING, mixPreset, type LightPreset } from './lighting';
 import { EDGE_X } from './river';
 import type { Run, Systems } from './run';
@@ -76,14 +76,14 @@ export function waveSpot(i: number, playerZ: number): { x: number; z: number } {
   return { x: EDGE_X - 1 - lane * WAVE.laneGap, z: playerZ + WAVE.upstream + lane * WAVE.laneStep };
 }
 
-/** How the night ends at `(x, z)`: the safe spot, the lake shore (Night 3), or not yet. */
+/** How the night ends at depth `z`: the safe spot, the lake shore (Night 3), or not yet. */
 export function nightEnd(
   area: Pick<AreaDef, 'safeZ' | 'endingAt'>,
-  x: number,
   z: number,
 ): 'safe' | 'ending' | null {
   const at = area.endingAt;
-  if (at) return nearSpot(x, z, at, at.radius) ? 'ending' : null;
+  // A line across the whole bank, not a circle: hugging the water must not miss Mom.
+  if (at) return z <= at.z + at.radius ? 'ending' : null;
   return atSafeSpot(z, area.safeZ) ? 'safe' : null;
 }
 
