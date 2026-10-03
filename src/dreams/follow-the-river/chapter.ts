@@ -4,6 +4,7 @@ import type { DreamContext } from '../types';
 import type { AreaDef } from './areas/types';
 import { assemble } from './assemble';
 import { createDeath } from './death';
+import { createEnding, NO_ENDING } from './ending';
 import { MAX_HEALTH } from './flow';
 import {
   announce,
@@ -17,7 +18,7 @@ import {
 } from './phases';
 import { createPlay } from './play';
 import type { Events, Run, Systems } from './run';
-import { restartPhase, type RunSave } from './state';
+import { completePhase, restartPhase, type RunSave } from './state';
 import { stopTape } from './tapes';
 
 export interface Chapter {
@@ -46,6 +47,7 @@ function newRun(save: RunSave): Run {
     frozen: false,
     dying: 'no',
     dyingTime: 0,
+    ending: 'no',
   };
 }
 
@@ -98,23 +100,41 @@ export async function startChapter(
     onReset: () => undefined,
     disposed: false,
   };
+  // Night 3 only: the finale runs inside this chapter; its save is the finished run.
+  const ending = area.endingAt
+    ? createEnding({
+        sys,
+        run,
+        lantern,
+        persist: () => {
+          f.save = completePhase(f.save, run.live);
+          store.save(f.save);
+        },
+      })
+    : NO_ENDING;
   const events: Events = {
     hint: (id) => showHint(f, id),
     tape: (pickup) => readTape(f, pickup),
     wait: () => void waitForDark(f),
     die: () => death.start(),
     arrive: () => arrive(f),
+    ending: () => ending.start(),
   };
   if (import.meta.env.DEV) Object.assign(window, { kdRiver: sys });
   const play = createPlay(sys, run, events);
-  f.onReset = () => play.reset();
+  f.onReset = () => {
+    ending.cancel(); // a death mid-wave restarts the night
+    play.reset();
+  };
   beginPhase(f);
   ctx.stage.scene = sys.world.scene;
   const phaseOf = (): RunSave['phase'] => f.save.phase;
   const again = (): void => restart(f);
   const stop = ctx.stage.addUpdater((dt) => {
-    if (run.dying === 'no') play.update(dt);
-    else {
+    if (run.dying === 'no') {
+      play.update(dt);
+      ending.update(dt);
+    } else {
       if (!ctx.isPaused()) sys.ambience.hush(dt);
       death.step(dt, phaseOf, again);
     }
@@ -124,6 +144,7 @@ export async function startChapter(
     freeze: () => void (run.frozen = true),
     dispose() {
       f.disposed = true;
+      ending.dispose();
       teardown(sys, stop);
     },
   };

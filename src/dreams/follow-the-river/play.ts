@@ -1,13 +1,15 @@
 import * as THREE from 'three/webgpu';
 import { createControls, type Controls } from './controls';
-import { nightDifficulty, nightTuning, spawnInterval } from './difficulty';
+import { nightDifficulty, nightTuning, spawnInterval, type NightDifficulty } from './difficulty';
+import { nightEnd } from './ending';
 import { BEAM, drainBattery } from './flashlight';
-import { atSafeSpot, nearSpot, takeDamage } from './flow';
+import { nearSpot, takeDamage } from './flow';
 import type { HudState } from './hud';
 import { applyDim, LIGHTING } from './lighting';
 import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
 import { addSupply, chapterOf, isNight } from './state';
+import type { Tuning } from './zombies/brain';
 import type { PlayerSense } from './zombies/horde';
 import { nextSpawn, type Pace, type Strip } from './zombies/spawner';
 
@@ -35,6 +37,10 @@ interface State {
   run: Run;
   events: Events;
   sense: PlayerSense;
+  /** The chapter's night difficulty and zombie tuning, looked up once. */
+  chapter: number;
+  night: NightDifficulty;
+  tuning: Tuning;
   controls: Controls;
   look: THREE.Vector3;
   spawnTimer: { timer: number };
@@ -67,14 +73,19 @@ function newSense(): PlayerSense {
 function createState(sys: Systems, run: Run, events: Events): State {
   const { area, hud, grid } = sys;
   const sense = newSense();
+  const chapter = chapterOf(run.phase);
+  const night = nightDifficulty(chapter);
   const state: State = {
     sys,
     run,
     events,
     sense,
+    chapter,
+    night,
+    tuning: nightTuning(chapter),
     controls: createControls(sys, run, events, sense),
     look: new THREE.Vector3(),
-    spawnTimer: { timer: nightDifficulty(chapterOf(run.phase)).interval },
+    spawnTimer: { timer: night.interval },
     strip: {
       minX: area.landX,
       maxX: EDGE_X - NIGHT_STRIP_MARGIN,
@@ -90,7 +101,7 @@ function createState(sys: Systems, run: Run, events: Events): State {
       showAmmo: false,
       weapon: 'bow',
     },
-    pace: { ...nightDifficulty(chapterOf(run.phase)) },
+    pace: { ...night },
     wasPaused: true,
     hitPause: false,
     grace: 0,
@@ -147,10 +158,7 @@ function tickWorld(p: State, dt: number): void {
 
 function spawnNight(p: State, dt: number): void {
   const { sys, sense } = p;
-  const chapter = chapterOf(p.run.phase);
-  const base = nightDifficulty(chapter);
-  p.pace.cap = base.cap;
-  p.pace.interval = spawnInterval(base.interval, sys.gun.noiseLeft);
+  p.pace.interval = spawnInterval(p.night.interval, sys.gun.noiseLeft);
   const at = nextSpawn(
     p.spawnTimer,
     dt,
@@ -163,7 +171,7 @@ function spawnNight(p: State, dt: number): void {
     p.pace,
   );
   if (!at) return;
-  sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), nightTuning(chapter));
+  sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), p.tuning);
 }
 
 /** Shack darkness: eases toward 1 inside, 0 outside; lights are touched only when it moved. */
@@ -189,9 +197,10 @@ function tickView(p: State, dt: number): void {
   sys.ambience.update(
     dt,
     sense.x,
-    isNight(run.phase),
+    isNight(run.phase) && run.ending !== 'calm', // after the wave only the wind is left
     sys.horde.aliveCount(),
     run.health <= HURT_HEALTH,
+    p.chapter,
   );
   hudState.battery = s.battery;
   hudState.arrows = s.arrows;
@@ -235,11 +244,18 @@ function tick(p: State, dt: number): void {
   p.controls.update(dt);
   tickWorld(p, dt);
   sys.scares.update(dt, sense, isNight(run.phase));
-  if (isNight(run.phase)) spawnNight(p, dt);
+  if (isNight(run.phase) && run.ending === 'no') spawnNight(p, dt);
   tickDim(p, dt);
   tickHints(p);
   tickView(p, dt);
-  if (isNight(run.phase) && atSafeSpot(sense.z, sys.area.safeZ)) p.events.arrive();
+  if (isNight(run.phase) && run.ending === 'no') endNight(p);
+}
+
+/** Night 1–2: the safe spot ends the night. Night 3: the dam's foot starts the ending. */
+function endNight(p: State): void {
+  const end = nightEnd(p.sys.area, p.sense.x, p.sense.z);
+  if (end === 'safe') p.events.arrive();
+  else if (end === 'ending') p.events.ending();
 }
 
 /** The per-frame gameplay the chapter registers: input, supplies, zombies, spawns, light and sound. */
@@ -247,7 +263,7 @@ export function createPlay(sys: Systems, run: Run, events: Events): Play {
   const p = createState(sys, run, events);
   return {
     reset() {
-      p.spawnTimer.timer = nightDifficulty(chapterOf(run.phase)).interval;
+      p.spawnTimer.timer = p.night.interval;
       p.toldAboutWait = false;
       p.wasInShack = false;
       p.hitPause = false;

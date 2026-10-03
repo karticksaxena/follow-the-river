@@ -7,6 +7,7 @@ import type { DreamContext, DreamModule } from '../types';
 import { areaFor } from './areas';
 import type { AreaDef } from './areas/types';
 import { startChapter, type Chapter } from './chapter';
+import { REPLAY_PAGES } from './ending';
 import { phaseTitle } from './flow';
 import { runIntro, type Intro } from './intro';
 import {
@@ -23,8 +24,6 @@ import {
 const PLAYABLE: readonly Phase[] = ['day1', 'night1', 'day2', 'night2', 'day3', 'night3'];
 /** Show "Loading…" only when a scene swap takes longer than this. */
 const LOADING_DELAY_MS = 300;
-/** Task 8 replaces these pages with the ending. */
-const FINALE = ['You reach the dam.', 'To be continued…'];
 const LOAD_FAILED = "Couldn't load the next part. Check your internet connection and try again.";
 
 /** The intro is played by `runIntro`; this fallback (a finished run restarting) skips it. */
@@ -32,7 +31,7 @@ function playable(save: RunSave): RunSave {
   return save.phase === 'intro' ? completePhase(save, restartPhase(save)) : save;
 }
 
-/** Dev only: `?phase=day1|night1` starts that phase with fresh supplies, ignoring the save. */
+/** Dev only: `?phase=intro|day1…night3` starts that phase with fresh supplies, ignoring the save. */
 function devOverride(): RunSave | null {
   if (!import.meta.env.DEV) return null;
   const phase = new URLSearchParams(location.search).get('phase');
@@ -51,14 +50,13 @@ export function createDream(): DreamModule {
 
   let area: AreaDef | null = null;
 
-  /** The ending, then back to the dream cards. */
-  const onFinale = (): void => ctx?.read(FINALE, () => ctx?.finish());
+  /** "Watch the ending again": the epilogue and credits (the live finale plays inside Night 3). */
+  const onFinale = (): void => ctx?.read(REPLAY_PAGES, () => ctx?.finish());
 
   /** A night is survived: show the area's arrival pages, then hand over to the next chapter. */
   const onDone = (done: RunSave): void => {
     const arrival = area?.arrival ?? [];
     save = done;
-    if (done.phase === 'end') return onFinale();
     ctx?.read(arrival, () => void nextChapter());
   };
 

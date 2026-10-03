@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import type { AudioBus } from '../../engine/audio';
 import { loadModel, loadSkinned, type SkinnedAsset } from '../../engine/models';
 import type { Vec3 } from '../../engine/ray';
+import { makeShadow, nearestToEdge, SINK_TIME, sinkPose } from './fish-parts';
 import { characterUrl, propUrl } from './kits';
 import { EDGE_X, RIVER_X } from './river';
 import type { Sounds } from './sounds';
@@ -31,10 +32,13 @@ const THROW_RANGE = 1.5;
 const PACK_DISTANCE = 4;
 const PACK_TIME = 1;
 const PACK_ARC = 1.2;
-const SHADOW_OPACITY = 0.35;
 const CAPACITY = Math.max(32, SPAWNER.cap);
 const MIN_SWIM_SPEED = 0.3; // m/s along the river before the heading follows motion
 const MAX_LEAN = 0.25;
+// The ending: the last lunge takes this many at once, then the orca rolls over and sinks.
+const FINALE_TAKES = 3;
+const SINK_Y = -4;
+const SINK_DRIFT = 0.3; // m/s downstream while sinking
 
 export function strikesFor(fed: number): number {
   return FISH.baseStrikes + fed * FISH.strikesPerPack;
@@ -68,7 +72,14 @@ export function canThrow(x: number, edgeX: number, fishPacks: number): boolean {
   return fishPacks > 0 && edgeX - x <= THROW_RANGE;
 }
 
+/** Where the ending has the orca: cruising/striking as usual, the last lunge, sinking, or gone. */
+export type Finale = 'no' | 'lunge' | 'sink' | 'gone';
+
 export interface Fish {
+  /** The ending's state (read it each frame; it only moves forward). */
+  readonly finale: Finale;
+  /** The last lunge: takes up to three zombies at once, then it rolls over and sinks (6 s). */
+  lastLunge(horde: Horde, player: { x: number; z: number }): void;
   /** Night: strikes left this phase. */
   readonly strikes: number;
   arm(strikes: number): void;
@@ -98,31 +109,6 @@ function findClip(clips: readonly THREE.AnimationClip[], name: string): THREE.An
   const clip = clips.find((c) => c.name === name);
   if (!clip) throw new Error(`orca.glb has no ${name} clip`);
   return clip;
-}
-
-function makeShadow(): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 64;
-  const g = canvas.getContext('2d');
-  if (g) {
-    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    grad.addColorStop(0, '#000');
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, 64, 64);
-  }
-  const material = new THREE.MeshBasicMaterial({
-    map: new THREE.CanvasTexture(canvas),
-    color: 0x000000,
-    transparent: true,
-    opacity: SHADOW_OPACITY,
-    depthWrite: false,
-  });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.scale.set(3, 8, 1); // rotated by yaw below: long axis follows the orca's body (z)
-  mesh.renderOrder = 1;
-  return mesh;
 }
 
 interface Rise {
@@ -163,6 +149,11 @@ interface FishState {
   rise: Rise | null;
   packT: number; // <0: no pack in flight
   takePending: boolean;
+  finale: Finale;
+  sinkT: number;
+  sinkFromY: number;
+  /** Zombies the last lunge takes when it breaks the surface. */
+  victims: number[];
 }
 
 function playSplash(f: FishState, x: number, z: number): void {
@@ -212,6 +203,8 @@ function stepRise(f: FishState, r: Rise, dt: number, horde: Horde | null): void 
   if (!r.done && s >= 0.5) {
     r.done = true;
     if (r.victim >= 0) horde?.takeByFish(r.victim);
+    for (const id of f.victims) horde?.takeByFish(id);
+    f.victims.length = 0;
     playSplash(f, x, z);
   }
   if (s >= 1) endRise(f);
@@ -271,7 +264,7 @@ function stepPack(f: FishState, dt: number): void {
 function placeShadow(f: FishState): void {
   f.shadow.position.set(f.root.position.x, WATER_Y + 0.02, f.root.position.z);
   f.shadow.rotation.set(-Math.PI / 2, f.yaw, 0, 'YXZ');
-  f.shadow.visible = f.root.position.y < 0.2;
+  f.shadow.visible = f.root.position.y < 0.2 && f.finale !== 'gone';
 }
 
 function startTake(f: FishState): void {
@@ -282,6 +275,35 @@ function startTake(f: FishState): void {
     dur: TAKE_TIME,
     peak: TAKE_PEAK_Y,
   });
+}
+
+function startFinale(f: FishState, horde: Horde, player: { x: number; z: number }): void {
+  f.count = 0;
+  horde.forEachAlive(f.collect);
+  f.victims = nearestToEdge(f.buffer, f.count, FINALE_TAKES);
+  let toX = EDGE_X + 1;
+  let toZ = player.z;
+  for (let i = 0; i < f.count; i++) {
+    if (f.buffer[i * 3] !== f.victims[0]) continue;
+    toX = Math.max(f.buffer[i * 3 + 1], EDGE_X + 1);
+    toZ = f.buffer[i * 3 + 2];
+  }
+  if (f.rise) endRise(f);
+  f.strikes = 0;
+  f.takePending = false;
+  f.finale = 'lunge';
+  startRise(f, { toX, toZ, dur: STRIKE_TIME, peak: STRIKE_PEAK_Y, lunge: true });
+}
+
+function stepSink(f: FishState, dt: number): void {
+  f.sinkT += dt;
+  const { depth, roll } = sinkPose(f.sinkT);
+  const pos = f.root.position;
+  pos.set(pos.x, f.sinkFromY + (SINK_Y - f.sinkFromY) * depth, pos.z - SINK_DRIFT * dt);
+  f.root.rotation.set(0, f.yaw, roll);
+  if (f.sinkT < SINK_TIME) return;
+  f.finale = 'gone';
+  f.root.visible = false;
 }
 
 function updateFish(
@@ -298,14 +320,23 @@ function updateFish(
     f.root.position.set(RIVER_X - 2, CRUISE_Y, player.z - LAG_Z);
   }
   f.cooldown = Math.max(0, f.cooldown - dt);
+  if (f.finale === 'sink') {
+    stepSink(f, dt);
+    placeShadow(f);
+    return;
+  }
   if (f.packT >= 0) stepPack(f, dt);
   if (f.rise) stepRise(f, f.rise, dt, horde);
-  else {
+  else if (f.finale === 'lunge') {
+    f.finale = 'sink'; // the lunge is over: it goes under for good
+    f.sinkT = 0;
+    f.sinkFromY = f.root.position.y;
+  } else {
     if (f.takePending) startTake(f);
     else if (night && f.strikes > 0 && f.cooldown === 0 && horde) tryStrike(f, player, horde);
     if (!f.rise) cruise(f, dt, player);
   }
-  f.root.rotation.y = f.yaw;
+  if (f.finale !== 'sink') f.root.rotation.y = f.yaw;
   placeShadow(f);
 }
 
@@ -330,6 +361,10 @@ function resetFish(f: FishState): void {
     f.swim.reset().play();
   }
   f.rise = null;
+  f.finale = 'no';
+  f.victims.length = 0;
+  f.root.visible = true;
+  f.root.rotation.set(0, f.yaw, 0);
 }
 
 /** Frees the orca's own resources, including its shadow plane's geometry, material and texture. */
@@ -411,6 +446,10 @@ function createState(
     rise: null,
     packT: -1,
     takePending: false,
+    finale: 'no',
+    sinkT: 0,
+    sinkFromY: CRUISE_Y,
+    victims: [],
   };
   return f;
 }
@@ -426,6 +465,10 @@ export async function createFish(
   ]);
   const f = createState(scene, audio, sounds, asset, packModel);
   return {
+    get finale() {
+      return f.finale;
+    },
+    lastLunge: (horde, player) => startFinale(f, horde, player),
     get strikes() {
       return f.strikes;
     },

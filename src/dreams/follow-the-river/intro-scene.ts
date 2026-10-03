@@ -77,7 +77,7 @@ export interface Mom {
 }
 
 /** Mom with cross-faded clips and the fish pack parked in her right hand (hidden until needed). */
-function createMom(
+export function createMom(
   asset: { scene: THREE.Object3D; clips: readonly THREE.AnimationClip[] },
   pack: THREE.Object3D,
 ): Mom {

@@ -34,6 +34,8 @@ export interface Systems {
 }
 
 export type Dying = 'no' | 'anim' | 'wait';
+/** The finale: `fight` is the last wave (no normal spawns), `calm` is after it (wind only). */
+export type EndingState = 'no' | 'fight' | 'calm';
 
 /** Mutable state of the phase being played (reset by the chapter at every phase start). */
 export interface Run {
@@ -50,6 +52,7 @@ export interface Run {
   frozen: boolean;
   dying: Dying;
   dyingTime: number;
+  ending: EndingState;
 }
 
 /** What gameplay asks the chapter to do. */
@@ -60,4 +63,6 @@ export interface Events {
   wait(): void;
   die(): void;
   arrive(): void;
+  /** Night 3: the player reached the foot of the dam. */
+  ending(): void;
 }
