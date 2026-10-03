@@ -1,7 +1,7 @@
 import type * as THREE from 'three/webgpu';
 import type { DreamContext, DreamModule } from '../types';
 import { createFlashlight } from './flashlight';
-import { buildRiverbank, riverbankColliders, SPAWN } from './riverbank';
+import { buildRiverbank, riverbankColliders, SKY_NAME, SPAWN } from './riverbank';
 
 /** Plan 1 grey box: proves walking, collisions, darkness and the flashlight. Plan 2 replaces it. */
 export function createDream(): DreamModule {
@@ -14,12 +14,15 @@ export function createDream(): DreamModule {
       camera = ctx.stage.camera;
       scene.add(camera);
       ctx.stage.scene = scene;
+      const sky = scene.getObjectByName(SKY_NAME);
       ctx.player.colliders = riverbankColliders();
       ctx.player.teleport(SPAWN.x, SPAWN.z, SPAWN.yaw);
       const light = createFlashlight(camera);
       flashlight = light;
       let toldAboutLight = false;
       stop = ctx.stage.addUpdater(() => {
+        // Keep the sky centred on the player so it never ends, wherever they walk.
+        sky?.position.set(ctx.stage.camera.position.x, 0, ctx.stage.camera.position.z);
         // Drop key taps made while reading or paused, so they don't fire on resume.
         if (ctx.isPaused()) {
           ctx.keys.consumePress('KeyF');
