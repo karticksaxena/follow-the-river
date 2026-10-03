@@ -90,6 +90,137 @@ function stick(a: Arrow, x: number, y: number, z: number): void {
   a.state = 'stuck';
 }
 
+interface BowState {
+  readonly audio: AudioBus;
+  readonly sounds: Sounds;
+  readonly view: THREE.Group;
+  readonly nocked: THREE.Object3D;
+  readonly arrows: Arrow[];
+  readonly meshes: THREE.Object3D[];
+  cooldown: number;
+  kick: number;
+}
+
+function resolveHit(
+  s: BowState,
+  i: number,
+  x0: number,
+  y0: number,
+  z0: number,
+  horde: Horde,
+  grid: BoxGrid,
+): void {
+  const a = s.arrows[i];
+  const t = obstacle(grid, x0, y0, z0, a);
+  const length = Math.hypot(a.x - x0, a.y - y0, a.z - z0) * t;
+  origin.x = x0;
+  origin.y = y0;
+  origin.z = z0;
+  aim.set(a.vx, a.vy, a.vz).normalize();
+  dir.x = aim.x;
+  dir.y = aim.y;
+  dir.z = aim.z;
+  const zombie = length > 0 ? horde.rayHit(origin, dir, length) : null;
+  if (zombie) {
+    horde.kill(zombie.id);
+    s.audio.once(s.sounds.thud, VOLUME.thud);
+    stick(a, x0 + dir.x * zombie.distance, 0, z0 + dir.z * zombie.distance);
+  } else if (t < 1) {
+    stick(a, x0 + (a.x - x0) * t, y0 + (a.y - y0) * t, z0 + (a.z - z0) * t);
+  }
+}
+
+function fireArrow(s: BowState, eye: Vec3, look: Vec3): void {
+  const a = s.arrows.find((arrow) => arrow.state === 'idle');
+  if (!a || s.cooldown > 0) return;
+  a.x = eye.x + look.x * SPAWN_AHEAD;
+  a.y = eye.y + look.y * SPAWN_AHEAD;
+  a.z = eye.z + look.z * SPAWN_AHEAD;
+  a.vx = look.x * BOW.speed;
+  a.vy = look.y * BOW.speed;
+  a.vz = look.z * BOW.speed;
+  a.age = 0;
+  a.state = 'flying';
+  s.audio.once(s.sounds.twang, VOLUME.twang);
+  s.cooldown = BOW.cooldown;
+  s.kick = KICK_TIME;
+}
+
+/** One arrow's frame: fly and hit-test if flying, recover if stuck near the player (1 = recovered). */
+function updateArrow(
+  s: BowState,
+  i: number,
+  dt: number,
+  horde: Horde,
+  grid: BoxGrid,
+  player: { x: number; z: number },
+): number {
+  const a = s.arrows[i];
+  let recovered = 0;
+  if (a.state === 'flying') {
+    const { x, y, z } = a;
+    stepArrow(a, dt);
+    if (a.state === 'flying') resolveHit(s, i, x, y, z, horde, grid);
+    if (a.state === 'flying') orient(s.meshes[i], a);
+  } else if (a.state === 'stuck' && Math.hypot(a.x - player.x, a.z - player.z) < RECOVER_RADIUS) {
+    a.state = 'idle';
+    s.audio.once(s.sounds.click, VOLUME.click);
+    recovered = 1;
+  }
+  place(s.meshes[i], a);
+  return recovered;
+}
+
+function updateBow(
+  s: BowState,
+  dt: number,
+  horde: Horde,
+  grid: BoxGrid,
+  player: { x: number; z: number },
+): number {
+  s.cooldown = Math.max(0, s.cooldown - dt);
+  s.kick = Math.max(0, s.kick - dt);
+  s.view.position.z = -0.55 + KICK * (s.kick / KICK_TIME);
+  s.nocked.visible = s.cooldown <= 0;
+  let recovered = 0;
+  for (let i = 0; i < s.arrows.length; i++) recovered += updateArrow(s, i, dt, horde, grid, player);
+  return recovered;
+}
+
+function resetBow(s: BowState): void {
+  for (let i = 0; i < s.arrows.length; i++) {
+    s.arrows[i].state = 'idle';
+    s.meshes[i].visible = false;
+  }
+  s.cooldown = 0;
+  s.kick = 0;
+}
+
+function createBowState(
+  camera: THREE.Camera,
+  scene: THREE.Scene,
+  audio: AudioBus,
+  sounds: Sounds,
+  bowModel: THREE.Object3D,
+  arrowModel: THREE.Object3D,
+): BowState {
+  const view = new THREE.Group();
+  view.position.set(0.32, -0.32, -0.55);
+  view.rotation.set(0, 0.1, -0.15);
+  const nocked = arrowModel.clone(true);
+  nocked.position.set(0, 0, -0.25);
+  view.add(bowModel, nocked);
+  camera.add(view);
+  const arrows = Array.from({ length: BOW.pool }, newArrow);
+  const meshes = arrows.map(() => {
+    const mesh = arrowModel.clone(true);
+    mesh.visible = false;
+    scene.add(mesh);
+    return mesh;
+  });
+  return { audio, sounds, view, nocked, arrows, meshes, cooldown: 0, kick: 0 };
+}
+
 export async function createBow(
   camera: THREE.Camera,
   scene: THREE.Scene,
@@ -100,106 +231,17 @@ export async function createBow(
     loadModel(propUrl('bow')),
     loadModel(propUrl('arrow')),
   ]);
-  const view = new THREE.Group();
-  view.position.set(0.32, -0.32, -0.55);
-  view.rotation.set(0, 0.1, -0.15);
-  const nocked = arrowModel.clone(true);
-  nocked.position.set(0, 0, -0.25);
-  view.add(bowModel, nocked);
-  camera.add(view);
-
-  const arrows = Array.from({ length: BOW.pool }, newArrow);
-  const meshes = arrows.map(() => {
-    const mesh = arrowModel.clone(true);
-    mesh.visible = false;
-    scene.add(mesh);
-    return mesh;
-  });
-  let cooldown = 0;
-  let kick = 0;
-
-  function resolveHit(
-    i: number,
-    x0: number,
-    y0: number,
-    z0: number,
-    horde: Horde,
-    grid: BoxGrid,
-  ): void {
-    const a = arrows[i];
-    const t = obstacle(grid, x0, y0, z0, a);
-    const length = Math.hypot(a.x - x0, a.y - y0, a.z - z0) * t;
-    origin.x = x0;
-    origin.y = y0;
-    origin.z = z0;
-    aim.set(a.vx, a.vy, a.vz).normalize();
-    dir.x = aim.x;
-    dir.y = aim.y;
-    dir.z = aim.z;
-    const zombie = length > 0 ? horde.rayHit(origin, dir, length) : null;
-    if (zombie) {
-      horde.kill(zombie.id);
-      audio.once(sounds.thud, VOLUME.thud);
-      stick(a, x0 + dir.x * zombie.distance, 0, z0 + dir.z * zombie.distance);
-    } else if (t < 1) {
-      stick(a, x0 + (a.x - x0) * t, y0 + (a.y - y0) * t, z0 + (a.z - z0) * t);
-    }
-  }
-
+  const s = createBowState(camera, scene, audio, sounds, bowModel, arrowModel);
   return {
     get ready() {
-      return cooldown <= 0;
+      return s.cooldown <= 0;
     },
-    fire(eye, look) {
-      const a = arrows.find((arrow) => arrow.state === 'idle');
-      if (!a || cooldown > 0) return;
-      a.x = eye.x + look.x * SPAWN_AHEAD;
-      a.y = eye.y + look.y * SPAWN_AHEAD;
-      a.z = eye.z + look.z * SPAWN_AHEAD;
-      a.vx = look.x * BOW.speed;
-      a.vy = look.y * BOW.speed;
-      a.vz = look.z * BOW.speed;
-      a.age = 0;
-      a.state = 'flying';
-      audio.once(sounds.twang, VOLUME.twang);
-      cooldown = BOW.cooldown;
-      kick = KICK_TIME;
-    },
-    update(dt, horde, grid, player) {
-      cooldown = Math.max(0, cooldown - dt);
-      kick = Math.max(0, kick - dt);
-      view.position.z = -0.55 + KICK * (kick / KICK_TIME);
-      nocked.visible = cooldown <= 0;
-      let recovered = 0;
-      for (let i = 0; i < arrows.length; i++) {
-        const a = arrows[i];
-        if (a.state === 'flying') {
-          const { x, y, z } = a;
-          stepArrow(a, dt);
-          if (a.state === 'flying') resolveHit(i, x, y, z, horde, grid);
-          if (a.state === 'flying') orient(meshes[i], a);
-        } else if (a.state === 'stuck') {
-          if (Math.hypot(a.x - player.x, a.z - player.z) < RECOVER_RADIUS) {
-            a.state = 'idle';
-            audio.once(sounds.click, VOLUME.click);
-            recovered++;
-          }
-        }
-        place(meshes[i], a);
-      }
-      return recovered;
-    },
-    reset() {
-      for (let i = 0; i < arrows.length; i++) {
-        arrows[i].state = 'idle';
-        meshes[i].visible = false;
-      }
-      cooldown = 0;
-      kick = 0;
-    },
+    fire: (eye, look) => fireArrow(s, eye, look),
+    update: (dt, horde, grid, player) => updateBow(s, dt, horde, grid, player),
+    reset: () => resetBow(s),
     dispose() {
-      camera.remove(view);
-      for (const mesh of meshes) mesh.removeFromParent();
+      camera.remove(s.view);
+      for (const mesh of s.meshes) mesh.removeFromParent();
     },
   };
 }

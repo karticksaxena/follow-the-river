@@ -33,6 +33,12 @@ describe('resolveCircle', () => {
     expect(Math.hypot(out.x - 1, out.z - 1)).toBeCloseTo(0.3);
   });
 
+  it('writes into and returns a passed-in out object', () => {
+    const out = { x: 0, z: 0 };
+    expect(resolveCircle(1.1, 0, 0.3, [crate], out)).toBe(out);
+    expect(out.x).toBeCloseTo(1.3);
+  });
+
   it('gets a player whose centre is inside out through the nearest face', () => {
     const out = resolveCircle(0.9, 0, 0.3, [crate]);
     expect(out).toEqual({ x: 1.3, z: 0 });

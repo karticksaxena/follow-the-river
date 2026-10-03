@@ -89,58 +89,80 @@ const BOB = 0.04;
 const BOB_SPEED = 2;
 const SPIN_SPEED = 0.8;
 
-export async function createPickupMeshes(scene: THREE.Scene): Promise<PickupMeshes> {
+interface PickupState {
+  readonly templates: ReadonlyMap<string, THREE.Object3D>;
+  readonly group: THREE.Group;
+  readonly meshes: Map<string, THREE.Object3D>;
+  // Mirror of meshes' values, so update() walks an array without allocating an iterator.
+  active: THREE.Object3D[];
+  time: number;
+}
+
+async function loadTemplates(): Promise<Map<string, THREE.Object3D>> {
   const templates = new Map<string, THREE.Object3D>();
   await Promise.all(
     [...new Set(Object.values(MODEL))].map(async (n) =>
       templates.set(n, await loadModel(propUrl(n))),
     ),
   );
+  return templates;
+}
 
+function removePickup(s: PickupState, id: string): void {
+  const mesh = s.meshes.get(id);
+  if (!mesh) return;
+  mesh.removeFromParent();
+  s.meshes.delete(id);
+  s.active = [...s.meshes.values()];
+}
+
+function placePickups(
+  s: PickupState,
+  list: readonly PickupDef[],
+  taken: ReadonlySet<string>,
+): void {
+  for (const mesh of s.meshes.values()) mesh.removeFromParent();
+  s.meshes.clear();
+  for (const p of list) {
+    const template = s.templates.get(MODEL[p.kind]);
+    if (taken.has(p.id) || !template) continue;
+    const mesh = template.clone(true);
+    mesh.position.set(p.x, HOVER, p.z);
+    s.group.add(mesh);
+    s.meshes.set(p.id, mesh);
+  }
+  s.active = [...s.meshes.values()];
+}
+
+function updatePickups(s: PickupState, dt: number): void {
+  s.time += dt;
+  const y = HOVER + Math.sin(s.time * BOB_SPEED) * BOB;
+  for (let i = 0; i < s.active.length; i++) {
+    const mesh = s.active[i];
+    if (!mesh) continue;
+    mesh.position.y = y;
+    mesh.rotation.y += SPIN_SPEED * dt;
+  }
+}
+
+export async function createPickupMeshes(scene: THREE.Scene): Promise<PickupMeshes> {
   const group = new THREE.Group();
-  scene.add(group);
-  const meshes = new Map<string, THREE.Object3D>();
-  // Mirror of meshes' values, so update() walks an array without allocating an iterator.
-  let active: THREE.Object3D[] = [];
-  let time = 0;
-
-  const remove = (id: string): void => {
-    const mesh = meshes.get(id);
-    if (!mesh) return;
-    mesh.removeFromParent();
-    meshes.delete(id);
-    active = [...meshes.values()];
+  const s: PickupState = {
+    templates: await loadTemplates(),
+    group,
+    meshes: new Map(),
+    active: [],
+    time: 0,
   };
-
+  scene.add(group);
   return {
-    place(list, taken) {
-      for (const mesh of meshes.values()) mesh.removeFromParent();
-      meshes.clear();
-      for (const p of list) {
-        const template = templates.get(MODEL[p.kind]);
-        if (taken.has(p.id) || !template) continue;
-        const mesh = template.clone(true);
-        mesh.position.set(p.x, HOVER, p.z);
-        group.add(mesh);
-        meshes.set(p.id, mesh);
-      }
-      active = [...meshes.values()];
-    },
-    remove,
-    update(dt) {
-      time += dt;
-      const y = HOVER + Math.sin(time * BOB_SPEED) * BOB;
-      for (let i = 0; i < active.length; i++) {
-        const mesh = active[i];
-        if (!mesh) continue;
-        mesh.position.y = y;
-        mesh.rotation.y += SPIN_SPEED * dt;
-      }
-    },
+    place: (list, taken) => placePickups(s, list, taken),
+    remove: (id) => removePickup(s, id),
+    update: (dt) => updatePickups(s, dt),
     dispose() {
       group.removeFromParent();
-      meshes.clear();
-      active = [];
+      s.meshes.clear();
+      s.active = [];
     },
   };
 }

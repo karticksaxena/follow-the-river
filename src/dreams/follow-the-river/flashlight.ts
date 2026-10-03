@@ -53,8 +53,13 @@ export function createFlashlight(camera: THREE.Camera): Flashlight {
     on: true,
     blackout: false,
     apply(battery, time) {
+      const wasOn = light.intensity > 0;
       light.intensity =
         this.on && !this.blackout ? FLASHLIGHT.intensity * beamLevel(battery, time) : 0;
+      const isOn = light.intensity > 0;
+      // Skip the 1024² shadow pass while dark; force one render on the off -> on edge.
+      light.shadow.autoUpdate = isOn;
+      if (isOn && !wasOn) light.shadow.needsUpdate = true;
     },
     dispose() {
       camera.remove(light, light.target);

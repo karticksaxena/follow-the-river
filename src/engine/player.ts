@@ -38,10 +38,11 @@ export function createPlayer(
   controls.addEventListener('unlock', onUnlocked);
   document.addEventListener('pointerlockerror', onError);
   let grid = createBoxGrid([]);
+  const scratch = { x: 0, z: 0 };
   const moveBy = (dx: number, dz: number): void => {
     const x = camera.position.x + dx;
     const z = camera.position.z + dz;
-    const next = resolveCircle(x, z, PLAYER_RADIUS, grid.near(x, z, PLAYER_RADIUS + 0.5));
+    const next = resolveCircle(x, z, PLAYER_RADIUS, grid.near(x, z, PLAYER_RADIUS + 0.5), scratch);
     camera.position.set(next.x, EYE_HEIGHT, next.z);
   };
   const player: Player = {

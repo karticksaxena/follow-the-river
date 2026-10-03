@@ -58,12 +58,14 @@ export function segmentHitsBox(
 /**
  * Pushes a circle (the player, radius in metres) out of every box it overlaps.
  * Checks every box passed in: use `createBoxGrid` to pass only nearby boxes.
+ * Writes the result into `out` and returns it; hot loops pass a reused scratch object.
  */
 export function resolveCircle(
   x: number,
   z: number,
   radius: number,
   boxes: readonly Box[],
+  out: { x: number; z: number } = { x: 0, z: 0 },
 ): { x: number; z: number } {
   let px = x;
   let pz = z;
@@ -81,5 +83,7 @@ export function resolveCircle(
       ({ x: px, z: pz } = exitInside(px, pz, radius, box));
     }
   }
-  return { x: px, z: pz };
+  out.x = px;
+  out.z = pz;
+  return out;
 }

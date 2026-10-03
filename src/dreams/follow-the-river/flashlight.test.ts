@@ -1,5 +1,22 @@
+import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { BATTERY, beamLevel, drainBattery } from './flashlight';
+import { BATTERY, beamLevel, createFlashlight, drainBattery } from './flashlight';
+
+describe('shadow', () => {
+  it('skips the shadow pass while dark and forces one render on the way back on', () => {
+    const fl = createFlashlight(new THREE.PerspectiveCamera());
+    fl.apply(100, 0);
+    expect(fl.light.shadow.autoUpdate).toBe(true);
+    fl.on = false;
+    fl.apply(100, 0);
+    expect(fl.light.shadow.autoUpdate).toBe(false);
+    fl.on = true;
+    fl.apply(100, 0);
+    expect(fl.light.shadow.autoUpdate).toBe(true);
+    expect(fl.light.shadow.needsUpdate).toBe(true);
+    fl.dispose();
+  });
+});
 
 describe('battery', () => {
   it('drains only while on and never below zero', () => {
