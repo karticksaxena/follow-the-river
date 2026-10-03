@@ -4,6 +4,7 @@ import type { DreamContext, DreamModule } from '../types';
 import { CITY } from './areas/city';
 import { startChapter, type Chapter } from './chapter';
 import { phaseTitle } from './flow';
+import { runIntro, type Intro } from './intro';
 import {
   completePhase,
   freshRun,
@@ -19,7 +20,7 @@ const PLAYABLE: readonly Phase[] = ['day1', 'night1'];
 const LOADING_DELAY_MS = 300;
 const THE_END = ['You made it to the boathouse.', 'Night 1 survived.', 'To be continued…'];
 
-/** Task 18 inserts the intro scene here; until then the intro phase just completes. */
+/** The intro is played by `runIntro`; this fallback (a finished run restarting) skips it. */
 function playable(save: RunSave): RunSave {
   if (save.phase === 'intro') return completePhase(save, restartPhase(save));
   if (PLAYABLE.includes(save.phase)) return save;
@@ -38,6 +39,7 @@ export function createDream(): DreamModule {
   let ctx: DreamContext | null = null;
   let store: SaveStore<RunSave> | null = null;
   let chapter: Chapter | null = null;
+  let intro: Intro | null = null;
   let save: RunSave = freshRun();
   let resumable = false;
   let disposed = false;
@@ -50,31 +52,66 @@ export function createDream(): DreamModule {
   /** Builds a chapter for `from`; null if the dream was disposed meanwhile. */
   async function build(from: RunSave): Promise<Chapter | null> {
     if (!ctx || !store) return null;
-    const built = await startChapter(ctx, CITY, playable(from), store, onDone);
+    const built = await startChapter(ctx, CITY, playable(from), store, onDone, () => disposed);
     if (!disposed) return built;
     built.dispose();
     return null;
   }
 
-  /** Fade out, drop the old chapter, build a fresh run (with "Loading…" if slow), fade in, title card. */
-  async function startOver(): Promise<void> {
-    if (!ctx || !store) return;
-    chapter?.freeze();
-    await ctx.overlay.fade(true);
+  /** The intro scene for a fresh run, else the chapter for the save's phase. */
+  async function enter(from: RunSave): Promise<void> {
+    if (!ctx) return;
+    if (from.phase !== 'intro') {
+      chapter = await build(from);
+      return;
+    }
+    const built = await runIntro(ctx, () => void finishIntro());
+    if (disposed) built.dispose();
+    else intro = built;
+  }
+
+  /** Fade out, run `swap` (with "Loading…" if slow), fade in, title card. */
+  async function transition(swap: () => Promise<void>): Promise<void> {
+    if (!ctx) return;
+    const { overlay } = ctx;
+    await overlay.fade(true);
     if (disposed) return;
+    const loading = setTimeout(() => showMessage(overlay, '', 'Loading…'), LOADING_DELAY_MS);
+    await swap();
+    clearTimeout(loading);
+    if (disposed || (!chapter && !intro)) return;
+    overlay.closePanel();
+    await overlay.fade(false);
+    if (!disposed) chapter?.announce(true);
+  }
+
+  function dropScene(): void {
     chapter?.dispose();
     chapter = null;
-    store.clear();
-    save = freshRun();
-    resumable = false;
-    const { overlay } = ctx;
-    const loading = setTimeout(() => showMessage(overlay, '', 'Loading…'), LOADING_DELAY_MS);
-    chapter = await build(save);
-    clearTimeout(loading);
-    overlay.closePanel();
-    if (!chapter) return;
-    await overlay.fade(false);
-    if (!disposed) chapter.announce(true);
+    intro?.dispose();
+    intro = null;
+  }
+
+  /** Mom has sent you off: save the end of the intro, swap to Day 1. */
+  async function finishIntro(): Promise<void> {
+    if (!store) return;
+    save = completePhase(save, restartPhase(save));
+    store.save(save);
+    await transition(async () => {
+      dropScene();
+      await enter(save);
+    });
+  }
+
+  async function startOver(): Promise<void> {
+    chapter?.freeze();
+    await transition(async () => {
+      dropScene();
+      store?.clear();
+      save = freshRun();
+      resumable = false;
+      await enter(save);
+    });
   }
 
   async function begin(): Promise<void> {
@@ -97,15 +134,14 @@ export function createDream(): DreamModule {
       const loaded = forced ?? store.load();
       save = loaded ?? freshRun();
       resumable = !forced && loaded !== null && loaded.phase !== 'intro';
-      chapter = await build(save);
+      await enter(save);
     },
     begin() {
       void begin();
     },
     dispose() {
       disposed = true;
-      chapter?.dispose();
-      chapter = null;
+      dropScene();
     },
   };
 }
