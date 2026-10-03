@@ -6,6 +6,7 @@ import type { DreamContext } from '../types';
 import { createAmbience } from './ambience';
 import type { AreaDef } from './areas/types';
 import { createBow, type Bow } from './bow';
+import { HORDE_CAPACITY } from './difficulty';
 import { createFish, type Fish } from './fish';
 import { createFlashlight } from './flashlight';
 import { createHud } from './hud';
@@ -17,7 +18,6 @@ import { loadSounds, type Sounds } from './sounds';
 import { buildWorld, type World } from './world';
 import { DAY_TUNING } from './zombies/brain';
 import { createHorde, type Horde } from './zombies/horde';
-import { SPAWNER } from './zombies/spawner';
 
 const LANTERN_HEIGHT = 2.5;
 
@@ -37,17 +37,19 @@ interface Bodies {
 
 function loadBodies(
   ctx: DreamContext,
+  area: AreaDef,
   world: World,
   grid: ReturnType<typeof createBoxGrid>,
   sounds: Sounds,
 ): Promise<Bodies> {
   const { scene } = world;
   return Promise.all([
-    createHorde(scene, ctx.audio, grid, sounds.groans, SPAWNER.cap),
+    createHorde(scene, ctx.audio, grid, sounds.groans, HORDE_CAPACITY),
     createBow(ctx.stage.camera, scene, ctx.audio, sounds),
     createFish(scene, ctx.audio, sounds),
     createPickupMeshes(scene),
-    loadModel(propUrl('boathouse')),
+    // The night's safe-spot building (the city's boathouse, the forest-edge camp…); Night 3 has none.
+    area.safeProp ? loadModel(propUrl(area.safeProp.prop)) : Promise.resolve(new THREE.Group()),
   ]).then(([horde, bow, fish, pickups, boathouse]) => ({ horde, bow, fish, pickups, boathouse }));
 }
 
@@ -83,16 +85,20 @@ export async function assemble(
     return null;
   }
   const grid = createBoxGrid(world.colliders);
-  const bodies = await loadBodies(ctx, world, grid, sounds);
+  const bodies = await loadBodies(ctx, area, world, grid, sounds);
   const { horde, bow, fish, pickups, boathouse } = bodies;
   if (isCancelled()) {
     free(scene, camera, bodies);
     return null;
   }
   scene.add(camera);
-  boathouse.position.set(0, 0, area.safeZ - 2);
+  const safe = area.safeProp;
+  if (safe) {
+    boathouse.position.set(safe.x, 0, safe.z);
+    boathouse.rotation.y = safe.yaw;
+  }
   const lantern = new THREE.PointLight(0xffb060, 0, 30, 2);
-  lantern.position.set(0, LANTERN_HEIGHT, area.safeZ);
+  lantern.position.set(safe?.x ?? 0, LANTERN_HEIGHT, safe ? safe.z + 2 : area.safeZ);
   scene.add(boathouse, lantern);
   const flashlight = createFlashlight(camera);
   const scares = await createScares(

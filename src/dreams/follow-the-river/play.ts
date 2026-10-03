@@ -1,15 +1,15 @@
 import * as THREE from 'three/webgpu';
 import { createControls, type Controls } from './controls';
+import { nightDifficulty, nightTuning } from './difficulty';
 import { BEAM, drainBattery } from './flashlight';
 import { atSafeSpot, nearSpot, takeDamage } from './flow';
 import type { HudState } from './hud';
 import { applyDim, LIGHTING } from './lighting';
 import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
-import { addSupply, isNight } from './state';
-import { NIGHT_TUNING } from './zombies/brain';
+import { addSupply, chapterOf, isNight } from './state';
 import type { PlayerSense } from './zombies/horde';
-import { nextSpawn, SPAWNER, type Strip } from './zombies/spawner';
+import { nextSpawn, type Strip } from './zombies/spawner';
 
 /** Shack darkness eases at this rate (per second); lights are touched only past `DIM_EPSILON`. */
 const DIM_RATE = 1.5;
@@ -72,7 +72,7 @@ function createState(sys: Systems, run: Run, events: Events): State {
     sense,
     controls: createControls(sys, run, events, sense),
     look: new THREE.Vector3(),
-    spawnTimer: { timer: SPAWNER.interval },
+    spawnTimer: { timer: nightDifficulty(chapterOf(run.phase)).interval },
     strip: {
       minX: area.landX,
       maxX: EDGE_X - NIGHT_STRIP_MARGIN,
@@ -135,6 +135,7 @@ function tickWorld(p: State, dt: number): void {
 
 function spawnNight(p: State, dt: number): void {
   const { sys, sense } = p;
+  const chapter = chapterOf(p.run.phase);
   const at = nextSpawn(
     p.spawnTimer,
     dt,
@@ -144,9 +145,10 @@ function spawnNight(p: State, dt: number): void {
     sys.area.safeZ,
     p.blocked,
     Math.random,
+    nightDifficulty(chapter),
   );
   if (!at) return;
-  sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), NIGHT_TUNING);
+  sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), nightTuning(chapter));
 }
 
 /** Shack darkness: eases toward 1 inside, 0 outside; lights are touched only when it moved. */
@@ -228,7 +230,7 @@ export function createPlay(sys: Systems, run: Run, events: Events): Play {
   const p = createState(sys, run, events);
   return {
     reset() {
-      p.spawnTimer.timer = SPAWNER.interval;
+      p.spawnTimer.timer = nightDifficulty(chapterOf(run.phase)).interval;
       p.toldAboutWait = false;
       p.wasInShack = false;
       p.hitPause = false;

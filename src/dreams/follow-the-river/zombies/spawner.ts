@@ -13,6 +13,12 @@ export const SPAWNER = {
   quietNearSafe: 35,
 } as const;
 
+/** Per-night pace; defaults to SPAWNER's. */
+export interface Pace {
+  cap: number;
+  interval: number;
+}
+
 export interface Strip {
   minX: number;
   maxX: number;
@@ -49,11 +55,12 @@ export function nextSpawn(
   safeZ: number,
   blocked: (x: number, z: number) => boolean,
   random: () => number,
+  pace: Pace = SPAWNER,
 ): SpawnPoint | null {
   state.timer -= dt;
-  if (state.timer > 0 || alive >= SPAWNER.cap) return null;
+  if (state.timer > 0 || alive >= pace.cap) return null;
   if (player.z - safeZ < SPAWNER.quietNearSafe) return null;
-  state.timer = SPAWNER.interval;
+  state.timer = pace.interval;
   for (let i = 0; i < TRIES; i++) {
     const p = candidate(player, strip, random);
     const d = Math.hypot(p.x - player.x, p.z - player.z);

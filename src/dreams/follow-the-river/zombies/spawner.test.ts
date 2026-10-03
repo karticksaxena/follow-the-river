@@ -74,3 +74,14 @@ describe('nextSpawn', () => {
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(SPAWNER.quietNearSafe);
   });
 });
+
+describe('nextSpawn pace', () => {
+  it('uses the given cap and interval', () => {
+    const pace = { cap: 3, interval: 1.5 };
+    const at = { x: 0, z: -200 };
+    expect(nextSpawn({ timer: 0 }, 0.1, 3, at, strip, -400, never, seeded(), pace)).toBeNull();
+    const state = { timer: 0 };
+    nextSpawn(state, 0.1, 2, at, strip, -400, never, seeded(), pace);
+    expect(state.timer).toBe(1.5);
+  });
+});
