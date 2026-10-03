@@ -81,3 +81,24 @@ export async function loadModel(url: string): Promise<THREE.Object3D> {
   }
   return (await pending).clone(true);
 }
+
+export interface SkinnedAsset {
+  scene: THREE.Object3D;
+  clips: readonly THREE.AnimationClip[];
+}
+const skinnedCache = new Map<string, Promise<SkinnedAsset>>();
+
+/** Loads a skinned GLB once (marked cached); clone `scene` with SkeletonUtils.clone per character. */
+export function loadSkinned(url: string): Promise<SkinnedAsset> {
+  let pending = skinnedCache.get(url);
+  if (!pending) {
+    pending = loader.loadAsync(url).then((gltf) => {
+      enableShadows(gltf.scene, false);
+      markCached(gltf.scene);
+      return { scene: gltf.scene, clips: gltf.animations };
+    });
+    pending.catch(() => skinnedCache.delete(url));
+    skinnedCache.set(url, pending);
+  }
+  return pending;
+}
