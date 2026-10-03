@@ -3955,7 +3955,7 @@ git commit -m "feat(engine): graphics pass — 540p render, bloom, vignette, fil
 
 Kartik asked for real horror, a quiet home screen and a river that visibly flows. Everything here was checked in Chrome on 2026-10-03.
 - Home: the static/rain-like room tone is replaced by soft, slow sleep breathing at low volume.
-- River: long dark ripples drift downstream and glint in the flashlight. It is all done in a TSL shader, with no per-frame JavaScript.
+- River: wider (14 m) and clearly visible. Blue ripples drift downstream and glint under dim moonlight and the flashlight, and a pale mud edge marks the bank. It is all done in a TSL shader, with no per-frame JavaScript.
 - Scare kit (reusable in Plan 2): a procedural sting sound, a camera jolt and a light flicker.
 - The watcher: a Blender-built figure, too tall and too thin, with faint red eyes. It stands in the fog on the path. Walk within 13 m and the sting hits, the camera jolts, the flashlight stutters, and the figure is gone.
 
@@ -4487,10 +4487,10 @@ import * as THREE from 'three/webgpu';
 /** Downstream speed in m/s and the water's colours. Tuning knobs. */
 export const RIVER_FLOW = {
   speed: 1.6,
-  deep: 0x050f17,
-  streak: 0x3b5866,
+  deep: 0x0a1a26,
+  streak: 0x5b8296,
   /** Faint self-glow of the ripples so the flow reads even outside the flashlight. */
-  glow: 0x0c1a22,
+  glow: 0x12303e,
 } as const;
 
 /**
@@ -4522,8 +4522,11 @@ import { createRiverMaterial } from './water';
 
 /** Overcast dusk: dark grey-blue. Never bright. */
 export const SKY = 0x1b2026;
-export const RIVER_X = 7;
-export const RIVER_WIDTH = 8;
+/** The river: its near edge sits at x = 3, right beside the walkable bank. Tuning knobs. */
+export const RIVER_WIDTH = 14;
+export const RIVER_X = 3 + RIVER_WIDTH / 2;
+/** Dim blue moonlight: just enough to put a sheen on the water. Never bright. */
+const MOONLIGHT = 0.35;
 export const BANK_LENGTH = 120;
 
 /** Grey-box crates: [x, z, size]. Placeholder props until Plan 2's city kit. */
@@ -4574,7 +4577,9 @@ export async function buildRiverbank(): Promise<THREE.Scene> {
   scene.fog = new THREE.Fog(SKY, 6, 70);
   const sky = createSkyDome(0x07090c, SKY, SKY_DOME_RADIUS);
   sky.name = SKY_NAME;
-  scene.add(sky, new THREE.HemisphereLight(0x5a6470, 0x15180f, 0.6));
+  const moon = new THREE.DirectionalLight(0x9fb4ff, MOONLIGHT);
+  moon.position.set(40, 30, -80);
+  scene.add(sky, new THREE.HemisphereLight(0x5a6470, 0x15180f, 0.6), moon);
   const middle = -BANK_LENGTH / 2 + 10;
   // Ground and water run far past the walkable strip so fog, not an edge, ends the view.
   const ground = plane(120, 360, 0x2b2f24);
@@ -4585,7 +4590,10 @@ export async function buildRiverbank(): Promise<THREE.Scene> {
   water.rotation.x = -Math.PI / 2;
   water.position.set(RIVER_X, -0.15, middle);
   for (const surface of [ground, farBank, water]) surface.receiveShadow = true;
-  scene.add(ground, farBank, water);
+  // A pale strip of wet mud marks where the bank drops into the water.
+  const edge = plane(0.6, 360, 0x4a4a3c);
+  edge.position.set(RIVER_X - RIVER_WIDTH / 2 - 0.3, 0.01, middle);
+  scene.add(ground, farBank, water, edge);
   await addSkyline(scene);
   const crateMaterial = new THREE.MeshLambertMaterial({ color: 0x4a3b2a });
   for (const [x, z, size] of CRATES) {
