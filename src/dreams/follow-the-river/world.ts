@@ -83,6 +83,11 @@ export async function buildWorld(area: AreaDef): Promise<World> {
     scene,
     colliders,
     lights,
-    insideShack: (x, z) => bounds.some((b) => x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ),
+    insideShack(x, z) {
+      for (const b of bounds) {
+        if (x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ) return true;
+      }
+      return false;
+    },
   };
 }

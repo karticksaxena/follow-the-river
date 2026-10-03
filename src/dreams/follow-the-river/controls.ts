@@ -24,98 +24,115 @@ export interface Controls {
   prompt(): string | null;
 }
 
+/** What the control functions share. */
+interface Ctl {
+  sys: Systems;
+  run: Run;
+  events: Events;
+  sense: PlayerSense;
+  target: Target;
+  pickup: PickupDef | null;
+  notice: string | null;
+  noticeLeft: number;
+}
+
+const click = (c: Ctl): void => void c.sys.ctx.audio.once(c.sys.sounds.click, CLICK_VOLUME);
+
+function toggleLight(c: Ctl): void {
+  if (c.run.live.supplies.battery <= 0) return;
+  c.sys.flashlight.on = !c.sys.flashlight.on;
+  click(c);
+}
+
+function shoot(c: Ctl): void {
+  if (!c.sys.bow.ready) return;
+  const left = spend(c.run.live.supplies, 'arrows', 1);
+  if (!left) {
+    click(c);
+    c.notice = 'No arrows';
+    c.noticeLeft = NOTICE_SECONDS;
+    return;
+  }
+  c.run.live.supplies = left;
+  c.sys.bow.fire(c.sense.eye, c.sense.look);
+}
+
+function take(c: Ctl, found: PickupDef): void {
+  if (isFull(found, c.run.live.supplies)) return;
+  c.run.live = collect(c.run.live, found);
+  c.run.taken.add(found.id);
+  c.sys.pickups.remove(found.id);
+  click(c);
+  if (found.kind === 'arrows') c.events.hint('bow');
+  else if (found.kind === 'fishPack') c.events.hint('fish');
+}
+
+function throwPack(c: Ctl): void {
+  const left = spend(c.run.live.supplies, 'fishPacks', 1);
+  if (!left) return;
+  c.run.live.supplies = left;
+  c.run.live.fed++;
+  c.sys.fish.feed(c.sense.eye);
+}
+
+/** Works out what E would do from where the player stands. */
+function find(c: Ctl): void {
+  const { x, z } = c.sys.ctx.stage.camera.position;
+  const night = isNight(c.run.phase);
+  c.pickup = night ? null : nearestPickup(x, z, c.sys.area.pickups, c.run.taken);
+  if (c.pickup) c.target = 'pickup';
+  else if (!night && canThrow(x, EDGE_X, c.run.live.supplies.fishPacks)) c.target = 'fish';
+  else if (!night && nearSpot(x, z, c.sys.area.waitSpot, WAIT_RADIUS)) c.target = 'wait';
+  else c.target = null;
+}
+
+function use(c: Ctl): void {
+  if (c.target === 'pickup' && c.pickup) take(c, c.pickup);
+  else if (c.target === 'fish') throwPack(c);
+  else if (c.target === 'wait') c.events.wait();
+}
+
+function tick(c: Ctl, dt: number): void {
+  const { keys } = c.sys.ctx;
+  c.noticeLeft -= dt;
+  if (c.noticeLeft <= 0) c.notice = null;
+  if (keys.consumePress('KeyF')) toggleLight(c);
+  if (keys.consumePress('Mouse0')) shoot(c);
+  find(c);
+  if (keys.consumePress('KeyE')) {
+    use(c);
+    find(c);
+  }
+}
+
+function promptOf(c: Ctl): string | null {
+  if (c.notice) return c.notice;
+  if (c.target === 'pickup' && c.pickup) return promptFor(c.pickup, c.run.live.supplies);
+  if (c.target === 'fish') return 'E: throw a fish pack';
+  return c.target === 'wait' ? 'E: wait for dark' : null;
+}
+
 export function createControls(
   sys: Systems,
   run: Run,
   events: Events,
   sense: PlayerSense,
 ): Controls {
-  const { ctx, area, bow, fish, flashlight, pickups } = sys;
-  const camera = ctx.stage.camera;
-  let target: Target = null;
-  let pickup: PickupDef | null = null;
-  let notice: string | null = null;
-  let noticeLeft = 0;
-  const click = (): void => void ctx.audio.once(sys.sounds.click, CLICK_VOLUME);
-
-  function toggleLight(): void {
-    if (run.live.supplies.battery <= 0) return;
-    flashlight.on = !flashlight.on;
-    click();
-  }
-
-  function shoot(): void {
-    if (!bow.ready) return;
-    const left = spend(run.live.supplies, 'arrows', 1);
-    if (!left) {
-      click();
-      notice = 'No arrows';
-      noticeLeft = NOTICE_SECONDS;
-      return;
-    }
-    run.live.supplies = left;
-    bow.fire(sense.eye, sense.look);
-  }
-
-  function take(found: PickupDef): void {
-    if (isFull(found, run.live.supplies)) return;
-    run.live = collect(run.live, found);
-    run.taken.add(found.id);
-    pickups.remove(found.id);
-    click();
-    if (found.kind === 'arrows') events.hint('bow');
-    else if (found.kind === 'fishPack') events.hint('fish');
-  }
-
-  function throwPack(): void {
-    const left = spend(run.live.supplies, 'fishPacks', 1);
-    if (!left) return;
-    run.live.supplies = left;
-    run.live.fed++;
-    fish.feed(sense.eye);
-  }
-
-  function find(): void {
-    const night = isNight(run.phase);
-    pickup = night
-      ? null
-      : nearestPickup(camera.position.x, camera.position.z, area.pickups, run.taken);
-    if (pickup) target = 'pickup';
-    else if (!night && canThrow(camera.position.x, EDGE_X, run.live.supplies.fishPacks))
-      target = 'fish';
-    else if (!night && nearSpot(camera.position.x, camera.position.z, area.waitSpot, WAIT_RADIUS))
-      target = 'wait';
-    else target = null;
-  }
-
-  function use(): void {
-    if (target === 'pickup' && pickup) take(pickup);
-    else if (target === 'fish') throwPack();
-    else if (target === 'wait') events.wait();
-  }
-
-  const drain = (): void => {
-    for (const code of KEYS) ctx.keys.consumePress(code);
+  const c: Ctl = {
+    sys,
+    run,
+    events,
+    sense,
+    target: null,
+    pickup: null,
+    notice: null,
+    noticeLeft: 0,
   };
-
   return {
-    drain,
-    update(dt) {
-      noticeLeft -= dt;
-      if (noticeLeft <= 0) notice = null;
-      if (ctx.keys.consumePress('KeyF')) toggleLight();
-      if (ctx.keys.consumePress('Mouse0')) shoot();
-      find();
-      if (ctx.keys.consumePress('KeyE')) {
-        use();
-        find();
-      }
+    update: (dt) => tick(c, dt),
+    drain() {
+      for (const code of KEYS) sys.ctx.keys.consumePress(code);
     },
-    prompt() {
-      if (notice) return notice;
-      if (target === 'pickup' && pickup) return promptFor(pickup, run.live.supplies);
-      if (target === 'fish') return 'E: throw a fish pack';
-      return target === 'wait' ? 'E: wait for dark' : null;
-    },
+    prompt: () => promptOf(c),
   };
 }

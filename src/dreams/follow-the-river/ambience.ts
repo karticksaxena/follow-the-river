@@ -11,6 +11,8 @@ const EASE_PER_SECOND = 1;
 export interface Ambience {
   /** Eases every layer toward its target; the loops themselves never stop. */
   update(dt: number, x: number, night: boolean, zombies: number, hurt: boolean): void;
+  /** Eases every layer to silence (frozen, dying). */
+  hush(dt: number): void;
   dispose(): void;
 }
 
@@ -46,6 +48,9 @@ export function createAmbience(audio: AudioBus, sounds: Sounds): Ambience {
       step(drone, night ? VOLUME.drone : 0, dt);
       step(horde, night ? (VOLUME.horde * zombies) / SPAWNER.cap : 0, dt);
       step(heart, hurt ? VOLUME.heartbeat : 0, dt);
+    },
+    hush(dt) {
+      for (const layer of layers) step(layer, 0, dt);
     },
     dispose() {
       for (const { sound } of layers) {

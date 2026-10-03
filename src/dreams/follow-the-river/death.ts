@@ -15,16 +15,23 @@ export interface Death {
 /** The camera pitches down, rolls and sinks while the screen goes red (the HUD vignette is already full). */
 export function createDeath(ctx: DreamContext, run: Run): Death {
   const camera = ctx.stage.camera;
+  let x = 0;
+  let z = 0;
   return {
     start() {
       if (run.dying !== 'no') return;
       run.dying = 'anim';
       run.dyingTime = 0;
+      x = camera.position.x;
+      z = camera.position.z;
     },
     step(dt, phase, restart) {
       if (run.dying !== 'anim' || ctx.isPaused()) return;
       run.dyingTime += dt;
       const k = Math.min(1, run.dyingTime / DEATH.seconds);
+      // Runs after the session's player update, so this pose wins over walking and mouse-look.
+      camera.position.x = x;
+      camera.position.z = z;
       camera.rotation.x = DEATH.pitch * k;
       camera.rotation.z = DEATH.roll * k;
       camera.position.y = EYE_HEIGHT + (DEATH.height - EYE_HEIGHT) * k;

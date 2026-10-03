@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { createControls } from './controls';
+import { createControls, type Controls } from './controls';
 import { BEAM, drainBattery } from './flashlight';
 import { atSafeSpot, nearSpot, takeDamage } from './flow';
 import type { HudState } from './hud';
@@ -27,6 +27,24 @@ export interface Play {
   reset(): void;
 }
 
+/** What the per-frame functions share (everything preallocated, so frames allocate nothing). */
+interface State {
+  sys: Systems;
+  run: Run;
+  events: Events;
+  sense: PlayerSense;
+  controls: Controls;
+  look: THREE.Vector3;
+  spawnTimer: { timer: number };
+  strip: Strip;
+  hudState: HudState;
+  wasPaused: boolean;
+  toldAboutWait: boolean;
+  wasInShack: boolean;
+  blocked: (x: number, z: number) => boolean;
+  onHit: (damage: number) => void;
+}
+
 function newSense(): PlayerSense {
   return {
     x: 0,
@@ -39,148 +57,163 @@ function newSense(): PlayerSense {
   };
 }
 
+function createState(sys: Systems, run: Run, events: Events): State {
+  const { area, hud, grid } = sys;
+  const sense = newSense();
+  return {
+    sys,
+    run,
+    events,
+    sense,
+    controls: createControls(sys, run, events, sense),
+    look: new THREE.Vector3(),
+    spawnTimer: { timer: SPAWNER.interval },
+    strip: {
+      minX: area.landX,
+      maxX: EDGE_X - NIGHT_STRIP_MARGIN,
+      minZ: area.safeZ + NIGHT_SAFE_BUFFER,
+      maxZ: area.barricadeZ,
+    },
+    hudState: { battery: 0, arrows: 0, fishPacks: 0, ammo: 0, health: 0, showAmmo: false },
+    wasPaused: true,
+    toldAboutWait: false,
+    wasInShack: false,
+    blocked(x, z) {
+      for (const box of grid.near(x, z, 1)) {
+        if (x >= box.minX && x <= box.maxX && z >= box.minZ && z <= box.maxZ) return true;
+      }
+      return false;
+    },
+    onHit(damage) {
+      run.health = takeDamage(run.health, damage);
+      hud.hurt();
+      if (run.health === 0) events.die();
+      else events.hint('hurt');
+    },
+  };
+}
+
+function updateSense(p: State): void {
+  const { sense, look, sys, run } = p;
+  const { x, y, z } = sys.ctx.stage.camera.position;
+  sys.ctx.stage.camera.getWorldDirection(look);
+  sense.x = x;
+  sense.z = z;
+  sense.eye.x = x;
+  sense.eye.y = y;
+  sense.eye.z = z;
+  sense.look.x = look.x;
+  sense.look.y = look.y;
+  sense.look.z = look.z;
+  sense.beamOn = sys.flashlight.on && run.live.supplies.battery > 0;
+}
+
+function tickWorld(p: State, dt: number): void {
+  const { sys, run, sense } = p;
+  const night = isNight(run.phase);
+  const supplies = run.live.supplies;
+  supplies.battery = drainBattery(supplies.battery, sys.flashlight.on, dt);
+  sys.flashlight.apply(supplies.battery, run.time);
+  sys.horde.update(dt, sense, p.onHit);
+  const recovered = sys.bow.update(dt, sys.horde, sys.grid, sense);
+  if (recovered > 0) run.live.supplies = addSupply(run.live.supplies, 'arrows', recovered);
+  sys.fish.update(dt, sense, night ? sys.horde : null, night);
+  sys.pickups.update(dt);
+}
+
+function spawnNight(p: State, dt: number): void {
+  const { sys, sense } = p;
+  const at = nextSpawn(
+    p.spawnTimer,
+    dt,
+    sys.horde.aliveCount(),
+    sense,
+    p.strip,
+    sys.area.safeZ,
+    p.blocked,
+    Math.random,
+  );
+  if (!at) return;
+  sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), NIGHT_TUNING);
+}
+
+/** Shack darkness: eases toward 1 inside, 0 outside; lights are touched only when it moved. */
+function tickDim(p: State, dt: number): void {
+  const { run, sys, sense } = p;
+  const inside = sys.world.insideShack(sense.x, sense.z);
+  if (inside && !p.wasInShack) p.events.hint('shack');
+  p.wasInShack = inside;
+  const target = inside ? 1 : 0;
+  const move = DIM_RATE * dt;
+  run.dim += Math.max(-move, Math.min(move, target - run.dim));
+  const moved = Math.abs(run.dim - run.appliedDim) > DIM_EPSILON;
+  if (moved || (run.dim === target && run.appliedDim !== target)) {
+    run.appliedDim = run.dim;
+    applyDim(sys.world.lights, isNight(run.phase) ? LIGHTING.night : LIGHTING.day, run.dim);
+  }
+}
+
+function tickView(p: State, dt: number): void {
+  const { sys, run, sense, hudState } = p;
+  const s = run.live.supplies;
+  sys.world.lights.sky.position.set(sense.x, 0, sense.z);
+  sys.ambience.update(
+    dt,
+    sense.x,
+    isNight(run.phase),
+    sys.horde.aliveCount(),
+    run.health <= HURT_HEALTH,
+  );
+  hudState.battery = s.battery;
+  hudState.arrows = s.arrows;
+  hudState.fishPacks = s.fishPacks;
+  hudState.ammo = s.ammo;
+  hudState.health = run.health;
+  sys.hud.set(hudState);
+  sys.hud.prompt(p.controls.prompt());
+}
+
+function tickHints(p: State): void {
+  if (p.toldAboutWait || isNight(p.run.phase)) return;
+  if (nearSpot(p.sense.x, p.sense.z, p.sys.area.waitSpot, WAIT_HINT_RANGE)) {
+    p.toldAboutWait = true;
+    p.events.hint('wait');
+  }
+}
+
+function tick(p: State, dt: number): void {
+  const { sys, run, sense } = p;
+  if (sys.ctx.isPaused()) {
+    p.controls.drain();
+    p.wasPaused = true;
+    return;
+  }
+  if (p.wasPaused) p.controls.drain();
+  p.wasPaused = false;
+  if (run.frozen) {
+    sys.ambience.hush(dt);
+    return;
+  }
+  run.time += dt;
+  updateSense(p);
+  p.controls.update(dt);
+  tickWorld(p, dt);
+  if (isNight(run.phase)) spawnNight(p, dt);
+  tickDim(p, dt);
+  tickHints(p);
+  tickView(p, dt);
+  if (isNight(run.phase) && atSafeSpot(sense.z, sys.area.safeZ)) p.events.arrive();
+}
+
 /** The per-frame gameplay the chapter registers: input, supplies, zombies, spawns, light and sound. */
 export function createPlay(sys: Systems, run: Run, events: Events): Play {
-  const { ctx, area, horde, bow, fish, pickups, hud, flashlight, world } = sys;
-  const camera = ctx.stage.camera;
-  const sense = newSense();
-  const controls = createControls(sys, run, events, sense);
-  const look = new THREE.Vector3();
-  const spawnTimer = { timer: SPAWNER.interval };
-  const strip: Strip = {
-    minX: area.landX,
-    maxX: EDGE_X - NIGHT_STRIP_MARGIN,
-    minZ: area.safeZ + NIGHT_SAFE_BUFFER,
-    maxZ: area.barricadeZ,
-  };
-  const hudState: HudState = {
-    battery: 0,
-    arrows: 0,
-    fishPacks: 0,
-    ammo: 0,
-    health: 0,
-    showAmmo: false,
-  };
-  let wasPaused = true;
-  let toldAboutWait = false;
-  let wasInShack = false;
-
-  const blocked = (x: number, z: number): boolean => {
-    for (const box of sys.grid.near(x, z, 1)) {
-      if (x >= box.minX && x <= box.maxX && z >= box.minZ && z <= box.maxZ) return true;
-    }
-    return false;
-  };
-
-  const onHit = (damage: number): void => {
-    run.health = takeDamage(run.health, damage);
-    hud.hurt();
-    if (run.health === 0) events.die();
-    else events.hint('hurt');
-  };
-
-  function updateSense(): void {
-    const { x, y, z } = camera.position;
-    camera.getWorldDirection(look);
-    sense.x = x;
-    sense.z = z;
-    sense.eye.x = x;
-    sense.eye.y = y;
-    sense.eye.z = z;
-    sense.look.x = look.x;
-    sense.look.y = look.y;
-    sense.look.z = look.z;
-    sense.beamOn = flashlight.on && run.live.supplies.battery > 0;
-  }
-
-  function tickWorld(dt: number): void {
-    const night = isNight(run.phase);
-    const supplies = run.live.supplies;
-    supplies.battery = drainBattery(supplies.battery, flashlight.on, dt);
-    flashlight.apply(supplies.battery, run.time);
-    horde.update(dt, sense, onHit);
-    const recovered = bow.update(dt, horde, sys.grid, sense);
-    if (recovered > 0) run.live.supplies = addSupply(run.live.supplies, 'arrows', recovered);
-    fish.update(dt, sense, night ? horde : null, night);
-    pickups.update(dt);
-  }
-
-  function spawnNight(dt: number): void {
-    const at = nextSpawn(
-      spawnTimer,
-      dt,
-      horde.aliveCount(),
-      sense,
-      strip,
-      area.safeZ,
-      blocked,
-      Math.random,
-    );
-    if (!at) return;
-    horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), NIGHT_TUNING);
-  }
-
-  /** Shack darkness: eases toward 1 inside, 0 outside; lights are touched only when it moved. */
-  function tickDim(dt: number): void {
-    const inside = world.insideShack(sense.x, sense.z);
-    if (inside && !wasInShack) events.hint('shack');
-    wasInShack = inside;
-    const target = inside ? 1 : 0;
-    const move = DIM_RATE * dt;
-    run.dim += Math.max(-move, Math.min(move, target - run.dim));
-    const moved = Math.abs(run.dim - run.appliedDim) > DIM_EPSILON;
-    if (moved || (run.dim === target && run.appliedDim !== target)) {
-      run.appliedDim = run.dim;
-      applyDim(world.lights, isNight(run.phase) ? LIGHTING.night : LIGHTING.day, run.dim);
-    }
-  }
-
-  function tickView(dt: number): void {
-    const night = isNight(run.phase);
-    world.lights.sky.position.set(sense.x, 0, sense.z);
-    sys.ambience.update(dt, sense.x, night, horde.aliveCount(), run.health <= HURT_HEALTH);
-    const s = run.live.supplies;
-    hudState.battery = s.battery;
-    hudState.arrows = s.arrows;
-    hudState.fishPacks = s.fishPacks;
-    hudState.ammo = s.ammo;
-    hudState.health = run.health;
-    hud.set(hudState);
-    hud.prompt(controls.prompt());
-  }
-
-  function tickHints(): void {
-    if (toldAboutWait || isNight(run.phase)) return;
-    if (nearSpot(sense.x, sense.z, area.waitSpot, WAIT_HINT_RANGE)) {
-      toldAboutWait = true;
-      events.hint('wait');
-    }
-  }
-
+  const p = createState(sys, run, events);
   return {
     reset() {
-      spawnTimer.timer = SPAWNER.interval;
-      toldAboutWait = false;
-      wasInShack = false;
+      p.spawnTimer.timer = SPAWNER.interval;
+      p.toldAboutWait = false;
+      p.wasInShack = false;
     },
-    update(dt) {
-      if (ctx.isPaused()) {
-        controls.drain();
-        wasPaused = true;
-        return;
-      }
-      if (wasPaused) controls.drain();
-      wasPaused = false;
-      if (run.frozen) return;
-      run.time += dt;
-      updateSense();
-      controls.update(dt);
-      tickWorld(dt);
-      if (isNight(run.phase)) spawnNight(dt);
-      tickDim(dt);
-      tickHints();
-      tickView(dt);
-      if (isNight(run.phase) && atSafeSpot(sense.z, area.safeZ)) events.arrive();
-    },
+    update: (dt) => tick(p, dt),
   };
 }
