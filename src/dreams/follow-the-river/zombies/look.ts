@@ -38,7 +38,9 @@ export const CLIP_FOR: Readonly<Record<Intent, string>> = {
   walk: 'Walk',
   run: 'Run',
   strike: 'Attack',
-  stagger: 'Hit',
+  // Frozen in the beam, swaying. ('Hit' is a full knock-down that ends flat on the ground: a
+  // stunned zombie looked dead, then sprang up again.)
+  stagger: 'Idle',
   fall: 'Death',
   dragged: 'Hit',
 };
