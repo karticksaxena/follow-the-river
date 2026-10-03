@@ -1,11 +1,14 @@
 import type * as THREE from 'three/webgpu';
 import type { SaveStore } from '../../engine/save';
+import type { PickupDef } from './areas/types';
 import { strikesFor } from './fish';
 import { MAX_HEALTH, phaseTitle, spawnFor } from './flow';
 import { HINTS, type HintId } from './hints';
 import { applyLighting, LIGHTING } from './lighting';
 import type { Run, Systems } from './run';
+import { shackAt } from './scares';
 import { completePhase, isNight, restartPhase, type RunSave } from './state';
+import { playTape } from './tapes';
 import { DAY_TUNING } from './zombies/brain';
 
 /** Lantern brightness at night (tuning knob); it is 0 by day. */
@@ -37,6 +40,19 @@ export function showHint(f: Flow, id: HintId): void {
   if (pages.length > 0) f.sys.ctx.read(pages);
 }
 
+/** The tape: the `tape` hint the first time, then the transcript with Mom's voice, then the shack's ambush. */
+export function readTape(f: Flow, pickup: PickupDef): void {
+  const { sys } = f;
+  const shack = shackAt(sys.area.shacks, pickup.x, pickup.z);
+  const play = (): void =>
+    playTape(sys.ctx, sys.sounds, pickup.tape ?? 0, () => {
+      if (shack && !f.disposed) sys.scares.tapeTaken(shack);
+    });
+  const hint = hintPages(f, 'tape');
+  if (hint.length > 0) sys.ctx.read(hint, play);
+  else play();
+}
+
 /** (Re)starts `f.save.phase` with the supplies the save holds. */
 export function beginPhase(f: Flow): void {
   const { sys, run, save } = f;
@@ -55,6 +71,7 @@ export function beginPhase(f: Flow): void {
   horde.reset();
   bow.reset();
   fish.reset();
+  sys.scares.reset();
   if (night) fish.arm(strikesFor(run.live.fed));
   pickups.place(night ? [] : area.pickups, run.taken);
   if (!night) for (const l of area.lurkers) horde.spawn(l.x, l.z, l.yaw, DAY_TUNING, l.lying);

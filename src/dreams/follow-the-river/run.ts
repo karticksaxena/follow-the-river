@@ -1,13 +1,14 @@
 import type { BoxGrid } from '../../engine/grid';
 import type { DreamContext } from '../types';
 import type { Ambience } from './ambience';
-import type { AreaDef } from './areas/types';
+import type { AreaDef, PickupDef } from './areas/types';
 import type { Bow } from './bow';
 import type { Fish } from './fish';
 import type { Flashlight } from './flashlight';
 import type { HintId } from './hints';
 import type { Hud } from './hud';
 import type { PickupMeshes } from './pickups';
+import type { Scares } from './scares';
 import type { Sounds } from './sounds';
 import type { Phase, RunState } from './state';
 import type { World } from './world';
@@ -27,6 +28,7 @@ export interface Systems {
   pickups: PickupMeshes;
   hud: Hud;
   ambience: Ambience;
+  scares: Scares;
 }
 
 export type Dying = 'no' | 'anim' | 'wait';
@@ -51,6 +53,8 @@ export interface Run {
 /** What gameplay asks the chapter to do. */
 export interface Events {
   hint(id: HintId): void;
+  /** The player took a tape: read it with its voice, then the shack's ambush (if any). */
+  tape(pickup: PickupDef): void;
   wait(): void;
   die(): void;
   arrive(): void;

@@ -12,6 +12,7 @@ import { createHud } from './hud';
 import { propUrl } from './kits';
 import { createPickupMeshes, type PickupMeshes } from './pickups';
 import type { Systems } from './run';
+import { createScares } from './scares';
 import { loadSounds, type Sounds } from './sounds';
 import { buildWorld, type World } from './world';
 import { DAY_TUNING } from './zombies/brain';
@@ -59,6 +60,7 @@ function free(scene: THREE.Scene, camera: THREE.Camera, parts?: Partial<Systems>
   parts?.flashlight?.dispose();
   parts?.hud?.dispose();
   parts?.ambience?.dispose();
+  parts?.scares?.dispose();
   if (camera.parent === scene) camera.removeFromParent();
   disposeScene(scene);
 }
@@ -93,12 +95,25 @@ export async function assemble(
   lantern.position.set(0, LANTERN_HEIGHT, area.safeZ);
   scene.add(boathouse, lantern);
   const flashlight = createFlashlight(camera);
+  const scares = await createScares(
+    ctx,
+    scene,
+    area.scares,
+    horde,
+    sounds,
+    flashlight,
+    area.shacks,
+  );
+  if (isCancelled()) {
+    free(scene, camera, { ...bodies, flashlight, scares });
+    return null;
+  }
   // Two bodies on show, so both outfits compile (parked bodies are invisible, so skipped).
   horde.spawn(0, 0, 0, DAY_TUNING);
   horde.spawn(0, 0, 0, DAY_TUNING);
   await ctx.stage.renderer.compileAsync(scene, camera);
   if (isCancelled()) {
-    free(scene, camera, { ...bodies, flashlight });
+    free(scene, camera, { ...bodies, flashlight, scares });
     return null;
   }
   const hud = createHud(ctx.overlay.root);
@@ -117,6 +132,7 @@ export async function assemble(
     flashlight,
     hud,
     ambience,
+    scares,
   };
   return { sys, lantern };
 }

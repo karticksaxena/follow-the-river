@@ -198,6 +198,7 @@ function tick(p: State, dt: number): void {
   updateSense(p);
   p.controls.update(dt);
   tickWorld(p, dt);
+  sys.scares.update(dt, sense, isNight(run.phase));
   if (isNight(run.phase)) spawnNight(p, dt);
   tickDim(p, dt);
   tickHints(p);

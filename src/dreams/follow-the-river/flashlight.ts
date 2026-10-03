@@ -24,6 +24,8 @@ export function beamLevel(battery: number, time: number): number {
 export interface Flashlight {
   readonly light: THREE.SpotLight;
   on: boolean;
+  /** A scare stutter: forces the beam dark while true, however the battery is. */
+  blackout: boolean;
   /** Sets intensity from on + battery (never `visible`). */
   apply(battery: number, time: number): void;
   dispose(): void;
@@ -39,17 +41,20 @@ export function createFlashlight(camera: THREE.Camera): Flashlight {
     FLASHLIGHT.penumbra,
     2,
   );
-  light.position.set(0.2, -0.15, 0);
+  // Held in the left hand, so its cone misses the bow in the right (it blew the bow out to white).
+  light.position.set(-0.25, -0.12, 0);
   light.castShadow = true;
   light.shadow.mapSize.set(1024, 1024);
   light.shadow.bias = -0.0005;
-  light.target.position.set(0, -0.3, -1);
+  light.target.position.set(-0.05, -0.3, -1);
   camera.add(light, light.target);
   return {
     light,
     on: true,
+    blackout: false,
     apply(battery, time) {
-      light.intensity = this.on ? FLASHLIGHT.intensity * beamLevel(battery, time) : 0;
+      light.intensity =
+        this.on && !this.blackout ? FLASHLIGHT.intensity * beamLevel(battery, time) : 0;
     },
     dispose() {
       camera.remove(light, light.target);

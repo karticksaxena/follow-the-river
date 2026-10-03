@@ -5,10 +5,20 @@ import type { AreaDef } from './areas/types';
 import { assemble } from './assemble';
 import { createDeath } from './death';
 import { MAX_HEALTH } from './flow';
-import { announce, arrive, beginPhase, restart, showHint, waitForDark, type Flow } from './phases';
+import {
+  announce,
+  arrive,
+  beginPhase,
+  readTape,
+  restart,
+  showHint,
+  waitForDark,
+  type Flow,
+} from './phases';
 import { createPlay } from './play';
 import type { Events, Run, Systems } from './run';
 import { restartPhase, type RunSave } from './state';
+import { stopTape } from './tapes';
 
 export interface Chapter {
   /** The title card, then the phase's first-time hints (all player-paced). */
@@ -45,6 +55,8 @@ function teardown(sys: Systems, stop: () => void): void {
   stop();
   sys.ambience.dispose();
   sys.horde.dispose();
+  sys.scares.dispose();
+  stopTape();
   sys.bow.dispose();
   sys.fish.dispose();
   sys.pickups.dispose();
@@ -85,6 +97,7 @@ export async function startChapter(
   };
   const events: Events = {
     hint: (id) => showHint(f, id),
+    tape: (pickup) => readTape(f, pickup),
     wait: () => void waitForDark(f),
     die: () => death.start(),
     arrive: () => arrive(f),

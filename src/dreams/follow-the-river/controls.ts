@@ -65,6 +65,7 @@ function take(c: Ctl, found: PickupDef): void {
   click(c);
   if (found.kind === 'arrows') c.events.hint('bow');
   else if (found.kind === 'fishPack') c.events.hint('fish');
+  else if (found.kind === 'tape') c.events.tape(found);
 }
 
 function throwPack(c: Ctl): void {
