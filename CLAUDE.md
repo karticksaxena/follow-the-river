@@ -34,7 +34,7 @@ Tooling mirrors `~/Code/base-repo-ts/SETUP.md`: oxlint type-aware (`.oxlintrc.js
 - **Desktop only:** keyboard + mouse; full screen on Start; touch-only devices get the "play on a computer" screen.
 - **Saves:** only through `createSaveStore` (`kartiks-dreams:` prefix); blocked or corrupt storage must never crash.
 - **DOM:** text via `textContent` / `el()` — never `innerHTML` with dynamic strings. No `console` in committed code.
-- **Assets:** CC0 only; every file listed in `public/assets/LICENSES.md` (source URL + licence). Kenney GLBs are unlit — load through `loadModel` (it relights them).
+- **Assets:** CC0 for art/sound; fonts are OFL/Apache via @fontsource — everything listed in `public/assets/LICENSES.md` (source URL + licence). Kenney GLBs are unlit — load through `loadModel` (it relights them).
 - **Versions:** never hardcode versions in docs; install `@latest` stable and check `pnpm view <pkg> dist-tags` for prereleases. TypeScript must be a major that ships `lib/tsserver.js` (the typescript-lsp plugin needs it).
 
 ## Agents
@@ -42,4 +42,6 @@ Tooling mirrors `~/Code/base-repo-ts/SETUP.md`: oxlint type-aware (`.oxlintrc.js
 - Use the `grounded-research` skill before adding/upgrading a dependency, picking an asset pack, or using an API you haven't verified in `node_modules`.
 - Subagents run on Sonnet only (`model: "sonnet"`).
 - Browser checks: Claude in Chrome on `http://localhost:5173/?nolock` and `?nolock&webgl`; `window.kd` (dev only) exposes the app. Pointer lock and audio need a real click, so Kartik checks those and Safari by hand.
+- Rebuild assets (zombies, orca, props, sounds) with `tools/assets/README.md`.
+- Play-test: `?nolock`, `?phase=intro|day1|night1`, `?webgl`; `window.kd` and `window.kdRiver` (dev). Hidden tab: Chrome pauses rAF and THREE.Timer zeroes delta — override `document.hidden` and step `renderer._animation._animationLoop(t)` by hand.
 - Blender: headless (`/Applications/Blender.app/Contents/MacOS/Blender --background --python …`) or the project Blender MCP (`.mcp.json`) for converting/posing models.

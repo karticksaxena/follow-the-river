@@ -2,6 +2,7 @@ import type * as THREE from 'three/webgpu';
 import type { App } from '../app';
 import { DREAMS } from '../dreams/registry';
 import type { DreamInfo } from '../dreams/types';
+import { disposeScene } from '../engine/dispose';
 import { enterFullscreen, toggleFullscreen } from '../engine/fullscreen';
 import { button, el } from '../engine/ui';
 import { buildBedroom } from './bedroom';
@@ -111,6 +112,7 @@ export async function startHome(app: App, play: Play): Promise<HomeHandle> {
       stopZzz();
       zzz.dispose();
       tone?.stop();
+      disposeScene(room.scene);
     },
   };
 }

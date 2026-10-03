@@ -6,6 +6,7 @@ export type Screen = 'game' | 'pause-menu' | 'reader';
  * after Esc) keeps a menu up so the player can click Resume again.
  */
 export function screenAfter(event: LockEvent, reading: boolean): Screen {
-  if (event === 'locked') return 'game';
+  // A lock that lands after another reader opened must not start the game behind its pages.
+  if (event === 'locked') return reading ? 'reader' : 'game';
   return reading ? 'reader' : 'pause-menu';
 }

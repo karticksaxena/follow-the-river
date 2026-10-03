@@ -35,3 +35,29 @@ describe('KeyState', () => {
     expect(keys.isDown('KeyW')).toBe(false);
   });
 });
+
+function mouse(type: 'mousedown' | 'mouseup', button: number): Event {
+  return Object.assign(new Event(type), { button });
+}
+
+describe('KeyState mouse buttons', () => {
+  it('tracks mouse buttons as Mouse0 / Mouse2', () => {
+    const target = new EventTarget();
+    const keys = new KeyState();
+    keys.attach(target);
+    target.dispatchEvent(mouse('mousedown', 0));
+    expect(keys.isDown('Mouse0')).toBe(true);
+    expect(keys.consumePress('Mouse0')).toBe(true);
+    target.dispatchEvent(mouse('mouseup', 0));
+    expect(keys.isDown('Mouse0')).toBe(false);
+  });
+
+  it('stops listening after detach', () => {
+    const target = new EventTarget();
+    const keys = new KeyState();
+    keys.attach(target);
+    keys.detach();
+    target.dispatchEvent(mouse('mousedown', 2));
+    expect(keys.isDown('Mouse2')).toBe(false);
+  });
+});

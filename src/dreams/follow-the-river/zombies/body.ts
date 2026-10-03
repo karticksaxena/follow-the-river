@@ -1,0 +1,166 @@
+import { clone } from 'three/addons/utils/SkeletonUtils.js';
+import * as THREE from 'three/webgpu';
+import { resolveCircle } from '../../../engine/collide';
+import type { BoxGrid } from '../../../engine/grid';
+import type { SkinnedAsset } from '../../../engine/models';
+import { newMind, type Intent, type Mind, type Senses, type Thought, type Tuning } from './brain';
+import { CLIP_FOR, LOOPING, pickOutfit } from './look';
+import { steer } from './steer';
+
+/** Tuning knobs. */
+const FADE = 0.25;
+const RADIUS = 0.35;
+const TURN_RATE = 6;
+const DRAG_SPEED = 2;
+const SINK_SPEED = 1.2;
+const PARK_Y = -50;
+
+export interface Body {
+  root: THREE.Object3D;
+  mesh: THREE.Object3D | null;
+  mixer: THREE.AnimationMixer;
+  actions: Map<string, THREE.AnimationAction>;
+  action: THREE.AnimationAction | null;
+  intent: Intent | null;
+  active: boolean;
+  order: number;
+  heard: boolean;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  mind: Mind;
+  tuning: Tuning;
+  thought: Thought;
+}
+
+/** Per-horde scratch (reused every frame: no allocation in the hot loop). */
+export interface Scratch {
+  chest: THREE.Vector3;
+  senses: Senses;
+  dir: { x: number; z: number };
+  /** Reused out parameter for `resolveCircle`. */
+  pos: { x: number; z: number };
+  neighbours: Float32Array;
+  count: number;
+}
+
+function buildActions(
+  mixer: THREE.AnimationMixer,
+  clips: readonly THREE.AnimationClip[],
+): Map<string, THREE.AnimationAction> {
+  const actions = new Map<string, THREE.AnimationAction>();
+  for (const clip of clips) {
+    const action = mixer.clipAction(clip);
+    if (!LOOPING.has(clip.name)) {
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
+    }
+    actions.set(clip.name, action);
+  }
+  return actions;
+}
+
+export function createBody(i: number, assets: Record<'m' | 'f', SkinnedAsset>): Body {
+  const { body, outfit } = pickOutfit(i);
+  const asset = assets[body];
+  const root = clone(asset.scene);
+  const skinned: THREE.Object3D[] = [];
+  root.traverse((node) => {
+    if (node instanceof THREE.SkinnedMesh) skinned.push(node);
+  });
+  for (const node of skinned) if (node.name !== outfit) node.removeFromParent();
+  const kept = skinned.find((node) => node.name === outfit) ?? null;
+  if (kept) kept.frustumCulled = false;
+  const mixer = new THREE.AnimationMixer(root);
+  const actions = buildActions(mixer, asset.clips);
+  root.visible = false;
+  root.position.set(0, PARK_Y, 0);
+  return {
+    root,
+    mesh: kept,
+    mixer,
+    actions,
+    action: null,
+    intent: null,
+    active: false,
+    order: 0,
+    heard: false,
+    x: 0,
+    y: 0,
+    z: 0,
+    yaw: 0,
+    mind: newMind(),
+    tuning: { sight: 0, speed: 0, giveUp: 0 },
+    thought: { intent: 'stand', hit: false },
+  };
+}
+
+export function park(b: Body): void {
+  b.active = false;
+  b.root.visible = false;
+  b.root.position.set(0, PARK_Y, 0);
+  b.mixer.stopAllAction();
+  b.action = null;
+  b.intent = null;
+}
+
+/** Cross-fades to the clip for `intent` (fade 0: snap). `lie` is Death held on its last frame. */
+export function play(b: Body, intent: Intent, fade = FADE): void {
+  if (intent === b.intent) return;
+  const was = b.intent;
+  b.intent = intent;
+  if (intent === 'fall' && was === 'lie') return;
+  const next = b.actions.get(CLIP_FOR[intent]);
+  if (!next) return;
+  const prev = b.action;
+  next.reset();
+  if (intent === 'lie') {
+    next.time = next.getClip().duration;
+    next.paused = true;
+  }
+  next.play();
+  if (prev && prev !== next) {
+    if (fade > 0) {
+      next.fadeIn(fade);
+      prev.fadeOut(fade);
+    } else prev.stop();
+  }
+  b.action = next;
+}
+
+export function turn(yaw: number, target: number, maxStep: number): number {
+  const d = Math.atan2(Math.sin(target - yaw), Math.cos(target - yaw));
+  return yaw + Math.max(-maxStep, Math.min(maxStep, d));
+}
+
+/** Walks/runs toward the player (or drifts downriver when dragged) and turns to face the way it moves. */
+export function move(
+  b: Body,
+  dt: number,
+  player: { x: number; z: number },
+  grid: BoxGrid,
+  s: Scratch,
+): void {
+  const intent = b.thought.intent;
+  let face = b.yaw;
+  if (intent === 'walk' || intent === 'run') {
+    steer(b.x, b.z, player.x, player.z, s.neighbours, s.count, s.dir);
+    const next = resolveCircle(
+      b.x + s.dir.x * b.tuning.speed * dt,
+      b.z + s.dir.z * b.tuning.speed * dt,
+      RADIUS,
+      grid.near(b.x, b.z, 1),
+      s.pos,
+    );
+    b.x = next.x;
+    b.z = next.z;
+    if (s.dir.x !== 0 || s.dir.z !== 0) face = Math.atan2(s.dir.x, s.dir.z);
+  } else if (intent === 'strike') {
+    face = Math.atan2(player.x - b.x, player.z - b.z);
+  } else if (intent === 'dragged') {
+    b.x += DRAG_SPEED * dt;
+    b.y -= SINK_SPEED * dt;
+  }
+  b.yaw = turn(b.yaw, face, TURN_RATE * dt);
+}

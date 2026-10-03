@@ -22,7 +22,9 @@ Success: a stranger opens the link in Chrome or Safari on a laptop, picks a drea
 | Backend | None. All progress in the player's browser (`localStorage`), wrapped so blocked storage never crashes the game. |
 | Hosting | Static build on Vercel (top-level page, not an iframe, so saves persist). |
 | Art | Free CC0 low-poly packs (Kenney, Quaternius), license checked per asset, listed in `public/assets/LICENSES.md`. Blender (headless scripts or the Blender Lab MCP) converts/poses models. |
-| Sound | CC0 packs or procedural Web Audio. Voices = subtitles over muffled/garbled tape audio. |
+| Creatures | River guardian = an orca; story text keeps saying "it" / "the fish", the orca reveal is visual only. Zombies = everyday people (13 outfits, Quaternius modular characters) with retargeted zombie clips. |
+| Asset pipeline | `tools/blender` scripts + `tools/assets/README.md` rebuild everything. Characters are meshopt-compressed (gltf-transform); static props are batched per material and map cell (~990 → ~90 draw calls). |
+| Sound | CC0 packs or procedural Web Audio (groans, twang, horde loop, heartbeat). Voices = subtitles over muffled/garbled tape audio. Named audio channels pause with the game. |
 | Tooling | Same rules as `~/Code/base-repo-ts` (pnpm, oxlint type-aware, Prettier + organize-imports, `tsc --noEmit`, Vitest, `.nvmrc` = `lts/*`), on Vite instead of Next.js. Latest stable, mutually compatible versions — never hardcoded in docs. |
 
 ## Home screen — "Kartik's Dreams"
@@ -89,7 +91,7 @@ You run downstream for three days and three nights. The giant fish in the river 
 ## Milestones
 
 1. **Plan 1 — Foundation & Home:** tooling, engine, home screen (quiet: soft sleep breathing only), dream picker, pause/settings, graphics pass, a test riverbank with a flowing river, Blender-built skyline and one scripted scare (the watcher), Vercel-ready build.
-2. **Plan 2 — Follow the River v1:** asset pipeline (zombies, fish, city kit via Blender), intro, Day 1, Night 1, weapons, fish, checkpoints, hints, "To be continued".
+2. **Plan 2 — Follow the River v1 (done):** asset pipeline (people-zombies, orca, city kit via Blender), intro, Day 1, Night 1, bow, flashlight, orca, checkpoints, hints, "To be continued". See `docs/superpowers/plans/2026-10-03-plan-2-results.md`.
 3. **Plan 3 — Days 2–3 and the ending.**
 
 ## Out of scope (for now)

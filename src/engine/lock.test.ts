@@ -17,4 +17,8 @@ describe('screenAfter', () => {
   it('keeps the reader open while the player is reading pages', () => {
     expect(screenAfter('unlocked', true)).toBe('reader');
   });
+
+  it('stays on the reader when a late lock lands while pages are open', () => {
+    expect(screenAfter('locked', true)).toBe('reader');
+  });
 });

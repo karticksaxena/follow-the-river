@@ -1,71 +1,178 @@
-import type * as THREE from 'three/webgpu';
-import { flickerOn, shakeAt, stingBuffer } from '../../engine/scare';
+import * as THREE from 'three/webgpu';
+import { showMessage } from '../../engine/menus';
+import { browserStorage, createSaveStore, type SaveStore } from '../../engine/save';
+import { withTimeout } from '../../engine/time';
+import { LOAD_TIMEOUT_MS } from '../load';
 import type { DreamContext, DreamModule } from '../types';
-import { createFlashlight, FLASHLIGHT } from './flashlight';
-import { buildRiverbank, riverbankColliders, SKY_NAME, SPAWN } from './riverbank';
-import { loadWatcherFigure, shouldStrike, WATCHER, type WatcherState } from './watcher';
+import { CITY } from './areas/city';
+import { startChapter, type Chapter } from './chapter';
+import { pastTheEnd, phaseTitle } from './flow';
+import { runIntro, type Intro } from './intro';
+import {
+  completePhase,
+  freshRun,
+  isRunSave,
+  restartPhase,
+  type Phase,
+  type RunSave,
+} from './state';
 
-/** How hard the camera rolls during a scare jolt, in radians. Tuning knob. */
-const JOLT_ROLL = 0.06;
+/** Phases the city can play so far. Later phases arrive with the next areas (Plan 3). */
+const PLAYABLE: readonly Phase[] = ['day1', 'night1'];
+/** Show "Loading…" only when a scene swap takes longer than this. */
+const LOADING_DELAY_MS = 300;
+const THE_END = ['You made it to the boathouse.', 'Night 1 survived.', 'To be continued…'];
+const LOAD_FAILED = "Couldn't load the next part. Check your internet connection and try again.";
 
-/** Plan 1 test dream: walking, collisions, darkness, the flashlight and one scare. Plan 2 replaces it. */
+/** The intro is played by `runIntro`; this fallback (a finished run restarting) skips it. */
+function playable(save: RunSave): RunSave {
+  return save.phase === 'intro' ? completePhase(save, restartPhase(save)) : save;
+}
+
+/** Dev only: `?phase=day1|night1` starts that phase with fresh supplies, ignoring the save. */
+function devOverride(): RunSave | null {
+  if (!import.meta.env.DEV) return null;
+  const phase = new URLSearchParams(location.search).get('phase');
+  const found = [...PLAYABLE, 'intro' as const].find((p) => p === phase);
+  return found ? { ...freshRun(), phase: found } : null;
+}
+
 export function createDream(): DreamModule {
-  let flashlight: THREE.SpotLight | null = null;
-  let stop: (() => void) | null = null;
-  let camera: THREE.Camera | null = null;
+  let ctx: DreamContext | null = null;
+  let store: SaveStore<RunSave> | null = null;
+  let chapter: Chapter | null = null;
+  let intro: Intro | null = null;
+  let save: RunSave = freshRun();
+  let resumable = false;
   let disposed = false;
+
+  const onDone = (done: RunSave): void => {
+    save = done;
+    ctx?.read(THE_END, () => ctx?.finish());
+  };
+
+  /** Builds a chapter for `from`; null if the dream was disposed meanwhile. */
+  async function build(from: RunSave): Promise<Chapter | null> {
+    if (!ctx || !store) return null;
+    const built = await startChapter(ctx, CITY, playable(from), store, onDone, () => disposed);
+    if (!disposed) return built;
+    built.dispose();
+    return null;
+  }
+
+  /** The intro scene for a fresh run, else the chapter for the save's phase. */
+  async function enter(from: RunSave): Promise<void> {
+    if (!ctx) return;
+    if (from.phase !== 'intro') {
+      // A save past what is playable gets "Start over" in begin(), not a Day 1 built behind it.
+      if (PLAYABLE.includes(from.phase)) chapter = await build(from);
+      return;
+    }
+    const built = await runIntro(
+      ctx,
+      () => void finishIntro(),
+      () => disposed,
+    );
+    if (disposed) built.dispose();
+    else intro = built;
+  }
+
+  /** Fade out, run `swap` (with "Loading…" if slow), fade in, title card. Input is frozen throughout. */
+  async function transition(swap: () => Promise<void>): Promise<void> {
+    if (!ctx) return;
+    const { overlay } = ctx;
+    ctx.hold();
+    await overlay.fade(true);
+    if (disposed) return;
+    const loading = setTimeout(() => showMessage(overlay, '', 'Loading…'), LOADING_DELAY_MS);
+    let failed = false;
+    try {
+      await withTimeout(swap(), LOAD_TIMEOUT_MS);
+    } catch {
+      failed = true;
+    } finally {
+      clearTimeout(loading);
+    }
+    if (disposed) return;
+    if (failed || (!chapter && !intro)) {
+      dropScene();
+      await ctx.choose(LOAD_FAILED, ['Back to dreams']);
+      return ctx.finish();
+    }
+    overlay.closePanel();
+    await overlay.fade(false);
+    if (disposed) return;
+    if (chapter) chapter.announce(true);
+    else ctx.read(['The dream begins again.']); // the player's click regains control
+  }
+
+  function release(): void {
+    chapter?.dispose();
+    chapter = null;
+    intro?.dispose();
+    intro = null;
+  }
+
+  /** Frees the scene; the stage gets an empty one first so three never draws freed resources. */
+  function dropScene(): void {
+    if (ctx) ctx.stage.scene = new THREE.Scene();
+    release();
+  }
+
+  /** Mom has sent you off: save the end of the intro, swap to Day 1. */
+  async function finishIntro(): Promise<void> {
+    if (!store) return;
+    save = completePhase(save, restartPhase(save));
+    store.save(save);
+    await transition(async () => {
+      dropScene();
+      await enter(save);
+    });
+  }
+
+  async function startOver(): Promise<void> {
+    chapter?.freeze();
+    await transition(async () => {
+      dropScene();
+      store?.clear();
+      save = freshRun();
+      resumable = false;
+      await enter(save);
+    });
+  }
+
+  async function begin(): Promise<void> {
+    if (!ctx) return;
+    if (resumable) {
+      const label = `Continue from ${phaseTitle(save.phase)}?`;
+      const pick = await ctx.choose(label, ['Continue', 'Start over']);
+      if (disposed) return;
+      if (pick === 1) return startOver();
+    }
+    if (pastTheEnd(save.phase, PLAYABLE)) {
+      const done = 'This is as far as the dream goes for now.';
+      const again = await ctx.choose(done, ['Start over', 'Back to dreams']);
+      return again === 0 ? startOver() : ctx.finish();
+    }
+    chapter?.announce(true);
+  }
+
   return {
-    async start(ctx: DreamContext) {
-      const scene = await buildRiverbank();
-      if (disposed) return;
-      const view = ctx.stage.camera;
-      camera = view;
-      scene.add(view);
-      ctx.stage.scene = scene;
-      const sky = scene.getObjectByName(SKY_NAME);
-      ctx.player.colliders = riverbankColliders();
-      ctx.player.teleport(SPAWN.x, SPAWN.z, SPAWN.yaw);
-      const light = createFlashlight(view);
-      flashlight = light;
-      const figure = await loadWatcherFigure();
-      if (disposed) return;
-      figure.position.set(WATCHER.x, 0, WATCHER.z);
-      scene.add(figure);
-      const sting = stingBuffer(ctx.audio.listener.context);
-      let toldAboutLight = false;
-      let watcher: WatcherState = 'waiting';
-      let since = 0;
-      stop = ctx.stage.addUpdater((dt) => {
-        // Keep the sky centred on the player so it never ends, wherever they walk.
-        sky?.position.set(view.position.x, 0, view.position.z);
-        // Drop key taps made while reading or paused, so they don't fire on resume.
-        if (ctx.isPaused()) {
-          ctx.keys.consumePress('KeyF');
-          return;
-        }
-        if (ctx.keys.consumePress('KeyF')) light.visible = !light.visible;
-        if (!toldAboutLight && view.position.z < -8) {
-          toldAboutLight = true;
-          ctx.read(['It is getting dark. Press F to turn your flashlight on or off.']);
-        }
-        const distance = Math.hypot(view.position.x - WATCHER.x, view.position.z - WATCHER.z);
-        if (shouldStrike(watcher, distance)) {
-          watcher = 'struck';
-          ctx.audio.once(sting, 0.9);
-        }
-        if (watcher !== 'struck') return;
-        since += dt;
-        figure.visible = since < WATCHER.vanishAfter;
-        view.rotation.z = shakeAt(since) * JOLT_ROLL * Math.sin(since * 70);
-        light.intensity = flickerOn(since) ? FLASHLIGHT.intensity : 0;
-      });
+    async start(context) {
+      ctx = context;
+      store = createSaveStore(browserStorage(), 'follow-the-river', isRunSave);
+      const forced = devOverride();
+      const loaded = forced ?? store.load();
+      save = loaded ?? freshRun();
+      resumable = !forced && loaded !== null && loaded.phase !== 'intro';
+      await enter(save);
+    },
+    begin() {
+      void begin();
     },
     dispose() {
       disposed = true;
-      stop?.();
-      if (flashlight && camera) camera.remove(flashlight, flashlight.target);
-      camera?.rotation.set(0, camera.rotation.y, 0);
-      camera?.removeFromParent();
+      release();
     },
   };
 }

@@ -146,3 +146,59 @@ h1.title {
   display: block;
   width: 100%;
 }
+
+/* HUD */
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: var(--dim);
+  font-size: 1.3rem;
+}
+.hud[hidden] {
+  display: none;
+}
+.hud-hurt {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(110, 0, 0, 0.85) 100%);
+  transition: opacity 0.4s;
+}
+.hud-hurt.flash {
+  animation: hud-flash 0.45s ease-out;
+}
+@keyframes hud-flash {
+  from {
+    filter: brightness(2.2);
+  }
+  to {
+    filter: brightness(1);
+  }
+}
+.hud-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: rgba(169, 166, 184, 0.6);
+}
+.hud-stats {
+  position: absolute;
+  left: 24px;
+  bottom: 20px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: rgba(8, 8, 14, 0.55);
+  line-height: 1.5;
+}
+.hud-prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 14%;
+  transform: translateX(-50%);
+  text-shadow: 0 0 6px #000;
+}
