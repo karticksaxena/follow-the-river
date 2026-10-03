@@ -3,8 +3,34 @@ import * as THREE from 'three/webgpu';
 /** Brightness (candela), reach (m) and cone half-angle (rad). Tuning knobs. */
 export const FLASHLIGHT = { intensity: 80, distance: 22, angle: 0.45, penumbra: 0.5 } as const;
 
-/** A torch held at the camera, pointing where the player looks. */
-export function createFlashlight(camera: THREE.Camera): THREE.SpotLight {
+/** Battery is 0..100. Drain in percent per second; below `low` the beam stutters. */
+export const BATTERY = { drainPerSecond: 0.9, low: 20 } as const;
+
+/** Stun cone: reach (m) and half-angle (rad), narrower than the light itself. */
+export const BEAM = { range: 14, halfAngle: 0.3 } as const;
+
+export function drainBattery(battery: number, on: boolean, dt: number): number {
+  return on ? Math.max(0, battery - BATTERY.drainPerSecond * dt) : battery;
+}
+
+/** 0..1: full above BATTERY.low, stuttering below it, 0 when empty. Deterministic in `time`. */
+export function beamLevel(battery: number, time: number): number {
+  if (battery <= 0) return 0;
+  if (battery >= BATTERY.low) return 1;
+  const step = Math.sin(time * 23) + Math.sin(time * 7.3) > 0.4 ? 1 : 0;
+  return (0.35 + 0.65 * step) * Math.max(0.4, battery / BATTERY.low);
+}
+
+export interface Flashlight {
+  readonly light: THREE.SpotLight;
+  on: boolean;
+  /** Sets intensity from on + battery (never `visible`). */
+  apply(battery: number, time: number): void;
+  dispose(): void;
+}
+
+/** A torch held at the camera, pointing where the player looks. Starts on. */
+export function createFlashlight(camera: THREE.Camera): Flashlight {
   const light = new THREE.SpotLight(
     0xfff1d6,
     FLASHLIGHT.intensity,
@@ -19,5 +45,15 @@ export function createFlashlight(camera: THREE.Camera): THREE.SpotLight {
   light.shadow.bias = -0.0005;
   light.target.position.set(0, -0.3, -1);
   camera.add(light, light.target);
-  return light;
+  return {
+    light,
+    on: true,
+    apply(battery, time) {
+      light.intensity = this.on ? FLASHLIGHT.intensity * beamLevel(battery, time) : 0;
+    },
+    dispose() {
+      camera.remove(light, light.target);
+      light.dispose();
+    },
+  };
 }

@@ -3,7 +3,7 @@ import { boxAt, type Box } from '../../engine/collide';
 import { enableShadows } from '../../engine/models';
 import { flickerOn, shakeAt, stingBuffer } from '../../engine/scare';
 import type { DreamContext, DreamModule } from '../types';
-import { createFlashlight, FLASHLIGHT } from './flashlight';
+import { createFlashlight, FLASHLIGHT, type Flashlight } from './flashlight';
 import { applyLighting, createWorldLights, LIGHTING, SKY_NAME } from './lighting';
 import { addRiver, EDGE_X, OVERRUN, plane, RIVER_WIDTH, RIVER_X } from './river';
 import { addSkyline } from './skyline';
@@ -56,7 +56,7 @@ async function buildTestScene(): Promise<THREE.Scene> {
 
 /** Plan 1 test dream: walking, collisions, darkness, the flashlight and one scare. Plan 2 replaces it. */
 export function createDream(): DreamModule {
-  let flashlight: THREE.SpotLight | null = null;
+  let flashlight: Flashlight | null = null;
   let stop: (() => void) | null = null;
   let camera: THREE.Camera | null = null;
   let disposed = false;
@@ -71,8 +71,8 @@ export function createDream(): DreamModule {
       const sky = scene.getObjectByName(SKY_NAME);
       ctx.player.setColliders(testColliders());
       ctx.player.teleport(SPAWN.x, SPAWN.z, SPAWN.yaw);
-      const light = createFlashlight(view);
-      flashlight = light;
+      const torch = createFlashlight(view);
+      flashlight = torch;
       const figure = await loadWatcherFigure();
       if (disposed) return;
       figure.position.set(WATCHER.x, 0, WATCHER.z);
@@ -89,7 +89,10 @@ export function createDream(): DreamModule {
           ctx.keys.consumePress('KeyF');
           return;
         }
-        if (ctx.keys.consumePress('KeyF')) light.visible = !light.visible;
+        if (ctx.keys.consumePress('KeyF')) {
+          torch.on = !torch.on;
+          torch.apply(100, 0);
+        }
         if (!toldAboutLight && view.position.z < -8) {
           toldAboutLight = true;
           ctx.read(['It is getting dark. Press F to turn your flashlight on or off.']);
@@ -103,13 +106,13 @@ export function createDream(): DreamModule {
         since += dt;
         figure.visible = since < WATCHER.vanishAfter;
         view.rotation.z = shakeAt(since) * JOLT_ROLL * Math.sin(since * 70);
-        light.intensity = flickerOn(since) ? FLASHLIGHT.intensity : 0;
+        torch.light.intensity = torch.on && flickerOn(since) ? FLASHLIGHT.intensity : 0;
       });
     },
     dispose() {
       disposed = true;
       stop?.();
-      if (flashlight && camera) camera.remove(flashlight, flashlight.target);
+      flashlight?.dispose();
       camera?.rotation.set(0, camera.rotation.y, 0);
       camera?.removeFromParent();
     },

@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { boxAt, resolveCircle } from './collide';
+import { boxAt, resolveCircle, segmentHitsBox } from './collide';
 
 const crate = boxAt(0, 0, 2, 2); // spans -1..1 on both axes
+
+describe('segmentHitsBox', () => {
+  const box = boxAt(0, -5, 2, 2);
+  it('finds where a segment enters a box', () => {
+    expect(segmentHitsBox(0, 0, 0, -10, box)).toBeCloseTo(0.4);
+  });
+  it('misses boxes off to the side and segments that stop short', () => {
+    expect(segmentHitsBox(5, 0, 5, -10, box)).toBeNull();
+    expect(segmentHitsBox(0, 0, 0, -3, box)).toBeNull();
+  });
+  it('reports 0 when the segment starts inside', () => {
+    expect(segmentHitsBox(0, -5, 0, -6, box)).toBe(0);
+  });
+});
 
 describe('resolveCircle', () => {
   it('leaves a far-away player alone', () => {

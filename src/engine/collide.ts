@@ -24,6 +24,37 @@ function exitInside(x: number, z: number, radius: number, box: Box): { x: number
   return best;
 }
 
+/** Fraction 0..1 along the segment where it first enters the box, or null. */
+export function segmentHitsBox(
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  box: Box,
+): number | null {
+  let tMin = 0;
+  let tMax = 1;
+  const dx = x1 - x0;
+  const dz = z1 - z0;
+  if (Math.abs(dx) < 1e-12) {
+    if (x0 < box.minX || x0 > box.maxX) return null;
+  } else {
+    const a = (box.minX - x0) / dx;
+    const b = (box.maxX - x0) / dx;
+    tMin = Math.max(tMin, Math.min(a, b));
+    tMax = Math.min(tMax, Math.max(a, b));
+  }
+  if (Math.abs(dz) < 1e-12) {
+    if (z0 < box.minZ || z0 > box.maxZ) return null;
+  } else {
+    const a = (box.minZ - z0) / dz;
+    const b = (box.maxZ - z0) / dz;
+    tMin = Math.max(tMin, Math.min(a, b));
+    tMax = Math.min(tMax, Math.max(a, b));
+  }
+  return tMin <= tMax ? tMin : null;
+}
+
 /**
  * Pushes a circle (the player, radius in metres) out of every box it overlaps.
  * Checks every box passed in: use `createBoxGrid` to pass only nearby boxes.
