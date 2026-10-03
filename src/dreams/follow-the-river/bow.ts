@@ -101,7 +101,7 @@ export async function createBow(
     loadModel(propUrl('arrow')),
   ]);
   const view = new THREE.Group();
-  view.position.set(0.28, -0.3, -0.55);
+  view.position.set(0.32, -0.32, -0.55);
   view.rotation.set(0, 0.1, -0.15);
   const nocked = arrowModel.clone(true);
   nocked.position.set(0, 0, -0.25);
