@@ -14,7 +14,7 @@ import { loadSounds, type Sounds } from './sounds';
 // river so fog hides it from outside.
 export const ROOM_X = -70;
 const TV_SCALE = 1.4;
-export const TV_LIGHT = { color: 0x4060ff, intensity: 5, distance: 8, flicker: 0.35 };
+export const TV_LIGHT = { color: 0x5a6fb8, intensity: 2.6, distance: 8, flicker: 0.35 };
 const SCREEN_TINT = 0x8a8a8a;
 export const INSIDE_DIM = 0.7;
 const FADE = 0.3;
