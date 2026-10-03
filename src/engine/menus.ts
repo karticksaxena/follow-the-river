@@ -64,6 +64,8 @@ export function showPages(overlay: Overlay, pages: readonly string[], onDone: ()
     );
     body.append(text, count, row, el('p', 'keys', 'Enter / → next · ← back'));
   });
+  // Subtitle position: the scene being talked about (Mom, the TV) stays in view above the text.
+  panel.classList.add('low');
   addEventListener('keydown', onKey);
   render();
 }

@@ -47,8 +47,8 @@ export const LIGHTING: Readonly<Record<LightingName, LightPreset>> = {
     skyHorizon: 0x625d5a,
     fog: { color: 0x4e4a4a, near: 8, far: 85 },
     hemi: { sky: 0x8a8a90, ground: 0x1c1c18, intensity: 0.6 },
-    key: { color: 0xe0d4c0, intensity: 0.45, elevation: 0.12, azimuth: 3.0 },
-    disc: { color: 0xa89c90, size: 6, soft: 0.9 },
+    key: { color: 0xe0d4c0, intensity: 0.45, elevation: 0.42, azimuth: 3.0 },
+    disc: { color: 0x8a837c, size: 7, soft: 0.9 },
   },
 };
 

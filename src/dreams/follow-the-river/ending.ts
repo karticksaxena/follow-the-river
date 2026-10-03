@@ -30,7 +30,7 @@ export const ENDING_PAGES: Readonly<Record<PagedStep, readonly string[]>> = {
   silence: ['Mom: "It held on for us. It held on for you."', 'Mom: "We made it. Because of it."'],
   epilogue: [
     'The sky goes pale over the dam. Nothing moves on the bank.',
-    'Somewhere out there, the river is carrying a great black shape down to the sea.',
+    'Somewhere under the still water, a great black shape is resting at last.',
     'You are alive. You will not forget what it cost.',
     'You never saw it again. You are not sure you were ever meant to.',
   ],
@@ -59,6 +59,8 @@ export const WAVE = {
   upstream: 34,
   laneGap: 1.5,
   laneStep: 2,
+  /** The whole wave keeps hearing the player (m), so nobody gives up the hunt mid-fight. */
+  hearing: 60,
 } as const;
 export const DAWN = { seconds: 8, step: 0.25, volume: 0.35 } as const;
 const CRY_VOLUME = 0.8;
@@ -178,6 +180,7 @@ async function fight(h: EndingHost, st: State): Promise<void> {
   await until(st, (dt) => {
     t += dt;
     spawnWave(h, spawned, t);
+    horde.alert(cam.x, cam.z, WAVE.hearing);
     return t >= WAVE.seconds;
   });
   if (st.cancelled) return;
