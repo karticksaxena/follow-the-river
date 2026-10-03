@@ -46,3 +46,14 @@
 - Pointer lock: the mouse wheel and 1/2 weapon switch, Esc during the ending, Quit mid-ending, then Continue.
 - Pistol viewmodel placement and size.
 - Safari.
+
+## Polish after the merge (Chrome play-tests and Blender)
+
+- The TV news was invisible from eye height: the screen quad was flush with the case and z-fought it. Fixed in `tools/blender/dream1_props.py`, then `tv.glb` was rebuilt.
+- Reading pages are now a compact caption at the top, so the TV, Mom and the horde stay in view.
+- Zombie steering: a zombie's own entry in the Float32 neighbour list sat about 1e-5 m away and pushed it in a random direction. Far down the river, hordes stalled or walked away; now they really chase.
+- The orca's last lunge takes the zombies nearest the player. Night 3's ending starts anywhere across the bank at the shore.
+- Sprint tests (W + Shift, no fighting):
+  - Night 1: reaches the boathouse with 1 hit.
+  - Night 3: reaches the shore along the water with 1–2 hits.
+  - Night 2: survivable along the water; cutting through the corn is deadly.
