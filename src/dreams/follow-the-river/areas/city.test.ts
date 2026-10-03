@@ -50,4 +50,13 @@ describe('CITY', () => {
     expect(ambushShacks.length).toBeGreaterThan(0);
     expect(ambushShacks.every((id) => ids.has(id))).toBe(true);
   });
+
+  it('keeps solid props off the river and pickups clear of them', () => {
+    const solids = CITY.props.filter((p) => p.collide);
+    expect(solids.every((p) => p.x <= EDGE_X - 0.2)).toBe(true);
+    const tooClose = CITY.pickups.filter((k) =>
+      solids.some((p) => Math.hypot(p.x - k.x, p.z - k.z) < 1),
+    );
+    expect(tooClose).toEqual([]);
+  });
 });

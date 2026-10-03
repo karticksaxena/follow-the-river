@@ -14,6 +14,8 @@ const SHACK_BACK_X = -16;
 const SHACK_MID_X = -13.7;
 /** Facing +X (toward the door and the road). */
 const FACE_DOOR = -Math.PI / 2;
+/** Fence pieces are ~2.3 m long; 10 across the 21 m strip overlap slightly. */
+const BARRICADE_FENCES = 10;
 const BUILDING_SEED = 23;
 const BUILDINGS = [
   ...'a,b,c,d,e,f,g,h'.split(',').map((c) => `building-${c}`),
@@ -87,17 +89,23 @@ function streetProps(): PropPlacement[] {
 /** Fence and barriers across the whole strip at the barricade (buildWorld adds the collider). */
 function barricade(): PropPlacement[] {
   const out: PropPlacement[] = [];
-  for (let x = LAND_X + 2; x < EDGE_X; x += 4) {
+  const first = LAND_X + 1.1;
+  const last = EDGE_X - 1.2;
+  const step = (last - first) / (BARRICADE_FENCES - 1);
+  for (let i = 0; i < BARRICADE_FENCES; i++) {
+    const x = first + i * step;
     out.push({ kit: 'roads', model: 'construction-fence', x, z: BARRICADE_Z, yaw: Math.PI / 2 });
-  }
-  for (let x = LAND_X + 4; x < EDGE_X; x += 8) {
-    out.push({
-      kit: 'roads',
-      model: 'construction-barrier',
-      x,
-      z: BARRICADE_Z + 1,
-      yaw: Math.PI / 2,
-    });
+    if (i % 3 === 1) {
+      out.push({
+        kit: 'roads',
+        model: 'construction-barrier',
+        x,
+        z: BARRICADE_Z + 1.2,
+        yaw: Math.PI / 2 + (i % 2) * 0.15,
+      });
+    }
+    if (i % 3 === 0)
+      out.push({ kit: 'roads', model: 'construction-cone', x: x + 1, z: BARRICADE_Z + 1.6 });
   }
   return out;
 }
@@ -107,8 +115,8 @@ function outskirts(): PropPlacement[] {
   return [
     ...row('suburb', 'fence-2x3', -250, -400, 12, -16, { yaw: Math.PI / 2 }),
     ...row('suburb', 'tree-large', -255, -400, 20, -14),
-    ...row('suburb', 'tree-large', -265, -400, 28, 1),
-    ...row('roads', 'electricity-pole', -260, -400, 40, -9),
+    ...row('suburb', 'tree-large', -265, -400, 28, -12.5),
+    ...row('roads', 'electricity-pole', -270, -400, 40, -10.5),
   ];
 }
 
@@ -119,8 +127,8 @@ const PROPS: readonly PropPlacement[] = [
   ...backdrop(),
   ...barricade(),
   ...outskirts(),
-  { kit: 'survival', model: 'campfire-pit', x: 1.5, z: -113 },
-  { kit: 'survival', model: 'bedroll', x: 0.5, z: -112 },
+  { kit: 'survival', model: 'campfire-pit', x: 0.3, z: -113 },
+  { kit: 'survival', model: 'bedroll', x: -0.9, z: -113.5, yaw: 0.5 },
 ];
 
 const SHACKS: readonly ShackDef[] = [
