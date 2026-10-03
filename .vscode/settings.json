@@ -1,0 +1,7 @@
+{
+  "npm.autoDetect": "off",
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "js/ts.tsdk.promptToUseWorkspaceVersion": true,
+  "oxc.typeAware": true,
+  "oxc.path.tsgolint": "node_modules/.bin/tsgolint"
+}
