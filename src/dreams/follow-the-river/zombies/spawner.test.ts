@@ -61,4 +61,16 @@ describe('nextSpawn', () => {
     expect(xs.length).toBeGreaterThan(0);
     expect(Math.min(...xs)).toBeGreaterThanOrEqual(-6);
   });
+
+  it('never spawns a zombie itself inside the quiet zone near the safe spot', () => {
+    const random = seeded(11);
+    const player = { x: 0, z: -400 + SPAWNER.quietNearSafe + 1 };
+    const gaps: number[] = [];
+    for (let i = 0; i < 200; i++) {
+      const p = nextSpawn({ timer: 0 }, 0.1, 0, player, strip, -400, never, random);
+      if (p) gaps.push(p.z + 400);
+    }
+    expect(gaps.length).toBeGreaterThan(0);
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(SPAWNER.quietNearSafe);
+  });
 });

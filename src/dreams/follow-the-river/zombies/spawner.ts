@@ -57,7 +57,7 @@ export function nextSpawn(
   for (let i = 0; i < TRIES; i++) {
     const p = candidate(player, strip, random);
     const d = Math.hypot(p.x - player.x, p.z - player.z);
-    const inStrip = p.z >= strip.minZ && p.z <= strip.maxZ;
+    const inStrip = p.z >= strip.minZ && p.z <= strip.maxZ && p.z - safeZ >= SPAWNER.quietNearSafe;
     if (
       inStrip &&
       d >= SPAWNER.minDistance - 1e-9 &&

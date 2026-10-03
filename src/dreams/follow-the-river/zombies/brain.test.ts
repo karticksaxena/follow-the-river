@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ATTACK,
   DAY_TUNING,
+  HUNT_SECONDS,
   isAlive,
   kill,
   newMind,
@@ -42,8 +43,14 @@ describe('zombie brain', () => {
     expect(run(undefined, near, 0.2, NIGHT_TUNING).last.intent).toBe('run');
   });
 
-  it('hears noise from any distance', () => {
-    expect(run(undefined, { ...far, heard: true }, 0.1).mind.state).toBe('chase');
+  it('hears noise from any distance and hunts for a while after a one-frame pulse', () => {
+    const mind = newMind();
+    think(mind, { ...far, heard: true }, DAY_TUNING, 0.05, out);
+    expect(mind.state).toBe('chase');
+    run(mind, far, HUNT_SECONDS - 0.5);
+    expect(mind.state).toBe('chase');
+    run(mind, far, 1);
+    expect(mind.state).toBe('idle');
   });
 
   it('winds up before landing a blow, then recovers', () => {
