@@ -40,7 +40,7 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   hurt: ['You are hurt. Three hits and you are dead.'],
   tape: ["A video tape. Mom's handwriting on the label."],
   night2: ['Corn hides them. Listen.'],
-  night3: ['The dam. Mom is at the dam.'],
+  night3: ['The lake. Mom is waiting at the lake.'],
   gun: [
     'A police gun. Press 2 for the gun, 1 for the bow.',
     'The gun stops anything — but every shot is loud, and they will come.',

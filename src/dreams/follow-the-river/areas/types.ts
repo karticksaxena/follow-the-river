@@ -64,6 +64,10 @@ export interface AreaDef {
   safeProp?: { prop: string; x: number; z: number; yaw: number };
   /** Night 3: reaching it starts the ending instead of the safe spot. */
   endingAt?: { x: number; z: number; radius: number };
+  /** Where Mom waits (Night 3): on the shore, at ground level. */
+  meetAt?: { x: number; z: number };
+  /** The strip ends in a lake: `z` is where the shore meets the water. */
+  lake?: { z: number };
   /** Fog far distance at night, overriding the area's default. */
   nightFog?: number;
   props: readonly PropPlacement[];

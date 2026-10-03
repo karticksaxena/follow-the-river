@@ -50,7 +50,7 @@ Success: a stranger opens the link in Chrome or Safari on a laptop, picks a drea
 
 A virus breaks out. Mom sees it on the TV news and knows many won't survive. She rushes to the store, buys a pack of fish, throws it into the river — a huge shape passes under the water and vanishes. She tells you: "Run. Always follow the river." She stays behind, filming, whispering "What have we done…"
 
-You run downstream for three days and three nights. The giant fish in the river protects you from zombies. Mom's video tapes reveal the truth: she worked at a lab; the experiment that grew her pet fish also leaked the virus. At the end you reach the dam and find Mom. On the last night the fish dies protecting you both. Bittersweet ending.
+You run downstream for three days and three nights. The giant fish in the river protects you from zombies. Mom's video tapes reveal the truth: she worked at a lab; the experiment that grew her pet fish also leaked the virus. At the end the river opens into a forest lake below the dam (where the lab is), and you find Mom waiting on the shore. On the last night the fish dies protecting you both. Bittersweet ending.
 
 ### Structure (about 12 minutes)
 
@@ -59,7 +59,7 @@ You run downstream for three days and three nights. The giant fish in the river 
 | Intro | Home by the river | Teaches walk/look/interact. TV news, Mom, fish thrown in. |
 | Day 1 → Night 1 | City → run to suburbs | Flashlight + bow. Tape 1. |
 | Day 2 → Night 2 | Suburbs & farms → run to forest | Gun found in a police car. Tape 2. |
-| Day 3 → Night 3 | Forest → run to the dam | Tape 3. Mom found; fish dies; ending. |
+| Day 3 → Night 3 | Forest → run to the lake below the dam | Tape 3. Mom found on the shore; fish dies; ending. |
 
 ### Day (player chooses when it ends)
 

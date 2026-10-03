@@ -29,7 +29,7 @@ export const TAPES: Readonly<Record<number, readonly string[]>> = {
     '"I let the creature go into the river, so they couldn\'t destroy it."',
     '"It knows my voice. It will protect you, K."',
     '"If you\'re watching this, you followed the river."',
-    "\"I'll be at the dam. That's where it started. I'm going to fix what I can.\"",
+    "\"I'll wait for you at the lake below the dam. That's where it started. I'm going to fix what I can.\"",
   ],
 };
 

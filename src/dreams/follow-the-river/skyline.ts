@@ -125,9 +125,10 @@ export async function addSkyline(
   style: SkylineStyle = 'city',
   startZ = 0,
   endZ = -110,
+  endMargin = MARGIN,
 ): Promise<void> {
   const from = startZ + MARGIN;
-  const span = startZ - endZ + 2 * MARGIN;
+  const span = startZ - endZ + MARGIN + endMargin;
   const count = Math.round(span / SPACING);
   const far = skylineLayout(7, count, 22, 60, from, span).map((s, i) => farBankItem(style, s, i));
   const near = skylineLayout(11, count, -40, -16, from, span).map(treeItem);

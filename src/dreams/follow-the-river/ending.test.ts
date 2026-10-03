@@ -13,7 +13,7 @@ import {
   waveSpot,
   type EndingStep,
 } from './ending';
-import { facing, momSpot } from './ending-scene';
+import { facing } from './ending-scene';
 import { EDGE_X } from './river';
 
 describe('ending steps', () => {
@@ -79,29 +79,29 @@ describe('nightEnd', () => {
     }
   });
 
-  it('Night 3 ignores the safe z and ends at the foot of the dam stair', () => {
+  it('Night 3 ignores the safe z and ends at the lake shore', () => {
     const at = FOREST.endingAt;
     expect(at).toBeDefined();
     if (!at) return;
-    expect(nightEnd(FOREST, at.x, FOREST.safeZ - 1)).toBeNull(); // 8 m short of the stair
+    expect(nightEnd(FOREST, at.x, FOREST.safeZ - 1)).toBeNull(); // 8 m short of the shore
     expect(nightEnd(FOREST, at.x, at.z + at.radius + 0.5)).toBeNull();
     expect(nightEnd(FOREST, at.x, at.z + at.radius - 0.5)).toBe('ending');
     expect(nightEnd(FOREST, at.x, at.z)).toBe('ending');
   });
 });
 
-describe('Mom at the dam', () => {
-  it('stands on the crest at the control-house door, facing the stair', () => {
-    const dam = FOREST.safeProp;
+describe('Mom on the shore', () => {
+  it('stands at ground level on the shore, facing back up the bank toward the player', () => {
+    const mom = FOREST.meetAt;
     const at = FOREST.endingAt;
-    expect(dam && at).toBeTruthy();
-    if (!dam || !at) return;
-    const mom = momSpot(dam);
-    expect(mom.y).toBe(18); // the crest
-    expect(Math.abs(mom.x - (dam.x - 13.5))).toBeLessThan(0.5); // the door's x
-    expect(mom.z).toBeGreaterThan(dam.z - 1.5);
-    expect(mom.z).toBeLessThan(dam.z + 0.5);
+    expect(mom && at).toBeTruthy();
+    if (!mom || !at) return;
     const yaw = facing(mom.x, mom.z, at.x, at.z);
     expect(Math.cos(yaw)).toBeGreaterThan(0.9); // looks toward +z, the player
+  });
+
+  it('is the lantern spot of the area (no other area has one)', () => {
+    expect(CITY.meetAt).toBeUndefined();
+    expect(SUBURBS.meetAt).toBeUndefined();
   });
 });

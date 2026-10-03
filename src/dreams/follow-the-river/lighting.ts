@@ -175,12 +175,12 @@ export function createWorldLights(scene: THREE.Scene): WorldLights {
   return { hemi, key, disc, sky, scene };
 }
 
-/** Darkens hemi + key by `dim` 0..1 (inside shacks). Allocation-free: safe to call every frame. */
 /** Pulls the fog in (an area's tighter night). Rare: called when a phase starts. */
 export function setFogFar(lights: WorldLights, far: number): void {
   if (lights.scene.fog instanceof THREE.Fog) lights.scene.fog.far = far;
 }
 
+/** Darkens hemi + key by `dim` 0..1 (inside shacks). Allocation-free: safe to call every frame. */
 export function applyDim(lights: WorldLights, preset: LightPreset, dim: number): void {
   const factor = 1 - DIM_STRENGTH * dim;
   lights.hemi.intensity = preset.hemi.intensity * factor;

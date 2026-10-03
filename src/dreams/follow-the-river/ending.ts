@@ -1,9 +1,9 @@
 import type * as THREE from 'three/webgpu';
 import type { AreaDef } from './areas/types';
 import { nightTuning } from './difficulty';
-import { buildEndingScene, type EndingScene } from './ending-scene';
+import { buildEndingScene, facing, type EndingScene } from './ending-scene';
 import { atSafeSpot, nearSpot } from './flow';
-import { applyLighting, LIGHTING, mixPreset } from './lighting';
+import { applyLighting, LIGHTING, mixPreset, type LightPreset } from './lighting';
 import { EDGE_X } from './river';
 import type { Run, Systems } from './run';
 
@@ -74,7 +74,7 @@ export function waveSpot(i: number, playerZ: number): { x: number; z: number } {
   return { x: EDGE_X - 1 - lane * WAVE.laneGap, z: playerZ + WAVE.upstream + lane * WAVE.laneStep };
 }
 
-/** How the night ends at `(x, z)`: the safe spot, the dam's foot (Night 3), or not yet. */
+/** How the night ends at `(x, z)`: the safe spot, the lake shore (Night 3), or not yet. */
 export function nightEnd(
   area: Pick<AreaDef, 'safeZ' | 'endingAt'>,
   x: number,
@@ -130,7 +130,7 @@ const until = (st: State, pred: Wait['pred']): Promise<void> =>
     st.wait = { pred, resolve };
   });
 
-/** Fade to black, clear the bank, put Mom at the door, fade back in. */
+/** Fade to black, clear the bank, put Mom on the shore, turn to her, fade back in. */
 async function setUp(h: EndingHost, st: State): Promise<void> {
   const { ctx, horde } = h.sys;
   h.run.ending = 'fight';
@@ -144,6 +144,8 @@ async function setUp(h: EndingHost, st: State): Promise<void> {
   st.scene = scene;
   const cam = ctx.stage.camera.position;
   scene.place(cam.x, cam.z, h.lantern);
+  const mom = h.sys.area.meetAt;
+  if (mom) ctx.player.teleport(cam.x, cam.z, facing(cam.x, cam.z, mom.x, mom.z) + Math.PI);
   await ctx.stage.renderer.compileAsync(h.sys.world.scene, ctx.stage.camera);
   if (st.cancelled) return;
   await ctx.overlay.fade(false);
@@ -187,11 +189,18 @@ async function fight(h: EndingHost, st: State): Promise<void> {
   await until(st, () => fish.finale === 'gone');
 }
 
+/** Night 3's own night: the area's tighter fog, as `setFogFar` left it. Built once per dawn. */
+function nightPreset(area: AreaDef): LightPreset {
+  const { night } = LIGHTING;
+  return { ...night, fog: { ...night.fog, far: area.nightFog ?? night.fog.far } };
+}
+
 /** Night to dawn over `DAWN.seconds`, the pad swelling in with it. */
 async function dawn(h: EndingHost, st: State): Promise<void> {
   const { world, ctx, sounds } = h.sys;
   const pad = ctx.audio.loop(sounds.dawn, 0);
   st.pad = pad;
+  const from = nightPreset(h.sys.area);
   let t = 0;
   let nextPaint = 0;
   await until(st, (dt) => {
@@ -200,7 +209,7 @@ async function dawn(h: EndingHost, st: State): Promise<void> {
     pad.setVolume(DAWN.volume * k);
     if (t >= nextPaint || k >= 1) {
       nextPaint = t + DAWN.step;
-      applyLighting(world.lights, mixPreset(LIGHTING.night, LIGHTING.dawn, k));
+      applyLighting(world.lights, mixPreset(from, LIGHTING.dawn, k));
     }
     return k >= 1;
   });
@@ -270,7 +279,7 @@ export function createEnding(h: EndingHost): Ending {
       stand();
       h.run.ending = 'no';
       st.scene?.remove(h.lantern);
-      st = freshState(st.scene); // Mom stays built; reaching the dam again starts over
+      st = freshState(st.scene); // Mom stays built; reaching the shore again starts over
     },
     dispose() {
       stand();

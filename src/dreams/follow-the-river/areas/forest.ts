@@ -1,14 +1,20 @@
+import { EDGE_X } from '../river';
 import { shackBounds } from '../shack';
 import { seeded } from '../skyline';
 import type { AreaDef, LurkerDef, PickupDef, PropPlacement, ScareDef, ShackDef } from './types';
 
 const START_Z = 14;
-/** Just past the dam's near face (base 10 m thick at z -396): buildWorld's end wall sits behind it. */
+/** Where the shore meets the water; the pebble band (6 m) lies on the land side of it. */
+const LAKE_Z = -392;
+/** One metre before the water: buildWorld's end wall sits here. */
 const END_Z = -391;
 const BARRICADE_Z = -120;
 const LAND_X = -18;
-const SAFE_Z = -380;
-const DAM = { prop: 'dam', x: 10, z: -396, yaw: 0 };
+const SAFE_Z = -372;
+/** The dam across the lake, ~48 m past the shore: lost in Night 3's fog, a grey shape at dawn. */
+const DAM = { prop: 'dam', x: 10, z: -440, yaw: 0 };
+/** Mom on the pebbles, her canoe beside her. */
+const MOM = { x: -3, z: -387.5 };
 const PINE_SEED = 61;
 const SHACK_BACK_X = -16;
 const FACE_DOOR = -Math.PI / 2;
@@ -55,6 +61,30 @@ function dayForest(): PropPlacement[] {
     ...pines(PINE_SEED + 1, 12, -118, 2.4, -60, -26),
     ...pines(PINE_SEED + 2, 10, -118, 14, 20, 40),
   ];
+}
+
+/** Pines along both sides of the lake, receding into the fog, and rocks along the shore. */
+function lakeShore(): PropPlacement[] {
+  const random = seeded(PINE_SEED + 6);
+  const out = [
+    ...pines(PINE_SEED + 7, LAKE_Z - 2, LAKE_Z - 110, 5, -78, -64),
+    ...pines(PINE_SEED + 8, LAKE_Z - 2, LAKE_Z - 110, 7, 94, 110),
+    at('canoe', MOM.x + 2.5, MOM.z - 1.2, 0.35, 0.6),
+  ];
+  for (let x = -34; x < 62; x += 9) {
+    if (x > EDGE_X - 4 && x < EDGE_X + 18) continue; // the river mouth stays open
+    const model = random() < 0.5 ? 'rock_largeA' : 'rock_largeC';
+    out.push(
+      at(
+        model,
+        x + random() * 4,
+        LAKE_Z + 0.5 + random() * 2,
+        random() * TAU,
+        0.3 + random() * 0.3,
+      ),
+    );
+  }
+  return out;
 }
 
 const TALL_ROCKS = ['rock_tallA', 'rock_tallB', 'rock_tallC', 'rock_tallD', 'rock_tallE'];
@@ -140,7 +170,9 @@ function clearOfShacks(p: PropPlacement): boolean {
 }
 
 const PROPS: readonly PropPlacement[] = [
-  ...[...dayForest(), ...nightRoute(), ...campsite(), ...clutter()].filter(clearOfShacks),
+  ...[...dayForest(), ...nightRoute(), ...lakeShore(), ...campsite(), ...clutter()].filter(
+    clearOfShacks,
+  ),
   ...barricade(),
   { kit: 'survival', model: 'campfire-pit', x: 0.3, z: -113 },
   { kit: 'survival', model: 'bedroll', x: -0.9, z: -113.5, yaw: 0.5 },
@@ -178,7 +210,7 @@ const SCARES: readonly ScareDef[] = [
 export const FOREST: AreaDef = {
   id: 'forest',
   chapter: 3,
-  arrival: ['The dam rises out of the dark.', 'Mom said she would be here.'],
+  arrival: ['The river opens into a still, black lake.', 'Mom said she would be waiting.'],
   ground: 0x14170f,
   farBank: 0x0f130d,
   skyline: 'trees',
@@ -191,7 +223,9 @@ export const FOREST: AreaDef = {
   nightStart: { x: 1.5, z: -124, yaw: 0 },
   safeZ: SAFE_Z,
   safeProp: DAM,
-  endingAt: { x: -6, z: -388, radius: 4 },
+  endingAt: { x: -4, z: -381, radius: 4 },
+  meetAt: MOM,
+  lake: { z: LAKE_Z },
   nightFog: 45,
   props: PROPS,
   shacks: SHACKS,

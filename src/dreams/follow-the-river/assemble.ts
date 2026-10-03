@@ -7,6 +7,7 @@ import { createAmbience } from './ambience';
 import type { AreaDef } from './areas/types';
 import { createBow, type Bow } from './bow';
 import { HORDE_CAPACITY } from './difficulty';
+import { MOM_LANTERN } from './ending-scene';
 import { createFish, type Fish } from './fish';
 import { createFlashlight } from './flashlight';
 import { createGun, type Gun } from './gun';
@@ -109,7 +110,8 @@ export async function assemble(
     boathouse.rotation.y = safe.yaw;
   }
   const lantern = new THREE.PointLight(0xffb060, 0, 30, 2);
-  lantern.position.set(safe?.x ?? 0, LANTERN_HEIGHT, safe ? safe.z + 2 : area.safeZ);
+  if (area.meetAt) lantern.position.set(area.meetAt.x + 0.5, MOM_LANTERN.height, area.meetAt.z);
+  else lantern.position.set(safe?.x ?? 0, LANTERN_HEIGHT, safe ? safe.z + 2 : area.safeZ);
   scene.add(boathouse, lantern);
   const flashlight = createFlashlight(camera);
   const scares = await createScares(

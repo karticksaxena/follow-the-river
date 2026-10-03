@@ -5,7 +5,7 @@ import { loadModel } from '../../engine/models';
 import type { AreaDef, PropPlacement } from './areas/types';
 import { KIT_SCALE, kitUrl } from './kits';
 import { createWorldLights, type WorldLights } from './lighting';
-import { addRiver, EDGE_X, OVERRUN, plane, RIVER_WIDTH } from './river';
+import { addLake, addRiver, EDGE_X, OVERRUN, plane, RIVER_WIDTH } from './river';
 import { addShack, shackBounds, shackColliders } from './shack';
 import { addSkyline } from './skyline';
 
@@ -56,10 +56,27 @@ function stripBlockers(area: AreaDef): Box[] {
   ];
 }
 
+/** Pure: the z range (near, far) of the land west of the river; it stops at a lake's shore. */
+export function groundSpan(area: AreaDef): { z0: number; z1: number } {
+  return { z0: area.startZ + OVERRUN, z1: area.lake ? area.lake.z : area.endZ - OVERRUN };
+}
+
 function addGround(scene: THREE.Scene, area: AreaDef): void {
-  const ground = plane(120, area.startZ - area.endZ + 2 * OVERRUN, area.ground);
-  ground.position.set(EDGE_X - 60, 0, (area.startZ + area.endZ) / 2);
+  const { z0, z1 } = groundSpan(area);
+  const ground = plane(120, z0 - z1, area.ground);
+  ground.position.set(EDGE_X - 60, 0, (z0 + z1) / 2);
   scene.add(ground);
+}
+
+/** The river (stopping at a lake's shore, where the lake begins) and its skyline. */
+function addWaters(scene: THREE.Scene, area: AreaDef): Promise<void> {
+  const { lake } = area;
+  if (!lake) {
+    return addSkyline(scene, area.skyline, area.startZ, area.endZ);
+  }
+  addRiver(scene, area.startZ, lake.z, area.farBank, 0);
+  addLake(scene, lake.z, area.ground, area.farBank);
+  return addSkyline(scene, area.skyline, area.startZ, lake.z, 0);
 }
 
 /** Builds an area: lights, ground, river, skyline, props, shacks and every blocker. */
@@ -67,11 +84,10 @@ export async function buildWorld(area: AreaDef): Promise<World> {
   const scene = new THREE.Scene();
   const lights = createWorldLights(scene);
   addGround(scene, area);
-  addRiver(scene, area.startZ, area.endZ, area.farBank);
   const colliders = stripBlockers(area);
   const [props] = await Promise.all([
     Promise.all(area.props.map(loadProp)),
-    addSkyline(scene, area.skyline, area.startZ, area.endZ),
+    addWaters(scene, area),
     ...area.shacks.map((shack) => addShack(scene, shack)),
   ]);
   for (const { collider } of props) if (collider) colliders.push(collider);

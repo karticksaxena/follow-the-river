@@ -85,8 +85,8 @@ export function beginPhase(f: Flow): void {
 
 /** Days 2 and 3 name their place on the title card (Day 1 stays plain). */
 const DAY_CARD: Readonly<Record<string, string>> = {
-  day2: 'Day 2\nThe suburbs',
-  day3: 'Day 3\nThe forest',
+  day2: 'Day 2 — The suburbs',
+  day3: 'Day 3 — The forest',
 };
 
 /** First-time hints for a phase: the generic one, then the night's own (Night 2, Night 3). */
