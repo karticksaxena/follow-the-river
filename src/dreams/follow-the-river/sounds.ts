@@ -157,7 +157,9 @@ export function mixHorde(
     }
   }
   const smoothing = onePole(900, rate);
+  // Warm the filter up on the whole loop first, so its state at the start matches the end: no click.
   let low = 0;
+  for (let i = 0; i < mix.length; i++) low += smoothing * ((mix[i] ?? 0) - low);
   let top = 0;
   for (let i = 0; i < mix.length; i++) {
     low += smoothing * ((mix[i] ?? 0) - low);

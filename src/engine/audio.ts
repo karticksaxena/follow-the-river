@@ -9,7 +9,11 @@ export interface AudioBus {
   setVolume(volume: number): void;
   /** Fetches and decodes once per URL; a failed fetch is retried next call. */
   load(url: string): Promise<AudioBuffer>;
-  loop(buffer: AudioBuffer, volume: number, channel?: Channel): THREE.Audio;
+  /**
+   * Loops `buffer`. Decoded AAC files carry encoder padding, so their ends are trimmed (`loopBounds`);
+   * pass `trim: false` for seamless buffers built in code (the horde layer).
+   */
+  loop(buffer: AudioBuffer, volume: number, channel?: Channel, trim?: boolean): THREE.Audio;
   /** Plays `buffer` once (a scare sting, a thud). Callers may stop the returned sound. */
   once(buffer: AudioBuffer, volume: number, channel?: Channel): THREE.Audio;
   /** A world-channel sound attached to `parent` (groans, splashes). Caller plays/stops it. */
@@ -83,12 +87,14 @@ export function createAudioBus(camera: THREE.Camera): AudioBus {
       if (!response.ok) throw new Error(`${response.status} ${url}`);
       return listener.context.decodeAudioData(await response.arrayBuffer());
     }),
-    loop(buffer, volume, channel = 'world') {
+    loop(buffer, volume, channel = 'world', trim = true) {
       const sound = make(buffer, volume, channel);
-      const { start, end } = loopBounds(buffer.duration);
       sound.setLoop(true);
-      sound.setLoopStart(start);
-      sound.setLoopEnd(end);
+      if (trim) {
+        const { start, end } = loopBounds(buffer.duration);
+        sound.setLoopStart(start);
+        sound.setLoopEnd(end);
+      }
       sound.play();
       return sound;
     },

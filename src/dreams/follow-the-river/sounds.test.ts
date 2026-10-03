@@ -56,6 +56,12 @@ describe('mixHorde', () => {
     expect(peak(mix)).toBeGreaterThan(0.5);
   });
 
+  it('loops without a click: the last sample flows into the first', () => {
+    const groan = new Float32Array(RATE).map((_, i) => Math.sin(i / 10));
+    const mix = mixHorde(RATE, [groan], 4, 12, seeded());
+    expect(Math.abs((mix[0] ?? 0) - (mix[mix.length - 1] ?? 0))).toBeLessThan(0.05);
+  });
+
   it('returns silence when there are no groans', () => {
     expect(peak(mixHorde(RATE, [], 1, 5, seeded()))).toBe(0);
   });
