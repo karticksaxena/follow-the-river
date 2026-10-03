@@ -23,6 +23,7 @@ coverage/
 
 # Claude Code: personal settings stay local (skills, .mcp.json and settings.json are shared)
 .claude/settings.local.json
+.claude/worktrees/
 
 # Editor / OS
 .DS_Store

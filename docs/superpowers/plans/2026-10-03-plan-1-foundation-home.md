@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-03-kartiks-dreams-design.md`
 
-**Evidence:** Every code block below was lint-, type- and test-checked (62 tests) in a scratch prototype on 2026-10-03, then run in Chrome on WebGPU and `?webgl`. Copy the code exactly. If a newer package version breaks it, fix the code; don't drop the check.
+**Evidence:** Every code block below was lint-, type- and test-checked (63 tests) in a scratch prototype on 2026-10-03, then run in Chrome on WebGPU and `?webgl`. Copy the code exactly. If a newer package version breaks it, fix the code; don't drop the check.
 
 ## Global Constraints
 
@@ -73,14 +73,15 @@ Also covered: a dream whose code fails to download returns to the cards with a m
 | `src/dreams/types.ts` | `DreamInfo`, `DreamContext`, `DreamModule` |
 | `src/dreams/registry.ts` | List of dreams |
 | `src/dreams/load.ts` | Safe dream loading |
-| `src/dreams/follow-the-river/*` | Grey-box riverbank, skyline, flashlight |
+| `src/dreams/follow-the-river/*` | Riverbank (grey-box ground, Blender-built skyline), flashlight |
+| `tools/blender/river_props.py` | Headless Blender script that builds the river scenery GLBs |
 | `src/home/*` | Bedroom, Zzz, dream cloud, home flow |
 | `src/app.ts` | Runs a dream: player, pause menu, reader |
 | `src/main.ts` | Boot |
 
 ---
 
-### Task 0: First commit on `main` [controller — ask Kartik first]
+### Task 0: First commit on `main` [controller — ask Kartik first] ✅ done (`0689702`)
 
 The repo has no commits, and worktrees need one. **Ask Kartik before committing.**
 
@@ -116,6 +117,7 @@ coverage/
 
 # Claude Code: personal settings stay local (skills, .mcp.json and settings.json are shared)
 .claude/settings.local.json
+.claude/worktrees/
 
 # Editor / OS
 .DS_Store
@@ -2321,10 +2323,11 @@ git commit -m "feat(dreams): registry, dream contract and failure-safe loading" 
 
 ---
 
-### Task 9: Grey-box riverbank with sky, skyline and flashlight
+### Task 9: Riverbank with Blender-built skyline, sky and flashlight
 
 **Files:**
-- Create: `src/engine/sky.ts`, `src/dreams/follow-the-river/riverbank.ts`, `src/dreams/follow-the-river/skyline.ts`, `src/dreams/follow-the-river/flashlight.ts`
+- Create: `tools/blender/river_props.py`, `public/assets/river/*.glb` (5 files, generated), `src/engine/sky.ts`, `src/dreams/follow-the-river/riverbank.ts`, `src/dreams/follow-the-river/skyline.ts`, `src/dreams/follow-the-river/flashlight.ts`
+- Modify: `public/assets/LICENSES.md` (add a row)
 - Modify: `src/dreams/follow-the-river/index.ts` (replace the temporary file)
 - Test: `src/dreams/follow-the-river/riverbank.test.ts`, `src/dreams/follow-the-river/skyline.test.ts`
 
@@ -2332,13 +2335,178 @@ git commit -m "feat(dreams): registry, dream contract and failure-safe loading" 
 - Consumes: `boxAt`, `resolveCircle`, `PLAYER_RADIUS`, `DreamContext`.
 - Produces:
   - `createSkyDome(top, horizon, radius?)`
-  - `SKY`, `RIVER_X`, `RIVER_WIDTH`, `BANK_LENGTH`, `CRATES`, `SPAWN`, `riverbankColliders(): Box[]`, `buildRiverbank(): THREE.Scene`
-  - `Silhouette`, `skylineLayout(seed, count, minX, maxX)`, `addSkyline(scene)`
+  - `SKY`, `RIVER_X`, `RIVER_WIDTH`, `BANK_LENGTH`, `CRATES`, `SPAWN`, `riverbankColliders(): Box[]`, `buildRiverbank(): Promise<THREE.Scene>`
+  - `Silhouette`, `BuildingModel`, `skylineLayout(seed, count, minX, maxX)`, `buildingFor(height): BuildingModel`, `addSkyline(scene): Promise<void>`
   - `FLASHLIGHT`, `createFlashlight(camera): THREE.SpotLight`
 
-This is a stand-in for Plan 2's real city. It still has to look like a place: dark overcast sky dome, ground and water running ~360 m into fog, city blocks across the river, a tree line behind, crates on the bank and a flashlight cone on the ground.
+This is a stand-in for Plan 2's real city. It still has to look like a place: a dark overcast sky dome, and ground and water running ~360 m into fog. Across the river are **Blender-built** concrete blocks, mostly dark windows with a few lit. Behind the bank is a **Blender-built** forest of pines and dead trees. There are grey-box crates on the bank and a flashlight cone on the ground.
 
-- [ ] **Step 1: Write the failing tests**
+The scenery is made by a committed headless Blender script, so anyone can rebuild it. The Blender Lab MCP (`.mcp.json`) is optional and only for previews; the script is the source of truth.
+
+- [ ] **Step 1: 🔎 Check Blender and its glTF exporter**
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --version | head -1
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python-expr "import bpy; print('GLTF_OK', hasattr(bpy.ops.export_scene, 'gltf'))" | grep GLTF_OK
+```
+Expected: a Blender LTS version line and `GLTF_OK True`. If Blender is missing, stop and ask Kartik.
+
+- [ ] **Step 2: Write the Blender script**
+
+`tools/blender/river_props.py`:
+```python
+"""Builds the low-poly river scenery and exports one GLB per prop.
+
+Run headless from the repo root:
+  /Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
+    --python tools/blender/river_props.py -- public/assets/river
+"""
+
+import math
+import random
+import sys
+from pathlib import Path
+
+import bpy
+
+OUT = Path(sys.argv[sys.argv.index("--") + 1] if "--" in sys.argv else "public/assets/river")
+random.seed(7)
+
+
+def reset() -> None:
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+
+
+def material(name: str, color: tuple, emission: float = 0.0) -> bpy.types.Material:
+    mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    mat.use_nodes = True
+    bsdf = mat.node_tree.nodes["Principled BSDF"]
+    bsdf.inputs["Base Color"].default_value = (*color, 1.0)
+    bsdf.inputs["Roughness"].default_value = 1.0
+    if emission > 0:
+        bsdf.inputs["Emission Color"].default_value = (*color, 1.0)
+        bsdf.inputs["Emission Strength"].default_value = emission
+    return mat
+
+
+def box(name: str, size: tuple, location: tuple, mat: bpy.types.Material) -> bpy.types.Object:
+    bpy.ops.mesh.primitive_cube_add(size=1, location=location)
+    obj = bpy.context.active_object
+    obj.name = name
+    obj.scale = size
+    bpy.ops.object.transform_apply(scale=True)
+    obj.data.materials.append(mat)
+    return obj
+
+
+def join(objects: list, name: str) -> bpy.types.Object:
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in objects:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = objects[0]
+    bpy.ops.object.join()
+    joined = bpy.context.active_object
+    joined.name = name
+    return joined
+
+
+def export(name: str) -> None:
+    OUT.mkdir(parents=True, exist_ok=True)
+    bpy.ops.export_scene.gltf(filepath=str(OUT / f"{name}.glb"), export_format="GLB")
+
+
+def building(name: str, width: float, depth: float, height: float, lit_ratio: float) -> None:
+    """Concrete block, rooftop box, rows of dark windows with a few still lit."""
+    reset()
+    wall = material("concrete", (0.09, 0.1, 0.11))
+    dark = material("windowDark", (0.02, 0.025, 0.03))
+    lit = material("windowLit", (1.0, 0.72, 0.35), emission=2.5)
+    parts = [box("body", (width, depth, height), (0, 0, height / 2), wall)]
+    parts.append(box("roof", (width * 0.4, depth * 0.4, 1.2), (width * 0.15, 0, height + 0.6), wall))
+    floors = int(height // 3)
+    columns = max(1, int(width // 2))
+    for f in range(floors):
+        for c in range(columns):
+            x = -width / 2 + (c + 0.5) * width / columns
+            z = 1.6 + f * 3
+            glass = lit if random.random() < lit_ratio else dark
+            parts.append(box("win", (0.9, 0.05, 1.2), (x, -depth / 2 - 0.02, z), glass))
+    join(parts, name)
+    export(name)
+
+
+def pine(name: str, height: float) -> None:
+    """Three stacked low-poly cones on a trunk."""
+    reset()
+    bark = material("bark", (0.06, 0.04, 0.03))
+    needles = material("needles", (0.04, 0.07, 0.04))
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=6, radius=0.18, depth=height * 0.3, location=(0, 0, height * 0.15)
+    )
+    trunk = bpy.context.active_object
+    trunk.data.materials.append(bark)
+    parts = [trunk]
+    for i in range(3):
+        radius = height * (0.28 - i * 0.06)
+        z = height * (0.3 + i * 0.22)
+        bpy.ops.mesh.primitive_cone_add(
+            vertices=7, radius1=radius, depth=height * 0.4, location=(0, 0, z + height * 0.2)
+        )
+        cone = bpy.context.active_object
+        cone.rotation_euler[2] = random.random() * math.pi
+        cone.data.materials.append(needles)
+        parts.append(cone)
+    join(parts, name)
+    export(name)
+
+
+def dead_tree(name: str, height: float) -> None:
+    """A leafless trunk with crooked branches."""
+    reset()
+    bark = material("bark", (0.05, 0.04, 0.035))
+    bpy.ops.mesh.primitive_cylinder_add(vertices=5, radius=0.15, depth=height, location=(0, 0, height / 2))
+    parts = [bpy.context.active_object]
+    for i in range(4):
+        angle = i * math.pi / 2 + random.random() * 0.6
+        length = height * 0.35
+        z = height * (0.5 + i * 0.1)
+        bpy.ops.mesh.primitive_cylinder_add(
+            vertices=4,
+            radius=0.06,
+            depth=length,
+            location=(math.cos(angle) * length / 3, math.sin(angle) * length / 3, z),
+        )
+        branch = bpy.context.active_object
+        branch.rotation_euler = (math.sin(angle) * 0.9, -math.cos(angle) * 0.9, 0)
+        parts.append(branch)
+    for part in parts:
+        part.data.materials.append(bark)
+    join(parts, name)
+    export(name)
+
+
+building("buildingTall", 6, 6, 27, 0.08)
+building("buildingMid", 8, 6, 15, 0.12)
+building("buildingLow", 10, 7, 9, 0.18)
+pine("pine", 9)
+dead_tree("deadTree", 7)
+print("EXPORTED", sorted(p.name for p in OUT.glob("*.glb")))
+```
+
+- [ ] **Step 3: Build the props**
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python tools/blender/river_props.py -- public/assets/river | grep EXPORTED
+```
+Expected: `EXPORTED ['buildingLow.glb', 'buildingMid.glb', 'buildingTall.glb', 'deadTree.glb', 'pine.glb']`.
+
+Append this row to the table in `public/assets/LICENSES.md`:
+
+```markdown
+| `river/*.glb` (buildingTall, buildingMid, buildingLow, pine, deadTree) | Made for this project by `tools/blender/river_props.py` | CC0 1.0 (original work) |
+```
+
+- [ ] **Step 4: Write the failing tests**
 
 `src/dreams/follow-the-river/riverbank.test.ts`:
 ```ts
@@ -2365,7 +2533,7 @@ describe('riverbank', () => {
 `src/dreams/follow-the-river/skyline.test.ts`:
 ```ts
 import { describe, expect, it } from 'vitest';
-import { skylineLayout } from './skyline';
+import { buildingFor, skylineLayout } from './skyline';
 
 describe('skylineLayout', () => {
   it('is the same every time for the same seed', () => {
@@ -2379,14 +2547,22 @@ describe('skylineLayout', () => {
     }
   });
 });
+
+describe('buildingFor', () => {
+  it('picks taller Blender buildings for taller silhouettes', () => {
+    expect(buildingFor(25)).toBe('buildingTall');
+    expect(buildingFor(15)).toBe('buildingMid');
+    expect(buildingFor(8)).toBe('buildingLow');
+  });
+});
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [ ] **Step 5: Run them and watch them fail**
 
 Run: `pnpm vitest run src/dreams/follow-the-river`
 Expected: FAIL (modules not found).
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 6: Implement**
 
 `src/engine/sky.ts`:
 ```ts
@@ -2421,9 +2597,10 @@ export function createSkyDome(top: number, horizon: number, radius = 180): THREE
 }
 ```
 
-`src/dreams/follow-the-river/skyline.ts`:
+`src/dreams/follow-the-river/skyline.ts`. It loads the Blender GLBs through `loadModel`. Windows face the river: Blender's -Y face exports as glTF +Z, which rotates to -X.
 ```ts
 import * as THREE from 'three/webgpu';
+import { loadModel } from '../../engine/models';
 
 export interface Silhouette {
   x: number;
@@ -2431,6 +2608,8 @@ export interface Silhouette {
   width: number;
   height: number;
 }
+
+export type BuildingModel = 'buildingTall' | 'buildingMid' | 'buildingLow';
 
 /** Repeatable pseudo-random numbers so the skyline is the same every visit. */
 function seeded(seed: number): () => number {
@@ -2464,21 +2643,44 @@ export function skylineLayout(
   return out;
 }
 
-export function addSkyline(scene: THREE.Scene): void {
+/** Which Blender building (tools/blender/river_props.py) fits a silhouette's height. */
+export function buildingFor(height: number): BuildingModel {
+  if (height > 20) return 'buildingTall';
+  if (height > 12) return 'buildingMid';
+  return 'buildingLow';
+}
+
+const url = (name: string): string => `/assets/river/${name}.glb`;
+
+/** Native heights of the Blender props, in metres. Keep in sync with river_props.py. */
+const PINE_HEIGHT = 9;
+const DEAD_TREE_HEIGHT = 7;
+
+/**
+ * Places the Blender buildings (windows facing the river) and trees.
+ * ponytail: one clone per prop (~130 meshes); switch to InstancedMesh if draw calls hurt.
+ */
+export async function addSkyline(scene: THREE.Scene): Promise<void> {
   const buildings = skylineLayout(7, 60, 22, 60);
   const trees = skylineLayout(11, 70, -40, -16);
-  const block = new THREE.MeshLambertMaterial({ color: 0x15181d });
-  const leaves = new THREE.MeshLambertMaterial({ color: 0x10140f });
-  for (const b of buildings) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(b.width, b.height, b.width), block);
-    mesh.position.set(b.x, b.height / 2, b.z);
-    scene.add(mesh);
-  }
-  for (const t of trees) {
-    const mesh = new THREE.Mesh(new THREE.ConeGeometry(t.width / 2, t.height * 0.6, 6), leaves);
-    mesh.position.set(t.x, (t.height * 0.6) / 2, t.z);
-    scene.add(mesh);
-  }
+  const placed = await Promise.all([
+    ...buildings.map((b) => loadModel(url(buildingFor(b.height)))),
+    ...trees.map((_, i) => loadModel(url(i % 3 === 2 ? 'deadTree' : 'pine'))),
+  ]);
+  buildings.forEach((b, i) => {
+    const model = placed[i];
+    model.position.set(b.x, 0, b.z);
+    model.rotation.y = -Math.PI / 2;
+    scene.add(model);
+  });
+  trees.forEach((t, i) => {
+    const model = placed[buildings.length + i];
+    const native = i % 3 === 2 ? DEAD_TREE_HEIGHT : PINE_HEIGHT;
+    model.position.set(t.x, 0, t.z);
+    model.rotation.y = t.width;
+    model.scale.setScalar((t.height * 0.6) / native);
+    scene.add(model);
+  });
 }
 ```
 
@@ -2528,7 +2730,7 @@ function plane(width: number, depth: number, color: number): THREE.Mesh {
   return mesh;
 }
 
-export function buildRiverbank(): THREE.Scene {
+export async function buildRiverbank(): Promise<THREE.Scene> {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(SKY);
   scene.fog = new THREE.Fog(SKY, 6, 70);
@@ -2542,7 +2744,7 @@ export function buildRiverbank(): THREE.Scene {
   const water = plane(RIVER_WIDTH, 360, 0x0b161b);
   water.position.set(RIVER_X, -0.15, middle);
   scene.add(ground, farBank, water);
-  addSkyline(scene);
+  await addSkyline(scene);
   const crateMaterial = new THREE.MeshLambertMaterial({ color: 0x4a3b2a });
   for (const [x, z, size] of CRATES) {
     const crate = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), crateMaterial);
@@ -2590,8 +2792,8 @@ export function createDream(): DreamModule {
   let stop: (() => void) | null = null;
   let camera: THREE.Camera | null = null;
   return {
-    start(ctx: DreamContext) {
-      const scene = buildRiverbank();
+    async start(ctx: DreamContext) {
+      const scene = await buildRiverbank();
       camera = ctx.stage.camera;
       scene.add(camera);
       ctx.stage.scene = scene;
@@ -2608,7 +2810,6 @@ export function createDream(): DreamModule {
           ctx.read(['It is getting dark. Press F to turn your flashlight on or off.']);
         }
       });
-      return Promise.resolve();
     },
     dispose() {
       stop?.();
@@ -2619,16 +2820,16 @@ export function createDream(): DreamModule {
 }
 ```
 
-- [ ] **Step 4: Run the full check**
+- [ ] **Step 7: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 52 passed`.
+Expected: all green, `Tests 53 passed`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add -A
-git commit -m "feat(follow-the-river): grey-box riverbank with sky dome, skyline, flashlight" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat(follow-the-river): riverbank with Blender-built skyline, sky dome and flashlight" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
@@ -3041,7 +3242,7 @@ export function nextHomeState(state: HomeState, event: HomeEvent): HomeState {
 - [ ] **Step 4: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 62 passed`.
+Expected: all green, `Tests 63 passed`.
 
 - [ ] **Step 5: Commit**
 
@@ -3365,7 +3566,7 @@ void boot();
 - [ ] **Step 2: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 62 passed`. The build shows a separate `follow-the-river-*.js` chunk.
+Expected: all green, `Tests 63 passed`. The build shows a separate `follow-the-river-*.js` chunk.
 
 - [ ] **Step 3: Confirm dev-only hooks are stripped from production**
 
@@ -3381,7 +3582,7 @@ With `pnpm run dev` running, open `http://localhost:5173/?nolock` and check:
 4. Intro pages: "1 / 4". Press Enter → "2 / 4". Press ← → "1 / 4" with Back disabled. Click Skip.
 5. Walk: dispatch `keydown`/`keyup` for `KeyW` 1.5 s apart, then read `kd.stage.camera.position.z`. Expected ≈ -3.3 (2.2 m/s).
 6. Hold W+Shift until z < -8. The page "It is getting dark. Press F…" opens and the game pauses.
-7. Turn the camera (`kd.stage.camera.rotation.set(0, -0.6, 0, 'YXZ')`). The screenshot shows the city skyline across the river fading into fog, the flashlight cone on the ground, and no visible world edge.
+7. Turn the camera toward the river (`kd.stage.camera.rotation.set(0.05, -1.2, 0, 'YXZ')`). The screenshot shows Blender concrete blocks with a few lit windows across the river, fading into fog. Turn the other way (`… 1.2 …`) and you see pines and dead trees. The flashlight cone is on the ground and there is no visible world edge.
 
 - [ ] **Step 5: [controller] Quit, re-enter and settings round trip**
 
@@ -3425,7 +3626,7 @@ rm -rf node_modules dist
 pnpm install --frozen-lockfile
 pnpm run check
 ```
-Expected: all green, 62 tests.
+Expected: all green, 63 tests.
 
 - [ ] **Step 3: Production preview smoke test [controller]**
 
