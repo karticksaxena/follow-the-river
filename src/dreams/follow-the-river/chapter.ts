@@ -53,6 +53,7 @@ function newRun(save: RunSave): Run {
 function teardown(sys: Systems, stop: () => void): void {
   const { camera } = sys.ctx.stage;
   stop();
+  if (import.meta.env.DEV) Reflect.deleteProperty(window, 'kdRiver');
   sys.ambience.dispose();
   sys.horde.dispose();
   sys.scares.dispose();
@@ -84,7 +85,7 @@ export async function startChapter(
   if (!built) return NOOP_CHAPTER;
   const { sys, lantern } = built;
   const run = newRun(initial);
-  const death = createDeath(ctx, run);
+  const death = createDeath(ctx, run, sys.flashlight);
   const f: Flow = {
     sys,
     lantern,
@@ -102,6 +103,7 @@ export async function startChapter(
     die: () => death.start(),
     arrive: () => arrive(f),
   };
+  if (import.meta.env.DEV) Object.assign(window, { kdRiver: sys });
   const play = createPlay(sys, run, events);
   f.onReset = () => play.reset();
   beginPhase(f);

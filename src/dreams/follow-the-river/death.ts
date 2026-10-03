@@ -1,5 +1,6 @@
 import { EYE_HEIGHT } from '../../engine/player';
 import type { DreamContext } from '../types';
+import type { Flashlight } from './flashlight';
 import type { Run } from './run';
 import { isNight, type Phase } from './state';
 
@@ -13,7 +14,7 @@ export interface Death {
 }
 
 /** The camera pitches down, rolls and sinks while the screen goes red (the HUD vignette is already full). */
-export function createDeath(ctx: DreamContext, run: Run): Death {
+export function createDeath(ctx: DreamContext, run: Run, flashlight: Flashlight): Death {
   const camera = ctx.stage.camera;
   let x = 0;
   let z = 0;
@@ -22,6 +23,9 @@ export function createDeath(ctx: DreamContext, run: Run): Death {
       if (run.dying !== 'no') return;
       run.dying = 'anim';
       run.dyingTime = 0;
+      // The fall stares at the ground: no bright spot (beginPhase sets it per phase on restart).
+      flashlight.on = false;
+      flashlight.light.intensity = 0;
       x = camera.position.x;
       z = camera.position.z;
     },
