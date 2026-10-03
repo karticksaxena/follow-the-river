@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-03-kartiks-dreams-design.md`
 
-**Evidence:** Every code block below was lint-, type- and test-checked (70 tests) in a scratch prototype on 2026-10-03, then run in Chrome on WebGPU and `?webgl`. Copy the code exactly. If a newer package version breaks it, fix the code; don't drop the check.
+**Evidence:** Every code block below was lint-, type- and test-checked (83 tests) in a scratch prototype on 2026-10-03, then run in Chrome on WebGPU and `?webgl`. Copy the code exactly. If a newer package version breaks it, fix the code; don't drop the check.
 
 ## Global Constraints
 
@@ -71,11 +71,13 @@ Also covered: a dream whose code fails to download returns to the cards with a m
 | `src/engine/models.ts` | GLB loading, cache, unlit→lit material swap |
 | `src/engine/sky.ts` | Gradient sky dome |
 | `src/engine/post.ts` | Bloom, vignette and film grain on top of the render |
+| `src/engine/scare.ts` | Scare kit: sting sound, camera jolt, light flicker |
+| `src/home/breath.ts` | Quiet sleep-breathing loop for the home screen |
 | `src/dreams/types.ts` | `DreamInfo`, `DreamContext`, `DreamModule` |
 | `src/dreams/registry.ts` | List of dreams |
 | `src/dreams/load.ts` | Safe dream loading |
 | `src/dreams/follow-the-river/*` | Riverbank (grey-box ground, Blender-built skyline), flashlight |
-| `tools/blender/river_props.py` | Headless Blender script that builds the river scenery GLBs |
+| `tools/blender/river_props.py` | Headless Blender script that builds the river scenery and the watcher figure GLBs |
 | `src/home/*` | Bedroom, Zzz, dream cloud, home flow |
 | `src/app.ts` | Runs a dream: player, pause menu, reader |
 | `src/main.ts` | Boot |
@@ -2644,6 +2646,12 @@ describe('skylineLayout', () => {
     expect(skylineLayout(7, 10, 22, 60)).toEqual(skylineLayout(7, 10, 22, 60));
   });
 
+  it('runs past the fog in both directions, so no row end is ever visible', () => {
+    const zs = skylineLayout(7, 60, 22, 60).map((s) => s.z);
+    expect(Math.max(...zs)).toBeGreaterThan(70);
+    expect(Math.min(...zs)).toBeLessThan(-180);
+  });
+
   it('keeps every silhouette outside the walkable strip', () => {
     for (const s of skylineLayout(7, 60, 22, 60)) {
       expect(s.x).toBeGreaterThanOrEqual(22);
@@ -2725,6 +2733,13 @@ function seeded(seed: number): () => number {
 }
 
 /**
+ * Silhouettes run from well behind the spawn (z = 0) to well past the bank's far end
+ * (z ≈ -110), further than the fog reaches (70 m), so no end of the row is ever visible.
+ */
+export const SKYLINE_FROM_Z = 90;
+export const SKYLINE_SPAN = 290;
+
+/**
  * Distant city blocks across the river and a tree line behind the bank, all well outside
  * the walkable strip. They read as shapes in the fog, so the world never ends at a cliff.
  */
@@ -2739,7 +2754,7 @@ export function skylineLayout(
   for (let i = 0; i < count; i++) {
     out.push({
       x: minX + random() * (maxX - minX),
-      z: 20 - i * (170 / count) - random() * 4,
+      z: SKYLINE_FROM_Z - i * (SKYLINE_SPAN / count) - random() * 4,
       width: 3 + random() * 6,
       height: 6 + random() * 22,
     });
@@ -2813,6 +2828,15 @@ export const CRATES: ReadonlyArray<readonly [number, number, number]> = [
 
 export const SPAWN = { x: 0, z: 0, yaw: 0 } as const;
 
+/** Name of the sky dome, so the dream can keep it centred on the player. */
+export const SKY_NAME = 'sky';
+
+/**
+ * The dome follows the player (see index.ts), so its far side is always 80 m away,
+ * well inside the camera's 200 m far plane.
+ */
+const SKY_DOME_RADIUS = 80;
+
 /** Crates, the river (no swimming yet) and the edges of the walkable strip. */
 export function riverbankColliders(): Box[] {
   const crates = CRATES.map(([x, z, size]) => boxAt(x, z, size, size));
@@ -2839,7 +2863,9 @@ export async function buildRiverbank(): Promise<THREE.Scene> {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(SKY);
   scene.fog = new THREE.Fog(SKY, 6, 70);
-  scene.add(createSkyDome(0x07090c, SKY), new THREE.HemisphereLight(0x5a6470, 0x15180f, 0.6));
+  const sky = createSkyDome(0x07090c, SKY, SKY_DOME_RADIUS);
+  sky.name = SKY_NAME;
+  scene.add(sky, new THREE.HemisphereLight(0x5a6470, 0x15180f, 0.6));
   const middle = -BANK_LENGTH / 2 + 10;
   // Ground and water run far past the walkable strip so fog, not an edge, ends the view.
   const ground = plane(120, 360, 0x2b2f24);
@@ -2894,7 +2920,7 @@ export function createFlashlight(camera: THREE.Camera): THREE.SpotLight {
 import type * as THREE from 'three/webgpu';
 import type { DreamContext, DreamModule } from '../types';
 import { createFlashlight } from './flashlight';
-import { buildRiverbank, riverbankColliders, SPAWN } from './riverbank';
+import { buildRiverbank, riverbankColliders, SKY_NAME, SPAWN } from './riverbank';
 
 /** Plan 1 grey box: proves walking, collisions, darkness and the flashlight. Plan 2 replaces it. */
 export function createDream(): DreamModule {
@@ -2907,13 +2933,20 @@ export function createDream(): DreamModule {
       camera = ctx.stage.camera;
       scene.add(camera);
       ctx.stage.scene = scene;
+      const sky = scene.getObjectByName(SKY_NAME);
       ctx.player.colliders = riverbankColliders();
       ctx.player.teleport(SPAWN.x, SPAWN.z, SPAWN.yaw);
       const light = createFlashlight(camera);
       flashlight = light;
       let toldAboutLight = false;
       stop = ctx.stage.addUpdater(() => {
-        if (ctx.isPaused()) return;
+        // Keep the sky centred on the player so it never ends, wherever they walk.
+        sky?.position.set(ctx.stage.camera.position.x, 0, ctx.stage.camera.position.z);
+        // Drop key taps made while reading or paused, so they don't fire on resume.
+        if (ctx.isPaused()) {
+          ctx.keys.consumePress('KeyF');
+          return;
+        }
         if (ctx.keys.consumePress('KeyF')) light.visible = !light.visible;
         if (!toldAboutLight && camera && camera.position.z < -8) {
           toldAboutLight = true;
@@ -2933,7 +2966,7 @@ export function createDream(): DreamModule {
 - [ ] **Step 7: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 60 passed`.
+Expected: all green, `Tests 61 passed`.
 
 - [ ] **Step 8: Commit**
 
@@ -3358,7 +3391,7 @@ export function nextHomeState(state: HomeState, event: HomeEvent): HomeState {
 - [ ] **Step 4: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 70 passed`.
+Expected: all green, `Tests 71 passed`.
 
 - [ ] **Step 5: Commit**
 
@@ -3450,13 +3483,16 @@ export async function runDream(
   const stopMove = app.stage.addUpdater((dt) => {
     if (screen === 'game') player.update(dt);
   });
-  const leave = (): void => {
+  const cleanUp = (): void => {
     removeEventListener('keydown', onEscape);
     stopMove();
     dream.dispose();
     player.dispose();
     app.overlay.closePanel();
     app.stage.scene = new THREE.Scene();
+  };
+  const leave = (): void => {
+    cleanUp();
     onQuit();
   };
   const showMenu = (): void =>
@@ -3480,15 +3516,21 @@ export async function runDream(
       lock();
     });
   };
-  await dream.start({
-    stage: app.stage,
-    overlay: app.overlay,
-    audio: app.audio,
-    keys: app.keys,
-    player,
-    read,
-    isPaused: () => screen !== 'game',
-  });
+  try {
+    await dream.start({
+      stage: app.stage,
+      overlay: app.overlay,
+      audio: app.audio,
+      keys: app.keys,
+      player,
+      read,
+      isPaused: () => screen !== 'game',
+    });
+  } catch {
+    // A model or sound failed to download: back to the dream cards with a message.
+    cleanUp();
+    return `Couldn't start "${info.title}". Check your internet connection and try again.`;
+  }
   await app.overlay.fade(false);
   read(info.intro);
   return null;
@@ -3576,7 +3618,7 @@ export async function startHome(app: App, play: Play): Promise<HomeHandle> {
     if (!send('start')) return;
     overlay.closePanel();
     enterFullscreen();
-    void audio.unlock();
+    audio.unlock().catch(() => undefined);
     tone = audio.loop(roomToneBuffer(audio.listener.context), 0.25);
     const center = room.head.clone().setY(6);
     addDreamCloud(room.scene, center);
@@ -3625,6 +3667,9 @@ import { createOverlay } from './engine/ui';
 import { startHome } from './home/home';
 import './style.css';
 
+const HOME_FAILED =
+  "Couldn't load the bedroom. Check your internet connection and reload the page.";
+
 async function tryStage(root: HTMLElement): Promise<Stage | null> {
   try {
     return await createStage(root);
@@ -3668,11 +3713,16 @@ async function boot(): Promise<void> {
   // Dev-only handle for browser checks, e.g. `kd.stage.camera.position`.
   if (import.meta.env.DEV) Object.assign(window, { kd: app });
   const goHome = async (): Promise<void> => {
-    const home = await startHome(app, async (info) => {
-      const error = await runDream(app, info, () => void goHome());
-      if (error === null) home.dispose();
-      return error;
-    });
+    try {
+      const home = await startHome(app, async (info) => {
+        const error = await runDream(app, info, () => void goHome());
+        if (error === null) home.dispose();
+        return error;
+      });
+    } catch {
+      showMessage(overlay, "Kartik's Dreams", HOME_FAILED);
+      await overlay.fade(false);
+    }
   };
   await goHome();
 }
@@ -3683,7 +3733,7 @@ void boot();
 - [ ] **Step 2: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 70 passed`. The build shows a separate `follow-the-river-*.js` chunk.
+Expected: all green, `Tests 71 passed`. The build shows a separate `follow-the-river-*.js` chunk.
 
 - [ ] **Step 3: Confirm dev-only hooks are stripped from production**
 
@@ -3880,7 +3930,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
 - [ ] **Step 4: Run the full check**
 
 Run: `pnpm run format && pnpm run check`
-Expected: all green, `Tests 70 passed`. The pure logic is untouched; rendering is checked in the next step.
+Expected: all green, `Tests 71 passed`. The pure logic is untouched; rendering is checked in the next step.
 
 - [ ] **Step 5: [controller] Browser check on both backends**
 
@@ -3901,7 +3951,865 @@ git commit -m "feat(engine): graphics pass — 540p render, bloom, vignette, fil
 
 ---
 
-### Task 13: Release check and hand-off
+### Task 13: Atmosphere and the first scare
+
+Kartik asked for real horror, a quiet home screen and a river that visibly flows. Everything here was checked in Chrome on 2026-10-03.
+- Home: the static/rain-like room tone is replaced by soft, slow sleep breathing at low volume.
+- River: long dark ripples drift downstream and glint in the flashlight. It is all done in a TSL shader, with no per-frame JavaScript.
+- Scare kit (reusable in Plan 2): a procedural sting sound, a camera jolt and a light flicker.
+- The watcher: a Blender-built figure, too tall and too thin, with faint red eyes. It stands in the fog on the path. Walk within 13 m and the sting hits, the camera jolts, the flashlight stutters, and the figure is gone.
+
+**Files:**
+- Create: `src/engine/scare.ts`, `src/dreams/follow-the-river/watcher.ts`, `src/dreams/follow-the-river/water.ts`, `src/home/breath.ts`, `public/assets/river/watcher.glb` (generated)
+- Modify: `tools/blender/river_props.py` (whole file below), `src/engine/audio.ts` (whole file: adds `once`, drops the unused brown-noise room tone), `src/dreams/follow-the-river/riverbank.ts` (whole file), `src/dreams/follow-the-river/index.ts` (whole file), `src/home/home.ts` (whole file), `public/assets/LICENSES.md` (river row)
+- Delete: `src/engine/audio.test.ts` (it only tested the removed brown noise)
+- Test: `src/engine/scare.test.ts`, `src/dreams/follow-the-river/watcher.test.ts`, `src/home/breath.test.ts`
+
+**Interfaces:**
+- Consumes: `loadModel` (Task 7), `AudioBus` (Task 6), `FLASHLIGHT` (Task 9), riverbank colliders/`SPAWN` (Task 9).
+- Produces:
+  - `SHAKE_SECONDS`, `FLICKER_SECONDS`, `shakeAt(elapsed)`, `flickerOn(elapsed)`, `stingSamples(sampleRate, seconds?, random?)`, `stingBuffer(context, seconds?)`
+  - `AudioBus.once(buffer, volume)` (`roomToneBuffer` and `brownNoise` are removed)
+  - `WATCHER`, `WatcherState`, `shouldStrike(state, distance)`, `loadWatcherFigure()`
+  - `RIVER_FLOW`, `createRiverMaterial()`
+  - `BREATH`, `BREATH_SECONDS`, `breathEnvelope(t)`, `breathSamples(sampleRate, random?)`, `breathBuffer(context)`
+
+- [ ] **Step 1: 🔎 Confirm the TSL nodes the river uses exist in the installed three.js**
+
+```bash
+grep -c "export const mx_noise_float" node_modules/@types/three/src/nodes/materialx/MaterialXNodes.d.ts
+grep -c "export const positionWorld" node_modules/@types/three/src/nodes/accessors/Position.d.ts
+grep -c "export const time" node_modules/@types/three/src/nodes/utils/Timer.d.ts
+```
+Expected: `1` three times. If something moved, find its new home with the `webgpu-threejs-tsl` skill or Context7 before writing code.
+
+- [ ] **Step 2: Write the failing tests**
+
+`src/engine/scare.test.ts`:
+```ts
+import { describe, expect, it } from 'vitest';
+import { FLICKER_SECONDS, flickerOn, SHAKE_SECONDS, shakeAt, stingSamples } from './scare';
+
+function seeded(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (state * 1664525 + 1013904223) % 4294967296;
+    return state / 4294967296;
+  };
+}
+
+describe('shakeAt', () => {
+  it('hits hardest at the moment of the scare and stops after', () => {
+    expect(shakeAt(0)).toBe(1);
+    expect(shakeAt(SHAKE_SECONDS / 2)).toBeCloseTo(0.25);
+    expect(shakeAt(SHAKE_SECONDS)).toBe(0);
+  });
+
+  it('is still before the scare and for broken times', () => {
+    expect(shakeAt(-1)).toBe(0);
+    expect(shakeAt(Number.NaN)).toBe(0);
+  });
+});
+
+describe('flickerOn', () => {
+  it('stutters off and on right after the scare', () => {
+    const states = new Set([0, 0.08, 0.15, 0.22, 0.3].map(flickerOn));
+    expect(states).toEqual(new Set([true, false]));
+  });
+
+  it('stays on once the flicker is over', () => {
+    expect(flickerOn(FLICKER_SECONDS)).toBe(true);
+    expect(flickerOn(10)).toBe(true);
+  });
+});
+
+describe('stingSamples', () => {
+  it('is loud at the start, silent-ish at the end, and never clips past -1..1', () => {
+    const samples = stingSamples(8000, 1.4, seeded(3));
+    const peak = (from: number, to: number): number =>
+      samples.slice(from, to).reduce((max, v) => Math.max(max, Math.abs(v)), 0);
+    expect(samples.length).toBe(11200);
+    expect(peak(0, 800)).toBeGreaterThan(0.5);
+    expect(peak(10400, 11200)).toBeLessThan(0.1);
+    expect(peak(0, samples.length)).toBeLessThanOrEqual(1);
+  });
+});
+```
+
+`src/dreams/follow-the-river/watcher.test.ts`:
+```ts
+import { describe, expect, it } from 'vitest';
+import { resolveCircle } from '../../engine/collide';
+import { PLAYER_RADIUS } from '../../engine/player';
+import { riverbankColliders, SPAWN } from './riverbank';
+import { shouldStrike, WATCHER } from './watcher';
+
+describe('watcher', () => {
+  it('waits while the player is far away', () => {
+    expect(shouldStrike('waiting', WATCHER.trigger + 1)).toBe(false);
+  });
+
+  it('strikes once the player comes within reach', () => {
+    expect(shouldStrike('waiting', WATCHER.trigger - 1)).toBe(true);
+  });
+
+  it('never strikes twice', () => {
+    expect(shouldStrike('struck', 0)).toBe(false);
+  });
+
+  it('starts out of reach of the spawn point', () => {
+    const distance = Math.hypot(WATCHER.x - SPAWN.x, WATCHER.z - SPAWN.z);
+    expect(shouldStrike('waiting', distance)).toBe(false);
+  });
+
+  it('stands on open ground the player can walk up to', () => {
+    expect(resolveCircle(WATCHER.x, WATCHER.z, PLAYER_RADIUS, riverbankColliders())).toEqual({
+      x: WATCHER.x,
+      z: WATCHER.z,
+    });
+  });
+});
+```
+
+`src/home/breath.test.ts`:
+```ts
+import { describe, expect, it } from 'vitest';
+import { BREATH, BREATH_SECONDS, breathEnvelope, breathSamples } from './breath';
+
+function seeded(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (state * 1664525 + 1013904223) % 4294967296;
+    return state / 4294967296;
+  };
+}
+
+describe('breathEnvelope', () => {
+  it('is silent at both ends of the cycle, so the loop never clicks', () => {
+    expect(breathEnvelope(0)).toBe(0);
+    expect(breathEnvelope(BREATH_SECONDS - 0.001)).toBe(0);
+  });
+
+  it('breathes in, pauses, then breathes out louder', () => {
+    const inhalePeak = breathEnvelope(BREATH.inhale / 2);
+    const pause = breathEnvelope(BREATH.inhale + BREATH.pause / 2);
+    const exhalePeak = breathEnvelope(BREATH.inhale + BREATH.pause + BREATH.exhale / 2);
+    expect(inhalePeak).toBeGreaterThan(0.4);
+    expect(pause).toBe(0);
+    expect(exhalePeak).toBeGreaterThan(inhalePeak);
+  });
+});
+
+describe('breathSamples', () => {
+  it('is one cycle long, stays in range and is quiet at the loop point', () => {
+    const samples = breathSamples(8000, seeded(5));
+    const peak = samples.reduce((max, v) => Math.max(max, Math.abs(v)), 0);
+    expect(samples.length).toBe(Math.floor(8000 * BREATH_SECONDS));
+    expect(peak).toBeLessThanOrEqual(1);
+    expect(peak).toBeGreaterThan(0.01);
+    expect(Math.abs(samples[0])).toBeLessThan(0.001);
+    expect(Math.abs(samples[samples.length - 1])).toBeLessThan(0.001);
+  });
+});
+```
+
+- [ ] **Step 3: Run them and watch them fail**
+
+Run: `pnpm vitest run src/engine/scare.test.ts src/dreams/follow-the-river/watcher.test.ts src/home/breath.test.ts`
+Expected: FAIL (modules not found).
+
+- [ ] **Step 4: Implement the pure modules**
+
+`src/engine/scare.ts`:
+```ts
+/** How long the camera jolts after a scare, in seconds. Tuning knob. */
+export const SHAKE_SECONDS = 0.6;
+/** How long the light stutters after a scare, in seconds. Tuning knob. */
+export const FLICKER_SECONDS = 1.2;
+
+/** Jolt strength `elapsed` seconds after a scare: 1 at the hit, easing to 0. */
+export function shakeAt(elapsed: number): number {
+  if (!(elapsed >= 0) || elapsed >= SHAKE_SECONDS) return 0;
+  const left = 1 - elapsed / SHAKE_SECONDS;
+  return left * left;
+}
+
+/** Whether a stuttering light is on `elapsed` seconds after a scare (always on once it settles). */
+export function flickerOn(elapsed: number): boolean {
+  if (!(elapsed >= 0) || elapsed >= FLICKER_SECONDS) return true;
+  return Math.floor(elapsed * 14) % 3 === 2;
+}
+
+/**
+ * A jumpscare sting: a harsh noise burst over a low, beating drone (55 Hz against 58.3 Hz).
+ * Fades out over `seconds`. Values stay inside -1..1.
+ */
+export function stingSamples(
+  sampleRate: number,
+  seconds = 1.4,
+  random: () => number = Math.random,
+): Float32Array<ArrayBuffer> {
+  const samples = new Float32Array(Math.floor(sampleRate * seconds));
+  for (let i = 0; i < samples.length; i++) {
+    const t = i / sampleRate;
+    const noise = (random() * 2 - 1) * Math.exp(-t * 10);
+    const drone = 0.5 * (Math.sin(2 * Math.PI * 55 * t) + Math.sin(2 * Math.PI * 58.3 * t));
+    const value = (noise * 0.9 + drone * 0.6) * Math.exp(-t * 2.5);
+    samples[i] = Math.max(-1, Math.min(1, value));
+  }
+  return samples;
+}
+
+export function stingBuffer(context: BaseAudioContext, seconds = 1.4): AudioBuffer {
+  const samples = stingSamples(context.sampleRate, seconds);
+  const buffer = context.createBuffer(1, samples.length, context.sampleRate);
+  buffer.copyToChannel(samples, 0);
+  return buffer;
+}
+```
+
+`src/dreams/follow-the-river/watcher.ts`:
+```ts
+import type * as THREE from 'three/webgpu';
+import { loadModel } from '../../engine/models';
+
+/**
+ * A tall figure standing still in the fog down the bank. Walk close and it is gone.
+ * Position, trigger distance (m) and how long it stays after the sting (s). Tuning knobs.
+ */
+export const WATCHER = { x: 0.8, z: -44, trigger: 13, vanishAfter: 0.25 } as const;
+
+export type WatcherState = 'waiting' | 'struck';
+
+/** The scare fires once, the first time the player comes within reach. */
+export function shouldStrike(state: WatcherState, distance: number): boolean {
+  return state === 'waiting' && distance < WATCHER.trigger;
+}
+
+/**
+ * The Blender-made figure (tools/blender/river_props.py `watcher`): too tall, too thin,
+ * arms past the knees, a tilted head and two faintly glowing red eyes facing the player.
+ */
+export function loadWatcherFigure(): Promise<THREE.Object3D> {
+  return loadModel('/assets/river/watcher.glb');
+}
+```
+
+`src/home/breath.ts`:
+```ts
+/** One slow sleeping breath: in, a short pause, a longer sigh out, a rest. Seconds. Tuning knobs. */
+export const BREATH = { inhale: 1.8, pause: 0.4, exhale: 2.4, rest: 1.2 } as const;
+export const BREATH_SECONDS = BREATH.inhale + BREATH.pause + BREATH.exhale + BREATH.rest;
+
+/** Loudness of the breath at time `t` within one cycle: silent at both ends so it loops cleanly. */
+export function breathEnvelope(t: number): number {
+  if (t < 0 || t >= BREATH_SECONDS) return 0;
+  if (t < BREATH.inhale) return 0.55 * Math.sin((Math.PI * t) / BREATH.inhale) ** 2;
+  const out = t - BREATH.inhale - BREATH.pause;
+  if (out < 0 || out >= BREATH.exhale) return 0;
+  return Math.sin((Math.PI * out) / BREATH.exhale) ** 2;
+}
+
+/**
+ * One breath cycle of soft, airy noise (heavily smoothed so it whooshes instead of hissing),
+ * shaped by `breathEnvelope`. Values stay inside -1..1.
+ */
+export function breathSamples(
+  sampleRate: number,
+  random: () => number = Math.random,
+): Float32Array<ArrayBuffer> {
+  const samples = new Float32Array(Math.floor(sampleRate * BREATH_SECONDS));
+  const smoothing = Math.min(1, 900 / sampleRate);
+  let air = 0;
+  for (let i = 0; i < samples.length; i++) {
+    air += smoothing * (random() * 2 - 1 - air);
+    samples[i] = Math.max(-1, Math.min(1, air * 2.2 * breathEnvelope(i / sampleRate)));
+  }
+  return samples;
+}
+
+export function breathBuffer(context: BaseAudioContext): AudioBuffer {
+  const samples = breathSamples(context.sampleRate);
+  const buffer = context.createBuffer(1, samples.length, context.sampleRate);
+  buffer.copyToChannel(samples, 0);
+  return buffer;
+}
+```
+
+Run the same three test files again. Expected: PASS (13 tests).
+
+- [ ] **Step 5: Build the watcher in Blender**
+
+Replace `tools/blender/river_props.py` with this version. It adds `limb()` and `watcher()`; the other props are unchanged:
+```python
+"""Builds the low-poly river scenery and exports one GLB per prop.
+
+Run headless from the repo root:
+  /Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
+    --python tools/blender/river_props.py -- public/assets/river
+"""
+
+import math
+import random
+import sys
+from pathlib import Path
+
+import bpy
+
+OUT = Path(sys.argv[sys.argv.index("--") + 1] if "--" in sys.argv else "public/assets/river")
+random.seed(7)
+
+
+def reset() -> None:
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+
+
+def material(name: str, color: tuple, emission: float = 0.0) -> bpy.types.Material:
+    mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    bsdf = mat.node_tree.nodes["Principled BSDF"]
+    bsdf.inputs["Base Color"].default_value = (*color, 1.0)
+    bsdf.inputs["Roughness"].default_value = 1.0
+    if emission > 0:
+        bsdf.inputs["Emission Color"].default_value = (*color, 1.0)
+        bsdf.inputs["Emission Strength"].default_value = emission
+    return mat
+
+
+def box(name: str, size: tuple, location: tuple, mat: bpy.types.Material) -> bpy.types.Object:
+    bpy.ops.mesh.primitive_cube_add(size=1, location=location)
+    obj = bpy.context.active_object
+    obj.name = name
+    obj.scale = size
+    bpy.ops.object.transform_apply(scale=True)
+    obj.data.materials.append(mat)
+    return obj
+
+
+def join(objects: list, name: str) -> bpy.types.Object:
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in objects:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = objects[0]
+    bpy.ops.object.join()
+    joined = bpy.context.active_object
+    joined.name = name
+    return joined
+
+
+def export(name: str) -> None:
+    OUT.mkdir(parents=True, exist_ok=True)
+    bpy.ops.export_scene.gltf(filepath=str(OUT / f"{name}.glb"), export_format="GLB")
+
+
+def building(name: str, width: float, depth: float, height: float, lit_ratio: float) -> None:
+    """Concrete block, rooftop box, rows of dark windows with a few still lit."""
+    reset()
+    wall = material("concrete", (0.09, 0.1, 0.11))
+    dark = material("windowDark", (0.02, 0.025, 0.03))
+    lit = material("windowLit", (1.0, 0.72, 0.35), emission=2.5)
+    parts = [box("body", (width, depth, height), (0, 0, height / 2), wall)]
+    parts.append(box("roof", (width * 0.4, depth * 0.4, 1.2), (width * 0.15, 0, height + 0.6), wall))
+    floors = int(height // 3)
+    columns = max(1, int(width // 2))
+    for f in range(floors):
+        for c in range(columns):
+            x = -width / 2 + (c + 0.5) * width / columns
+            z = 1.6 + f * 3
+            glass = lit if random.random() < lit_ratio else dark
+            parts.append(box("win", (0.9, 0.05, 1.2), (x, -depth / 2 - 0.02, z), glass))
+    join(parts, name)
+    export(name)
+
+
+def pine(name: str, height: float) -> None:
+    """Three stacked low-poly cones on a trunk."""
+    reset()
+    bark = material("bark", (0.06, 0.04, 0.03))
+    needles = material("needles", (0.04, 0.07, 0.04))
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=10, radius=0.18, depth=height * 0.3, location=(0, 0, height * 0.15)
+    )
+    trunk = bpy.context.active_object
+    trunk.data.materials.append(bark)
+    parts = [trunk]
+    for i in range(3):
+        radius = height * (0.28 - i * 0.06)
+        z = height * (0.3 + i * 0.22)
+        bpy.ops.mesh.primitive_cone_add(
+            vertices=12, radius1=radius, depth=height * 0.4, location=(0, 0, z + height * 0.2)
+        )
+        cone = bpy.context.active_object
+        cone.rotation_euler[2] = random.random() * math.pi
+        cone.data.materials.append(needles)
+        parts.append(cone)
+    join(parts, name)
+    bpy.ops.object.shade_smooth()
+    export(name)
+
+
+def dead_tree(name: str, height: float) -> None:
+    """A leafless trunk with crooked branches."""
+    reset()
+    bark = material("bark", (0.05, 0.04, 0.035))
+    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.15, depth=height, location=(0, 0, height / 2))
+    parts = [bpy.context.active_object]
+    for i in range(4):
+        angle = i * math.pi / 2 + random.random() * 0.6
+        length = height * 0.35
+        z = height * (0.5 + i * 0.1)
+        bpy.ops.mesh.primitive_cylinder_add(
+            vertices=6,
+            radius=0.06,
+            depth=length,
+            location=(math.cos(angle) * length / 3, math.sin(angle) * length / 3, z),
+        )
+        branch = bpy.context.active_object
+        branch.rotation_euler = (math.sin(angle) * 0.9, -math.cos(angle) * 0.9, 0)
+        parts.append(branch)
+    for part in parts:
+        part.data.materials.append(bark)
+    join(parts, name)
+    bpy.ops.object.shade_smooth()
+    export(name)
+
+
+def limb(radius: float, length: float, location: tuple, tilt: tuple = (0, 0, 0)) -> bpy.types.Object:
+    bpy.ops.mesh.primitive_cylinder_add(vertices=10, radius=radius, depth=length, location=location)
+    part = bpy.context.active_object
+    part.rotation_euler = tilt
+    return part
+
+
+def watcher(name: str) -> None:
+    """Too tall and too thin: arms hang past the knees, the head tilts, two eyes glow faint red.
+    Faces Blender -Y, which exports as glTF +Z (towards a player walking down the bank)."""
+    reset()
+    shadow = material("shadow", (0.012, 0.012, 0.014))
+    glow = material("eyes", (0.7, 0.03, 0.03), emission=4.0)
+    parts = [limb(0.07, 1.2, (side * 0.11, 0, 0.6)) for side in (-1, 1)]
+    torso = limb(0.16, 1.0, (0, 0, 1.68))
+    torso.scale = (1.0, 0.6, 1.0)
+    parts.append(torso)
+    parts += [limb(0.045, 1.5, (side * 0.24, 0, 1.32), (0, side * 0.07, 0)) for side in (-1, 1)]
+    parts.append(limb(0.05, 0.22, (0.02, 0, 2.25), (0.2, 0.15, 0)))
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=20, ring_count=14, radius=0.15, location=(0.05, -0.04, 2.45))
+    head = bpy.context.active_object
+    head.scale = (0.85, 0.95, 1.2)
+    head.rotation_euler = (0.25, 0.35, 0)
+    parts.append(head)
+    for part in parts:
+        part.data.materials.append(shadow)
+    for side in (-1, 1):
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=10, ring_count=6, radius=0.022, location=(0.05 + side * 0.055, -0.165, 2.47))
+        eye = bpy.context.active_object
+        eye.data.materials.append(glow)
+        parts.append(eye)
+    join(parts, name)
+    bpy.ops.object.transform_apply(scale=True, rotation=True)
+    bpy.ops.object.shade_smooth()
+    export(name)
+
+
+building("buildingTall", 6, 6, 27, 0.08)
+building("buildingMid", 8, 6, 15, 0.12)
+building("buildingLow", 10, 7, 9, 0.18)
+pine("pine", 9)
+dead_tree("deadTree", 7)
+watcher("watcher")
+print("EXPORTED", sorted(p.name for p in OUT.glob("*.glb")))
+```
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python tools/blender/river_props.py -- public/assets/river | grep EXPORTED
+```
+Expected: `EXPORTED ['buildingLow.glb', 'buildingMid.glb', 'buildingTall.glb', 'deadTree.glb', 'pine.glb', 'watcher.glb']`. The script is deterministic, so the five existing GLBs may show as unchanged or byte-identical; commit whatever it writes.
+
+In `public/assets/LICENSES.md`, change the river row's file list to `river/*.glb` (buildingTall, buildingMid, buildingLow, pine, deadTree, watcher).
+
+- [ ] **Step 6: Wire it in**
+
+Delete `src/engine/audio.test.ts`.
+
+`src/engine/audio.ts`:
+```ts
+import * as THREE from 'three/webgpu';
+
+export interface AudioBus {
+  readonly listener: THREE.AudioListener;
+  /** Browsers start audio suspended; call from a click handler. */
+  unlock(): Promise<void>;
+  setVolume(volume: number): void;
+  loop(buffer: AudioBuffer, volume: number): THREE.Audio;
+  /** Plays `buffer` once (a scare sting, a thud). */
+  once(buffer: AudioBuffer, volume: number): void;
+}
+
+export function createAudioBus(camera: THREE.Camera): AudioBus {
+  const listener = new THREE.AudioListener();
+  camera.add(listener);
+  return {
+    listener,
+    async unlock() {
+      if (listener.context.state !== 'running') await listener.context.resume();
+    },
+    setVolume(volume) {
+      listener.setMasterVolume(volume);
+    },
+    loop(buffer, volume) {
+      const sound = new THREE.Audio(listener);
+      sound.setBuffer(buffer);
+      sound.setLoop(true);
+      sound.setVolume(volume);
+      sound.play();
+      return sound;
+    },
+    once(buffer, volume) {
+      const sound = new THREE.Audio(listener);
+      sound.setBuffer(buffer);
+      sound.setVolume(volume);
+      // three's own onEnded resets isPlaying; keep it, then free the audio graph node.
+      const ended = sound.onEnded.bind(sound);
+      sound.onEnded = () => {
+        ended();
+        sound.disconnect();
+      };
+      sound.play();
+    },
+  };
+}
+```
+
+`src/dreams/follow-the-river/water.ts`:
+```ts
+import { color, float, mix, mx_noise_float, positionWorld, time, vec3 } from 'three/tsl';
+import * as THREE from 'three/webgpu';
+
+/** Downstream speed in m/s and the water's colours. Tuning knobs. */
+export const RIVER_FLOW = {
+  speed: 1.6,
+  deep: 0x050f17,
+  streak: 0x3b5866,
+  /** Faint self-glow of the ripples so the flow reads even outside the flashlight. */
+  glow: 0x0c1a22,
+} as const;
+
+/**
+ * Dark water whose long ripples drift downstream (towards -Z, the way the player must follow)
+ * and glint where the flashlight hits them. All in the shader: no per-frame JavaScript.
+ */
+export function createRiverMaterial(): THREE.MeshStandardNodeMaterial {
+  const downstream = positionWorld.z.add(time.mul(RIVER_FLOW.speed));
+  const ripples = mx_noise_float(
+    vec3(positionWorld.x.mul(1.1), downstream.mul(0.18), time.mul(0.2)),
+  );
+  const streaks = ripples.mul(0.5).add(0.5).pow(2);
+  const material = new THREE.MeshStandardNodeMaterial({ metalness: 0.15 });
+  material.colorNode = mix(color(RIVER_FLOW.deep), color(RIVER_FLOW.streak), streaks);
+  material.roughnessNode = float(0.45).sub(streaks.mul(0.35));
+  material.emissiveNode = color(RIVER_FLOW.glow).mul(streaks);
+  return material;
+}
+```
+
+`src/dreams/follow-the-river/riverbank.ts`:
+```ts
+import * as THREE from 'three/webgpu';
+import { boxAt, type Box } from '../../engine/collide';
+import { enableShadows } from '../../engine/models';
+import { createSkyDome } from '../../engine/sky';
+import { addSkyline } from './skyline';
+import { createRiverMaterial } from './water';
+
+/** Overcast dusk: dark grey-blue. Never bright. */
+export const SKY = 0x1b2026;
+export const RIVER_X = 7;
+export const RIVER_WIDTH = 8;
+export const BANK_LENGTH = 120;
+
+/** Grey-box crates: [x, z, size]. Placeholder props until Plan 2's city kit. */
+export const CRATES: ReadonlyArray<readonly [number, number, number]> = [
+  [-2, -6, 1.2],
+  [1.5, -11, 1],
+  [-3.5, -17, 1.6],
+  [0.5, -24, 1.1],
+  [-1.5, -32, 1.4],
+];
+
+export const SPAWN = { x: 0, z: 0, yaw: 0 } as const;
+
+/** Name of the sky dome, so the dream can keep it centred on the player. */
+export const SKY_NAME = 'sky';
+
+/**
+ * The dome follows the player (see index.ts), so its far side is always 80 m away,
+ * well inside the camera's 200 m far plane.
+ */
+const SKY_DOME_RADIUS = 80;
+
+/** Crates, the river (no swimming yet) and the edges of the walkable strip. */
+export function riverbankColliders(): Box[] {
+  const crates = CRATES.map(([x, z, size]) => boxAt(x, z, size, size));
+  const middle = -BANK_LENGTH / 2 + 10;
+  return [
+    ...crates,
+    boxAt(RIVER_X, middle, RIVER_WIDTH, BANK_LENGTH),
+    boxAt(-8, middle, 2, BANK_LENGTH),
+    boxAt(0, 11, 24, 2),
+    boxAt(0, -BANK_LENGTH + 9, 24, 2),
+  ];
+}
+
+function plane(width: number, depth: number, color: number): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, depth),
+    new THREE.MeshLambertMaterial({ color }),
+  );
+  mesh.rotation.x = -Math.PI / 2;
+  return mesh;
+}
+
+export async function buildRiverbank(): Promise<THREE.Scene> {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(SKY);
+  scene.fog = new THREE.Fog(SKY, 6, 70);
+  const sky = createSkyDome(0x07090c, SKY, SKY_DOME_RADIUS);
+  sky.name = SKY_NAME;
+  scene.add(sky, new THREE.HemisphereLight(0x5a6470, 0x15180f, 0.6));
+  const middle = -BANK_LENGTH / 2 + 10;
+  // Ground and water run far past the walkable strip so fog, not an edge, ends the view.
+  const ground = plane(120, 360, 0x2b2f24);
+  ground.position.set(RIVER_X - RIVER_WIDTH / 2 - 60, 0, middle);
+  const farBank = plane(80, 360, 0x24271f);
+  farBank.position.set(RIVER_X + RIVER_WIDTH / 2 + 40, 0, middle);
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(RIVER_WIDTH, 360), createRiverMaterial());
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(RIVER_X, -0.15, middle);
+  for (const surface of [ground, farBank, water]) surface.receiveShadow = true;
+  scene.add(ground, farBank, water);
+  await addSkyline(scene);
+  const crateMaterial = new THREE.MeshLambertMaterial({ color: 0x4a3b2a });
+  for (const [x, z, size] of CRATES) {
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), crateMaterial);
+    crate.position.set(x, size / 2, z);
+    enableShadows(crate);
+    scene.add(crate);
+  }
+  return scene;
+}
+```
+
+`src/dreams/follow-the-river/index.ts`:
+```ts
+import type * as THREE from 'three/webgpu';
+import { flickerOn, shakeAt, stingBuffer } from '../../engine/scare';
+import type { DreamContext, DreamModule } from '../types';
+import { createFlashlight, FLASHLIGHT } from './flashlight';
+import { buildRiverbank, riverbankColliders, SKY_NAME, SPAWN } from './riverbank';
+import { loadWatcherFigure, shouldStrike, WATCHER, type WatcherState } from './watcher';
+
+/** How hard the camera rolls during a scare jolt, in radians. Tuning knob. */
+const JOLT_ROLL = 0.06;
+
+/** Plan 1 test dream: walking, collisions, darkness, the flashlight and one scare. Plan 2 replaces it. */
+export function createDream(): DreamModule {
+  let flashlight: THREE.SpotLight | null = null;
+  let stop: (() => void) | null = null;
+  let camera: THREE.Camera | null = null;
+  return {
+    async start(ctx: DreamContext) {
+      const scene = await buildRiverbank();
+      const view = ctx.stage.camera;
+      camera = view;
+      scene.add(view);
+      ctx.stage.scene = scene;
+      const sky = scene.getObjectByName(SKY_NAME);
+      ctx.player.colliders = riverbankColliders();
+      ctx.player.teleport(SPAWN.x, SPAWN.z, SPAWN.yaw);
+      const light = createFlashlight(view);
+      flashlight = light;
+      const figure = await loadWatcherFigure();
+      figure.position.set(WATCHER.x, 0, WATCHER.z);
+      scene.add(figure);
+      const sting = stingBuffer(ctx.audio.listener.context);
+      let toldAboutLight = false;
+      let watcher: WatcherState = 'waiting';
+      let since = 0;
+      stop = ctx.stage.addUpdater((dt) => {
+        // Keep the sky centred on the player so it never ends, wherever they walk.
+        sky?.position.set(view.position.x, 0, view.position.z);
+        // Drop key taps made while reading or paused, so they don't fire on resume.
+        if (ctx.isPaused()) {
+          ctx.keys.consumePress('KeyF');
+          return;
+        }
+        if (ctx.keys.consumePress('KeyF')) light.visible = !light.visible;
+        if (!toldAboutLight && view.position.z < -8) {
+          toldAboutLight = true;
+          ctx.read(['It is getting dark. Press F to turn your flashlight on or off.']);
+        }
+        const distance = Math.hypot(view.position.x - WATCHER.x, view.position.z - WATCHER.z);
+        if (shouldStrike(watcher, distance)) {
+          watcher = 'struck';
+          ctx.audio.once(sting, 0.9);
+        }
+        if (watcher !== 'struck') return;
+        since += dt;
+        figure.visible = since < WATCHER.vanishAfter;
+        view.rotation.z = shakeAt(since) * JOLT_ROLL * Math.sin(since * 70);
+        light.intensity = flickerOn(since) ? FLASHLIGHT.intensity : 0;
+      });
+    },
+    dispose() {
+      stop?.();
+      if (flashlight && camera) camera.remove(flashlight, flashlight.target);
+      camera?.rotation.set(0, camera.rotation.y, 0);
+      camera?.removeFromParent();
+    },
+  };
+}
+```
+
+`src/home/home.ts`:
+```ts
+import type * as THREE from 'three/webgpu';
+import type { App } from '../app';
+import { DREAMS } from '../dreams/registry';
+import type { DreamInfo } from '../dreams/types';
+import { enterFullscreen, toggleFullscreen } from '../engine/fullscreen';
+import { button, el } from '../engine/ui';
+import { buildBedroom } from './bedroom';
+import { breathBuffer } from './breath';
+import { addDreamCloud, tweenCamera } from './cloud';
+import { nextHomeState, type HomeEvent, type HomeState } from './flow';
+import { createZzz } from './zzzSprites';
+
+export interface HomeHandle {
+  dispose(): void;
+}
+
+/** Starts a dream; resolves to an error message, or null once the dream is running. */
+export type Play = (info: DreamInfo) => Promise<string | null>;
+
+export async function startHome(app: App, play: Play): Promise<HomeHandle> {
+  const { stage, overlay, audio } = app;
+  const room = await buildBedroom();
+  stage.scene = room.scene;
+  stage.camera.position.copy(room.view.position);
+  stage.camera.lookAt(room.view.target);
+  const zzz = createZzz(room.scene, room.head);
+  const stopZzz = stage.addUpdater((dt) => zzz.update(dt));
+  let state: HomeState = 'sleeping';
+  let tone: THREE.Audio | null = null;
+  const send = (event: HomeEvent): boolean => {
+    const next = nextHomeState(state, event);
+    if (next === state) return false;
+    state = next;
+    return true;
+  };
+
+  const showCards = (message?: string): void => {
+    overlay.panel((panel) => {
+      panel.append(el('h1', '', 'Choose a dream'));
+      if (message) panel.append(el('p', 'error', message));
+      for (const info of DREAMS) {
+        const card = button('', () => send('pick') && showWarning(info), 'card');
+        card.append(
+          el('strong', '', info.title),
+          el('span', '', `${info.minutes} min · ${info.warnings.join(' · ')}`),
+        );
+        panel.append(card);
+      }
+      panel.append(button('Full screen on/off', toggleFullscreen, 'btn quiet'));
+    });
+  };
+
+  const showWarning = (info: DreamInfo): void => {
+    overlay.panel((panel) => {
+      panel.append(
+        el('h1', '', info.title),
+        el('p', 'big', `This dream contains: ${info.warnings.join(', ')}.`),
+        el('p', '', 'Headphones recommended. Play somewhere quiet.'),
+        button('Enter the dream', () => void enter(info), 'btn primary'),
+        button('Back', () => send('back') && showCards(), 'btn quiet'),
+      );
+    });
+  };
+
+  const enter = async (info: DreamInfo): Promise<void> => {
+    if (!send('confirm')) return;
+    overlay.closePanel();
+    await overlay.fade(true);
+    const error = await play(info);
+    if (error === null) return void send('loaded');
+    send('load-failed');
+    await overlay.fade(false);
+    showCards(error);
+  };
+
+  const rise = async (): Promise<void> => {
+    if (!send('start')) return;
+    overlay.closePanel();
+    enterFullscreen();
+    audio.unlock().catch(() => undefined);
+    // Just the sleeper's slow breathing: the home screen should feel quiet.
+    tone = audio.loop(breathBuffer(audio.listener.context), 0.12);
+    const center = room.head.clone().setY(6);
+    addDreamCloud(room.scene, center);
+    const to = {
+      position: room.head
+        .clone()
+        .setY(3.2)
+        .setZ(room.head.z + 0.6),
+      target: center,
+    };
+    await tweenCamera(stage, room.view, to, 3.5);
+    send('risen');
+    showCards();
+  };
+
+  overlay.panel((panel) => {
+    panel.classList.add('low');
+    panel.append(
+      el('h1', 'title', "Kartik's Dreams"),
+      el('p', 'big', 'Every dream here really happened.'),
+      button('Start', () => void rise(), 'btn primary'),
+    );
+  });
+
+  return {
+    dispose() {
+      stopZzz();
+      zzz.dispose();
+      tone?.stop();
+    },
+  };
+}
+```
+
+- [ ] **Step 7: Run the full check**
+
+Run: `pnpm run format && pnpm run check`
+Expected: all green, `Tests 83 passed`.
+
+- [ ] **Step 8: [controller] Browser check**
+
+On `http://localhost:5173/?nolock`:
+1. The home screen is quiet except for soft, slow breathing after Start (Kartik checks by ear; the controller checks there are no console errors).
+2. Enter the dream, then run `kd.stage.camera.position.set(2.5, 1.6, -6); kd.stage.camera.rotation.set(-0.3, -1.0, 0, 'YXZ')`. Two screenshots 2 s apart show the water's ripple pattern has moved.
+3. Run `kd.stage.camera.position.set(0.6, 1.6, -26); kd.stage.camera.rotation.set(0.12, 0, 0, 'YXZ')`. The watcher stands in the fog on the path.
+4. Move to `z = -33`. The figure's `visible` becomes false, `camera.rotation.z` is non-zero during the jolt and returns to 0, and there are no console errors.
+5. Repeat 2–4 on `?nolock&webgl`.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add -A
+git commit -m "feat: quiet breathing home, flowing river, scare kit and the watcher" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 14: Release check and hand-off
 
 **Files:**
 - No new code unless a check fails.
@@ -3921,12 +4829,12 @@ rm -rf node_modules dist
 pnpm install --frozen-lockfile
 pnpm run check
 ```
-Expected: all green, 70 tests.
+Expected: all green, 83 tests.
 
 - [ ] **Step 3: Production preview smoke test [controller]**
 
 Run `pnpm run build && pnpm run preview --port 4173`, then open `http://localhost:4173/` in Chrome.
-Expected: home screen renders with no console errors, and `window.kd` is `undefined`.
+Expected: home screen renders with no console errors, and `window.kd` is `undefined`. Measure frame rate in the riverbank by counting `requestAnimationFrame` calls over 3 s on WebGPU and `?webgl`. Expected: at least 55 fps on this Mac. If it is lower, lower `RENDER_HEIGHT` or the shadow map sizes before shipping.
 
 - [ ] **Step 4: [Kartik] Manual checks in a real window**
 

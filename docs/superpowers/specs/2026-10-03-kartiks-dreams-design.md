@@ -88,7 +88,7 @@ You run downstream for three days and three nights. The giant fish in the river 
 
 ## Milestones
 
-1. **Plan 1 — Foundation & Home:** tooling, engine, home screen, dream picker, pause/settings, grey-box riverbank test dream, Vercel-ready build.
+1. **Plan 1 — Foundation & Home:** tooling, engine, home screen (quiet: soft sleep breathing only), dream picker, pause/settings, graphics pass, a test riverbank with a flowing river, Blender-built skyline and one scripted scare (the watcher), Vercel-ready build.
 2. **Plan 2 — Follow the River v1:** asset pipeline (zombies, fish, city kit via Blender), intro, Day 1, Night 1, weapons, fish, checkpoints, hints, "To be continued".
 3. **Plan 3 — Days 2–3 and the ending.**
 
