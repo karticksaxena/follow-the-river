@@ -136,6 +136,6 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
       return { stage, overlay, audio, keys, player, isPaused, read, choose, finish };
     },
     cleanUp,
-    begin: () => read(info.intro),
+    begin: () => read(info.intro, () => current?.begin?.()),
   };
 }

@@ -1,120 +1,111 @@
-import * as THREE from 'three/webgpu';
-import { boxAt, type Box } from '../../engine/collide';
-import { enableShadows } from '../../engine/models';
-import { flickerOn, shakeAt, stingBuffer } from '../../engine/scare';
+import { showMessage } from '../../engine/menus';
+import { browserStorage, createSaveStore, type SaveStore } from '../../engine/save';
 import type { DreamContext, DreamModule } from '../types';
-import { createFlashlight, FLASHLIGHT, type Flashlight } from './flashlight';
-import { applyLighting, createWorldLights, LIGHTING, SKY_NAME } from './lighting';
-import { addRiver, EDGE_X, OVERRUN, plane, RIVER_WIDTH, RIVER_X } from './river';
-import { addSkyline } from './skyline';
-import { loadWatcherFigure, shouldStrike, WATCHER, type WatcherState } from './watcher';
+import { CITY } from './areas/city';
+import { startChapter, type Chapter } from './chapter';
+import { phaseTitle } from './flow';
+import {
+  completePhase,
+  freshRun,
+  isRunSave,
+  restartPhase,
+  type Phase,
+  type RunSave,
+} from './state';
 
-/** How hard the camera rolls during a scare jolt, in radians. Tuning knob. */
-const JOLT_ROLL = 0.06;
-const SPAWN = { x: 0, z: 0, yaw: 0 } as const;
-const BANK_LENGTH = 120;
+/** Phases the city can play so far. Later phases arrive with the next areas (Plan 3). */
+const PLAYABLE: readonly Phase[] = ['day1', 'night1'];
+/** Show "Loading…" only when a scene swap takes longer than this. */
+const LOADING_DELAY_MS = 300;
+const THE_END = ['You made it to the boathouse.', 'Night 1 survived.', 'To be continued…'];
 
-/** Grey-box crates: [x, z, size]. Plan 1 placeholders; Task 16 rewrites this dream. */
-const CRATES: ReadonlyArray<readonly [number, number, number]> = [
-  [-2, -6, 1.2],
-  [1.5, -11, 1],
-  [-3.5, -17, 1.6],
-  [0.5, -24, 1.1],
-  [-1.5, -32, 1.4],
-];
-
-function testColliders(): Box[] {
-  const middle = -BANK_LENGTH / 2 + 10;
-  return [
-    ...CRATES.map(([x, z, size]) => boxAt(x, z, size, size)),
-    boxAt(RIVER_X, middle, RIVER_WIDTH, BANK_LENGTH),
-    boxAt(-8, middle, 2, BANK_LENGTH),
-    boxAt(0, 11, 24, 2),
-    boxAt(0, -BANK_LENGTH + 9, 24, 2),
-  ];
+/** Task 18 inserts the intro scene here; until then the intro phase just completes. */
+function playable(save: RunSave): RunSave {
+  if (save.phase === 'intro') return completePhase(save, restartPhase(save));
+  if (PLAYABLE.includes(save.phase)) return save;
+  return playable(freshRun());
 }
 
-async function buildTestScene(): Promise<THREE.Scene> {
-  const scene = new THREE.Scene();
-  applyLighting(createWorldLights(scene), LIGHTING.night);
-  const fromZ = 10;
-  const toZ = fromZ - BANK_LENGTH;
-  const ground = plane(120, fromZ - toZ + 2 * OVERRUN, 0x2b2f24);
-  ground.position.set(EDGE_X - 60, 0, (fromZ + toZ) / 2);
-  scene.add(ground);
-  addRiver(scene, fromZ, toZ);
-  await addSkyline(scene, 'city', fromZ, toZ);
-  const material = new THREE.MeshLambertMaterial({ color: 0x4a3b2a });
-  for (const [x, z, size] of CRATES) {
-    const crate = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), material);
-    crate.position.set(x, size / 2, z);
-    enableShadows(crate);
-    scene.add(crate);
-  }
-  return scene;
+/** Dev only: `?phase=day1|night1` starts that phase with fresh supplies, ignoring the save. */
+function devOverride(): RunSave | null {
+  if (!import.meta.env.DEV) return null;
+  const phase = new URLSearchParams(location.search).get('phase');
+  const found = PLAYABLE.find((p) => p === phase);
+  return found ? { ...freshRun(), phase: found } : null;
 }
 
-/** Plan 1 test dream: walking, collisions, darkness, the flashlight and one scare. Plan 2 replaces it. */
 export function createDream(): DreamModule {
-  let flashlight: Flashlight | null = null;
-  let stop: (() => void) | null = null;
-  let camera: THREE.Camera | null = null;
+  let ctx: DreamContext | null = null;
+  let store: SaveStore<RunSave> | null = null;
+  let chapter: Chapter | null = null;
+  let save: RunSave = freshRun();
+  let resumable = false;
   let disposed = false;
+
+  const onDone = (done: RunSave): void => {
+    save = done;
+    ctx?.read(THE_END, () => ctx?.finish());
+  };
+
+  /** Builds a chapter for `from`; null if the dream was disposed meanwhile. */
+  async function build(from: RunSave): Promise<Chapter | null> {
+    if (!ctx || !store) return null;
+    const built = await startChapter(ctx, CITY, playable(from), store, onDone);
+    if (!disposed) return built;
+    built.dispose();
+    return null;
+  }
+
+  /** Fade out, drop the old chapter, build a fresh run (with "Loading…" if slow), fade in, title card. */
+  async function startOver(): Promise<void> {
+    if (!ctx || !store) return;
+    chapter?.freeze();
+    await ctx.overlay.fade(true);
+    if (disposed) return;
+    chapter?.dispose();
+    chapter = null;
+    store.clear();
+    save = freshRun();
+    resumable = false;
+    const { overlay } = ctx;
+    const loading = setTimeout(() => showMessage(overlay, '', 'Loading…'), LOADING_DELAY_MS);
+    chapter = await build(save);
+    clearTimeout(loading);
+    overlay.closePanel();
+    if (!chapter) return;
+    await overlay.fade(false);
+    if (!disposed) chapter.announce(true);
+  }
+
+  async function begin(): Promise<void> {
+    if (!ctx) return;
+    if (resumable) {
+      const label = `Continue from ${phaseTitle(save.phase)}?`;
+      const pick = await ctx.choose(label, ['Continue', 'Start over']);
+      if (disposed) return;
+      if (pick === 1) return startOver();
+      if (!PLAYABLE.includes(save.phase)) return ctx.read(THE_END, () => ctx?.finish());
+    }
+    chapter?.announce(true);
+  }
+
   return {
-    async start(ctx: DreamContext) {
-      const scene = await buildTestScene();
-      if (disposed) return;
-      const view = ctx.stage.camera;
-      camera = view;
-      scene.add(view);
-      ctx.stage.scene = scene;
-      const sky = scene.getObjectByName(SKY_NAME);
-      ctx.player.setColliders(testColliders());
-      ctx.player.teleport(SPAWN.x, SPAWN.z, SPAWN.yaw);
-      const torch = createFlashlight(view);
-      flashlight = torch;
-      const figure = await loadWatcherFigure();
-      if (disposed) return;
-      figure.position.set(WATCHER.x, 0, WATCHER.z);
-      scene.add(figure);
-      const sting = stingBuffer(ctx.audio.listener.context);
-      let toldAboutLight = false;
-      let watcher: WatcherState = 'waiting';
-      let since = 0;
-      stop = ctx.stage.addUpdater((dt) => {
-        // Keep the sky centred on the player so it never ends, wherever they walk.
-        sky?.position.set(view.position.x, 0, view.position.z);
-        // Drop key taps made while reading or paused, so they don't fire on resume.
-        if (ctx.isPaused()) {
-          ctx.keys.consumePress('KeyF');
-          return;
-        }
-        if (ctx.keys.consumePress('KeyF')) {
-          torch.on = !torch.on;
-          torch.apply(100, 0);
-        }
-        if (!toldAboutLight && view.position.z < -8) {
-          toldAboutLight = true;
-          ctx.read(['It is getting dark. Press F to turn your flashlight on or off.']);
-        }
-        const distance = Math.hypot(view.position.x - WATCHER.x, view.position.z - WATCHER.z);
-        if (shouldStrike(watcher, distance)) {
-          watcher = 'struck';
-          ctx.audio.once(sting, 0.9);
-        }
-        if (watcher !== 'struck') return;
-        since += dt;
-        figure.visible = since < WATCHER.vanishAfter;
-        view.rotation.z = shakeAt(since) * JOLT_ROLL * Math.sin(since * 70);
-        torch.light.intensity = torch.on && flickerOn(since) ? FLASHLIGHT.intensity : 0;
-      });
+    async start(context) {
+      ctx = context;
+      store = createSaveStore(browserStorage(), 'follow-the-river', isRunSave);
+      const forced = devOverride();
+      const loaded = forced ?? store.load();
+      save = loaded ?? freshRun();
+      resumable = !forced && loaded !== null && loaded.phase !== 'intro';
+      chapter = await build(save);
+    },
+    begin() {
+      void begin();
     },
     dispose() {
       disposed = true;
-      stop?.();
-      flashlight?.dispose();
-      camera?.rotation.set(0, camera.rotation.y, 0);
-      camera?.removeFromParent();
+      chapter?.dispose();
+      chapter = null;
     },
   };
 }

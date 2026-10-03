@@ -40,5 +40,7 @@ export interface DreamModule {
    * while this is still loading (a timeout), it must not touch the stage afterwards.
    */
   start(ctx: DreamContext): Promise<void>;
+  /** Called once the intro pages are finished (the game is about to run). */
+  begin?(): void;
   dispose(): void;
 }

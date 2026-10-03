@@ -7,6 +7,7 @@ import { characterUrl, propUrl } from './kits';
 import { EDGE_X, RIVER_X } from './river';
 import type { Sounds } from './sounds';
 import type { Horde } from './zombies/horde';
+import { SPAWNER } from './zombies/spawner';
 
 export const FISH = {
   strikesPerPack: 3,
@@ -31,7 +32,9 @@ const PACK_DISTANCE = 4;
 const PACK_TIME = 1;
 const PACK_ARC = 1.2;
 const SHADOW_OPACITY = 0.35;
-const CAPACITY = 32;
+const CAPACITY = Math.max(32, SPAWNER.cap);
+const MIN_SWIM_SPEED = 0.3; // m/s along the river before the heading follows motion
+const MAX_LEAN = 0.25;
 
 export function strikesFor(fed: number): number {
   return FISH.baseStrikes + fed * FISH.strikesPerPack;
@@ -75,6 +78,13 @@ export interface Fish {
   update(dt: number, player: { x: number; z: number }, horde: Horde | null, night: boolean): void;
   reset(): void;
   dispose(): void;
+}
+
+/** Yaw for velocity (vx, vz): along the river while swimming, else resting downstream (-Z). */
+export function cruiseHeading(vx: number, vz: number): number {
+  if (Math.abs(vz) < MIN_SWIM_SPEED) return 0;
+  const lean = Math.max(-MAX_LEAN, Math.min(MAX_LEAN, Math.atan2(vx, Math.abs(vz))));
+  return vz < 0 ? -lean : Math.PI + lean;
 }
 
 const smooth = (s: number): number => s * s * (3 - 2 * s);
@@ -236,7 +246,7 @@ export async function createFish(
     const stepZ = Math.sign(dz) * Math.min(Math.abs(dz), FISH.follow * dt);
     const x = root.position.x + (targetX - root.position.x) * Math.min(1, 2 * dt);
     const dx = x - root.position.x;
-    if (dx * dx + stepZ * stepZ > 1e-8) yaw = turnToward(yaw, Math.atan2(-dx, -stepZ), 3 * dt);
+    yaw = turnToward(yaw, cruiseHeading(dx / dt, stepZ / dt), 3 * dt);
     const y = root.position.y + (CRUISE_Y - root.position.y) * Math.min(1, 3 * dt);
     root.position.set(x, y, root.position.z + stepZ);
   }
@@ -292,6 +302,7 @@ export async function createFish(
     arm(n) {
       strikes = n;
     },
+    // A second feed() before the first pack lands replaces it (one pack in flight at a time).
     feed(from) {
       packFrom.set(from.x, from.y, from.z);
       packTo.set(EDGE_X + PACK_DISTANCE, WATER_Y, from.z);
@@ -331,6 +342,7 @@ export async function createFish(
       packT = -1;
       takePending = false;
       packModel.visible = false;
+      if (splash.isPlaying) splash.stop();
       if (rise?.lunge) {
         lunge.stop();
         swim.reset().play();
@@ -341,6 +353,7 @@ export async function createFish(
       if (splash.isPlaying) splash.stop();
       splashAt.remove(splash);
       mixer.stopAllAction();
+      mixer.uncacheRoot(body);
       scene.remove(root, shadow, packModel, splashAt);
       shadow.geometry.dispose();
       shadow.material.map?.dispose();

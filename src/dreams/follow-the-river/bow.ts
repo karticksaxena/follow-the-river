@@ -97,8 +97,8 @@ export async function createBow(
   sounds: Sounds,
 ): Promise<Bow> {
   const [bowModel, arrowModel] = await Promise.all([
-    loadModel(propUrl('bow.glb')),
-    loadModel(propUrl('arrow.glb')),
+    loadModel(propUrl('bow')),
+    loadModel(propUrl('arrow')),
   ]);
   const view = new THREE.Group();
   view.position.set(0.28, -0.3, -0.55);

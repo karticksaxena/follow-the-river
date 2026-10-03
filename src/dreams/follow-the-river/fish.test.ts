@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canThrow, FISH, pickStrike, strikesFor } from './fish';
+import { canThrow, cruiseHeading, FISH, pickStrike, strikesFor } from './fish';
 
 describe('fish', () => {
   it('gets stronger with every pack thrown in by day', () => {
@@ -19,5 +19,11 @@ describe('fish', () => {
     expect(canThrow(2, 3, 1)).toBe(true);
     expect(canThrow(-2, 3, 1)).toBe(false);
     expect(canThrow(2, 3, 0)).toBe(false);
+  });
+
+  it('rests facing downstream when not swimming along the river', () => {
+    expect(cruiseHeading(1.5, 0)).toBe(0);
+    expect(Math.abs(cruiseHeading(1, -2.5))).toBeLessThanOrEqual(0.25);
+    expect(cruiseHeading(0, 2.5)).toBeCloseTo(Math.PI);
   });
 });

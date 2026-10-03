@@ -37,20 +37,36 @@ export function createHud(root: HTMLElement): Hud {
   hurtEl.addEventListener('animationend', () => hurtEl.classList.remove('flash'));
 
   // Last written values, so the DOM is only touched when something changes.
-  let last: HudState | null = null;
+  // `fresh` makes the first set() write everything; after that fields are copied in place.
+  const last: HudState = {
+    battery: 0,
+    arrows: 0,
+    fishPacks: 0,
+    ammo: 0,
+    health: 0,
+    showAmmo: false,
+  };
+  let fresh = true;
   let lastPrompt: string | null = null;
 
   return {
     set(s) {
-      if (last?.battery !== s.battery) battery.textContent = `🔦 ${batteryCells(s.battery)}`;
-      if (last?.arrows !== s.arrows) arrows.textContent = `➶ ${s.arrows}`;
-      if (last?.fishPacks !== s.fishPacks) fish.textContent = `🐟 ${s.fishPacks}`;
-      if (last?.ammo !== s.ammo) ammo.textContent = `● ${s.ammo}`;
-      if (last?.showAmmo !== s.showAmmo) ammo.hidden = !s.showAmmo;
-      if (last?.health !== s.health) {
+      if (fresh || last.battery !== s.battery)
+        battery.textContent = `🔦 ${batteryCells(s.battery)}`;
+      if (fresh || last.arrows !== s.arrows) arrows.textContent = `➶ ${s.arrows}`;
+      if (fresh || last.fishPacks !== s.fishPacks) fish.textContent = `🐟 ${s.fishPacks}`;
+      if (fresh || last.ammo !== s.ammo) ammo.textContent = `● ${s.ammo}`;
+      if (fresh || last.showAmmo !== s.showAmmo) ammo.hidden = !s.showAmmo;
+      if (fresh || last.health !== s.health) {
         hurtEl.style.opacity = String(Math.max(0, Math.min(1, 1 - s.health / 100)));
       }
-      last = { ...s };
+      fresh = false;
+      last.battery = s.battery;
+      last.arrows = s.arrows;
+      last.fishPacks = s.fishPacks;
+      last.ammo = s.ammo;
+      last.health = s.health;
+      last.showAmmo = s.showAmmo;
     },
     prompt(text) {
       if (text === lastPrompt) return;

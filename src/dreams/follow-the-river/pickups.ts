@@ -58,10 +58,15 @@ export function collect(state: RunState, pickup: PickupDef): RunState {
   };
 }
 
+/** True when taking this pickup would add nothing because that supply is at its limit. */
+export function isFull(pickup: PickupDef, supplies: Supplies): boolean {
+  const gain = PICKUP_GAIN[pickup.kind];
+  return gain !== null && supplies[gain.kind] >= SUPPLY_LIMITS[gain.kind];
+}
+
 export function promptFor(pickup: PickupDef, supplies: Supplies): string {
   const text = PROMPT[pickup.kind];
-  const gain = PICKUP_GAIN[pickup.kind];
-  return gain && supplies[gain.kind] >= SUPPLY_LIMITS[gain.kind] ? text.full : text.take;
+  return isFull(pickup, supplies) ? text.full : text.take;
 }
 
 export interface PickupMeshes {
