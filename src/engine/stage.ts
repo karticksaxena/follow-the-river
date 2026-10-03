@@ -1,9 +1,10 @@
 import * as THREE from 'three/webgpu';
+import { createPost } from './post';
 import { internalResolution } from './resolution';
 import { clampDelta } from './time';
 
-/** Rows rendered per frame before upscaling. Lower = chunkier PS1 look. Tuning knob. */
-export const RENDER_HEIGHT = 360;
+/** Rows rendered per frame before upscaling. Lower = chunkier, retro look. Tuning knob. */
+export const RENDER_HEIGHT = 540;
 
 export type Backend = 'webgpu' | 'webgl2';
 export type Updater = (dt: number) => void;
@@ -32,8 +33,11 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   const renderer = new THREE.WebGPURenderer({ antialias: false, forceWebGL });
   await renderer.init();
   renderer.setPixelRatio(1);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   container.append(renderer.domElement);
   const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.05, 200);
+  const post = createPost(renderer, camera);
   const updaters = new Set<Updater>();
   const timer = new THREE.Timer();
   timer.connect(document);
@@ -55,6 +59,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
       void renderer.setAnimationLoop(null);
       removeEventListener('resize', onResize);
       timer.dispose();
+      post.dispose();
       void renderer.dispose();
       renderer.domElement.remove();
     },
@@ -63,7 +68,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
     timer.update(time);
     const dt = clampDelta(timer.getDelta());
     for (const fn of updaters) fn(dt);
-    renderer.render(stage.scene, camera);
+    post.render(stage.scene);
   });
   return stage;
 }
