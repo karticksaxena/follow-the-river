@@ -66,6 +66,8 @@ function loadBodies(
 
 /** Frees what a cancelled build made. Only touches the camera if the scene still owns it. */
 function free(scene: THREE.Scene, camera: THREE.Camera, parts?: Partial<Systems>): void {
+  // Scene first (as in the chapter teardown), while the viewmodels still hang off the camera.
+  disposeScene(scene);
   parts?.horde?.dispose();
   parts?.bow?.dispose();
   parts?.gun?.dispose();
@@ -76,7 +78,6 @@ function free(scene: THREE.Scene, camera: THREE.Camera, parts?: Partial<Systems>
   parts?.ambience?.dispose();
   parts?.scares?.dispose();
   if (camera.parent === scene) camera.removeFromParent();
-  disposeScene(scene);
 }
 
 /**

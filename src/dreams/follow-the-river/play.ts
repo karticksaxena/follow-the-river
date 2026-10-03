@@ -243,7 +243,7 @@ function tick(p: State, dt: number): void {
   updateSense(p);
   p.controls.update(dt);
   tickWorld(p, dt);
-  sys.scares.update(dt, sense, isNight(run.phase));
+  sys.scares.update(dt, sense, isNight(run.phase) && run.ending !== 'calm');
   if (isNight(run.phase) && run.ending === 'no') spawnNight(p, dt);
   tickDim(p, dt);
   tickHints(p);
@@ -251,8 +251,9 @@ function tick(p: State, dt: number): void {
   if (isNight(run.phase) && run.ending === 'no') endNight(p);
 }
 
-/** Night 1–2: the safe spot ends the night. Night 3: the dam's foot starts the ending. */
+/** Night 1–2: the safe spot ends the night. Night 3: the lake shore starts the ending. */
 function endNight(p: State): void {
+  if (p.run.dying !== 'no') return; // died this frame: the death restart wins over arriving
   const end = nightEnd(p.sys.area, p.sense.x, p.sense.z);
   if (end === 'safe') p.events.arrive();
   else if (end === 'ending') p.events.ending();

@@ -51,7 +51,10 @@ export function createDream(): DreamModule {
   let area: AreaDef | null = null;
 
   /** "Watch the ending again": the epilogue and credits (the live finale plays inside Night 3). */
-  const onFinale = (): void => ctx?.read(REPLAY_PAGES, () => ctx?.finish());
+  const onFinale = (): void => {
+    if (ctx) ctx.stage.scene = new THREE.Scene(); // dark behind the pages, never a stale stage
+    ctx?.read(REPLAY_PAGES, () => ctx?.finish());
+  };
 
   /** A night is survived: show the area's arrival pages, then hand over to the next chapter. */
   const onDone = (done: RunSave): void => {
@@ -164,7 +167,7 @@ export function createDream(): DreamModule {
   async function begin(): Promise<void> {
     if (!ctx) return;
     if (save.phase === 'end') {
-      const pick = await ctx.choose('You reached the dam.', [
+      const pick = await ctx.choose('You reached the lake.', [
         'Watch the ending again',
         'Start over',
       ]);
