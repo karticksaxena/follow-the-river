@@ -20,6 +20,13 @@ function seeded(seed: number): () => number {
 }
 
 /**
+ * Silhouettes run from well behind the spawn (z = 0) to well past the bank's far end
+ * (z ≈ -110), further than the fog reaches (70 m), so no end of the row is ever visible.
+ */
+export const SKYLINE_FROM_Z = 90;
+export const SKYLINE_SPAN = 290;
+
+/**
  * Distant city blocks across the river and a tree line behind the bank, all well outside
  * the walkable strip. They read as shapes in the fog, so the world never ends at a cliff.
  */
@@ -34,7 +41,7 @@ export function skylineLayout(
   for (let i = 0; i < count; i++) {
     out.push({
       x: minX + random() * (maxX - minX),
-      z: 20 - i * (170 / count) - random() * 4,
+      z: SKYLINE_FROM_Z - i * (SKYLINE_SPAN / count) - random() * 4,
       width: 3 + random() * 6,
       height: 6 + random() * 22,
     });

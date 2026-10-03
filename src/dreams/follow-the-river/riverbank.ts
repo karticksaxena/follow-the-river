@@ -21,6 +21,9 @@ export const CRATES: ReadonlyArray<readonly [number, number, number]> = [
 
 export const SPAWN = { x: 0, z: 0, yaw: 0 } as const;
 
+/** Small enough that the far side stays inside the camera's 200 m far plane from anywhere on the bank. */
+const SKY_DOME_RADIUS = 80;
+
 /** Crates, the river (no swimming yet) and the edges of the walkable strip. */
 export function riverbankColliders(): Box[] {
   const crates = CRATES.map(([x, z, size]) => boxAt(x, z, size, size));
@@ -47,7 +50,10 @@ export async function buildRiverbank(): Promise<THREE.Scene> {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(SKY);
   scene.fog = new THREE.Fog(SKY, 6, 70);
-  scene.add(createSkyDome(0x07090c, SKY), new THREE.HemisphereLight(0x5a6470, 0x15180f, 0.6));
+  scene.add(
+    createSkyDome(0x07090c, SKY, SKY_DOME_RADIUS),
+    new THREE.HemisphereLight(0x5a6470, 0x15180f, 0.6),
+  );
   const middle = -BANK_LENGTH / 2 + 10;
   // Ground and water run far past the walkable strip so fog, not an edge, ends the view.
   const ground = plane(120, 360, 0x2b2f24);

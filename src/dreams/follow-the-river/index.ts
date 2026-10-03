@@ -20,7 +20,11 @@ export function createDream(): DreamModule {
       flashlight = light;
       let toldAboutLight = false;
       stop = ctx.stage.addUpdater(() => {
-        if (ctx.isPaused()) return;
+        // Drop key taps made while reading or paused, so they don't fire on resume.
+        if (ctx.isPaused()) {
+          ctx.keys.consumePress('KeyF');
+          return;
+        }
         if (ctx.keys.consumePress('KeyF')) light.visible = !light.visible;
         if (!toldAboutLight && camera && camera.position.z < -8) {
           toldAboutLight = true;
