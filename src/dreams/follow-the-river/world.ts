@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { addBatched } from '../../engine/batch';
 import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
 import type { AreaDef, PropPlacement } from './areas/types';
@@ -73,10 +74,11 @@ export async function buildWorld(area: AreaDef): Promise<World> {
     addSkyline(scene, area.skyline, area.startZ, area.endZ),
     ...area.shacks.map((shack) => addShack(scene, shack)),
   ]);
-  for (const { model, collider } of props) {
-    scene.add(model);
-    if (collider) colliders.push(collider);
-  }
+  for (const { collider } of props) if (collider) colliders.push(collider);
+  addBatched(
+    scene,
+    props.map((p) => p.model),
+  );
   for (const shack of area.shacks) colliders.push(...shackColliders(shack));
   const bounds = area.shacks.map(shackBounds);
   return {

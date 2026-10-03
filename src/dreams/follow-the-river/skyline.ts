@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { assetUrl } from '../../engine/assets';
+import { addBatched } from '../../engine/batch';
 import { loadModel } from '../../engine/models';
 import { KIT_SCALE, kitUrl } from './kits';
 
@@ -117,7 +118,7 @@ function farBankItem(style: SkylineStyle, s: Silhouette, i: number): Item {
 /**
  * Places the far-bank silhouettes (windows facing the river) and a tree line behind the bank,
  * spanning `startZ` to `endZ` plus a margin so no end of the row is visible.
- * ponytail: one clone per prop (~130 meshes); switch to InstancedMesh if draw calls hurt.
+ * Static meshes are merged per material and map cell (addBatched).
  */
 export async function addSkyline(
   scene: THREE.Scene,
@@ -137,6 +138,6 @@ export async function addSkyline(
     model.position.set(item.x, 0, item.z);
     model.rotation.y = item.yaw;
     model.scale.setScalar(item.scale);
-    scene.add(model);
   });
+  addBatched(scene, models);
 }
