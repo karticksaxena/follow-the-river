@@ -14,6 +14,7 @@ Every file in `public/assets/` must be listed here. CC0 only.
 | `kits/roads/*` | Kenney — City Kit (Roads), https://kenney.nl/assets/city-kit-roads | CC0 1.0 |
 | `kits/cars/*` | Kenney — Car Kit, https://kenney.nl/assets/car-kit | CC0 1.0 |
 | `kits/survival/*` | Kenney — Survival Kit, https://kenney.nl/assets/survival-kit | CC0 1.0 |
+| `kits/nature/*` | Kenney — Nature Kit, https://kenney.nl/assets/nature-kit | CC0 1.0 |
 | `kits/suburb/*` | Kenney — City Kit (Suburban), https://kenney.nl/assets/city-kit-suburban | CC0 1.0 |
 | `sounds/zombie/groan-01…24.m4a` | artisticdude — "Zombies Sound Pack", https://opengameart.org/content/zombies-sound-pack (converted to AAC) | CC0 1.0 |
 | `sounds/ambience/*.m4a`, `sounds/stings/*.m4a` | "30 CC0 SFX loops", https://opengameart.org/content/30-cc0-sfx-loops (water_flowing, ambient_01–03, noise_01, weird_01–03, alarm_01; converted to AAC) | CC0 1.0 |
