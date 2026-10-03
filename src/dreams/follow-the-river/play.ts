@@ -18,6 +18,8 @@ const DIM_EPSILON = 0.01;
 const HURT_HEALTH = 34;
 /** Within this many metres of the wait spot the `wait` hint appears. */
 const WAIT_HINT_RANGE = 12;
+/** After the "you are hurt" page closes, zombie hits can't land for this long (s). */
+const HURT_GRACE = 1;
 const NIGHT_STRIP_MARGIN = 0.5;
 const NIGHT_SAFE_BUFFER = 15;
 
@@ -39,6 +41,9 @@ interface State {
   strip: Strip;
   hudState: HudState;
   wasPaused: boolean;
+  /** A non-lethal hit this frame: if the game pauses next (hint page), grace starts on resume. */
+  hitPause: boolean;
+  grace: number;
   toldAboutWait: boolean;
   wasInShack: boolean;
   blocked: (x: number, z: number) => boolean;
@@ -60,7 +65,7 @@ function newSense(): PlayerSense {
 function createState(sys: Systems, run: Run, events: Events): State {
   const { area, hud, grid } = sys;
   const sense = newSense();
-  return {
+  const state: State = {
     sys,
     run,
     events,
@@ -76,6 +81,8 @@ function createState(sys: Systems, run: Run, events: Events): State {
     },
     hudState: { battery: 0, arrows: 0, fishPacks: 0, ammo: 0, health: 0, showAmmo: false },
     wasPaused: true,
+    hitPause: false,
+    grace: 0,
     toldAboutWait: false,
     wasInShack: false,
     blocked(x, z) {
@@ -85,12 +92,17 @@ function createState(sys: Systems, run: Run, events: Events): State {
       return false;
     },
     onHit(damage) {
+      if (state.grace > 0) return;
       run.health = takeDamage(run.health, damage);
       hud.hurt();
       if (run.health === 0) events.die();
-      else events.hint('hurt');
+      else {
+        state.hitPause = true;
+        events.hint('hurt');
+      }
     },
   };
+  return state;
 }
 
 function updateSense(p: State): void {
@@ -141,7 +153,7 @@ function spawnNight(p: State, dt: number): void {
 function tickDim(p: State, dt: number): void {
   const { run, sys, sense } = p;
   const inside = sys.world.insideShack(sense.x, sense.z);
-  if (inside && !p.wasInShack) p.events.hint('shack');
+  if (inside && !p.wasInShack && !isNight(run.phase)) p.events.hint('shack');
   p.wasInShack = inside;
   const target = inside ? 1 : 0;
   const move = DIM_RATE * dt;
@@ -188,7 +200,12 @@ function tick(p: State, dt: number): void {
     p.wasPaused = true;
     return;
   }
-  if (p.wasPaused) p.controls.drain();
+  if (p.wasPaused) {
+    p.controls.drain();
+    if (p.hitPause) p.grace = HURT_GRACE;
+  }
+  p.hitPause = false;
+  p.grace = Math.max(0, p.grace - dt);
   p.wasPaused = false;
   if (run.frozen) {
     sys.ambience.hush(dt);
@@ -196,7 +213,7 @@ function tick(p: State, dt: number): void {
   }
   run.time += dt;
   updateSense(p);
-  p.controls.update(dt);
+  p.controls.update();
   tickWorld(p, dt);
   sys.scares.update(dt, sense, isNight(run.phase));
   if (isNight(run.phase)) spawnNight(p, dt);
@@ -214,6 +231,9 @@ export function createPlay(sys: Systems, run: Run, events: Events): Play {
       p.spawnTimer.timer = SPAWNER.interval;
       p.toldAboutWait = false;
       p.wasInShack = false;
+      p.hitPause = false;
+      p.grace = 0;
+      p.controls.drain(); // a stale click (e.g. on "Continue") must not fire an arrow
     },
     update: (dt) => tick(p, dt),
   };

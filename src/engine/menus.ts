@@ -68,12 +68,13 @@ export function showPages(overlay: Overlay, pages: readonly string[], onDone: ()
   render();
 }
 
-/** A player-paced question. Buttons only; the first one gets focus so Enter picks it. */
+/** A player-paced question. Buttons only; `focus` (default the first) gets focus so Enter picks it. */
 export function showChoice(
   overlay: Overlay,
   text: string,
   labels: readonly string[],
   onPick: (index: number) => void,
+  focus = 0,
 ): void {
   const buttons = labels.map((label, index) =>
     button(
@@ -82,7 +83,7 @@ export function showChoice(
         overlay.closePanel();
         onPick(index);
       },
-      index === 0 ? 'btn primary' : 'btn',
+      index === focus ? 'btn primary' : 'btn',
     ),
   );
   overlay.panel((panel) => {
@@ -90,7 +91,7 @@ export function showChoice(
     row.append(...buttons);
     panel.append(el('p', 'page-text', text), row);
   });
-  buttons[0]?.focus();
+  buttons[focus]?.focus();
 }
 
 export interface PauseMenuOptions {

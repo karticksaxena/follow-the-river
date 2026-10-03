@@ -41,6 +41,8 @@ function createGate(app: App, showMenu: () => void): Gate {
   };
   const onLock = (event: LockEvent): void => {
     setScreen(screenAfter(event, reading));
+    // A late 'locked' (requested by a closed reader) while another reader is open: stay paused.
+    if (event === 'locked' && reading) player.unlock();
     if (screen === 'game') app.overlay.closePanel();
     if (screen === 'pause-menu') showMenu();
   };
@@ -116,16 +118,23 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
       onDone?.();
     });
   };
-  const choose = (text: string, labels: readonly string[]): Promise<number> =>
+  const choose = (text: string, labels: readonly string[], focus = 0): Promise<number> =>
     new Promise((resolve) => {
       gate.openReader();
-      showChoice(app.overlay, text, labels, (index) => {
-        gate.closeReader();
-        resolve(index);
-      });
+      showChoice(
+        app.overlay,
+        text,
+        labels,
+        (index) => {
+          gate.closeReader();
+          resolve(index);
+        },
+        focus,
+      );
     });
+  const hold = (): void => gate.openReader();
   const finish = (): void => {
-    gate.openReader(); // freeze input so the pause menu can't open during the fade
+    hold(); // freeze input so the pause menu can't open during the fade
     void app.overlay.fade(true).then(leave);
   };
   return {
@@ -133,7 +142,7 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
       current = dream;
       const { stage, overlay, audio, keys } = app;
       const { player, isPaused } = gate;
-      return { stage, overlay, audio, keys, player, isPaused, read, choose, finish };
+      return { stage, overlay, audio, keys, player, isPaused, read, choose, hold, finish };
     },
     cleanUp,
     begin: () => read(info.intro, () => current?.begin?.()),

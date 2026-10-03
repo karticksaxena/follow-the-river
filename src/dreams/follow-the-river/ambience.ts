@@ -24,8 +24,9 @@ interface Layer {
 function step(layer: Layer, target: number, dt: number): void {
   const delta = target - layer.volume;
   const max = EASE_PER_SECOND * dt;
+  const before = layer.volume;
   layer.volume += Math.max(-max, Math.min(max, delta));
-  layer.sound.setVolume(layer.volume);
+  if (layer.volume !== before) layer.sound.setVolume(layer.volume);
 }
 
 /** Water, wind, the night drone, the horde murmur and a heartbeat: all started once, volume-driven. */

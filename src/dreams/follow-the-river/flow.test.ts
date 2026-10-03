@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { CITY } from './areas/city';
-import { atSafeSpot, MAX_HEALTH, nearSpot, phaseTitle, spawnFor, takeDamage } from './flow';
+import {
+  atSafeSpot,
+  MAX_HEALTH,
+  nearSpot,
+  phaseTitle,
+  spawnFor,
+  takeDamage,
+  waitQuestion,
+} from './flow';
 
 describe('chapter flow', () => {
   it('takes damage down to zero, never below', () => {
@@ -24,6 +32,13 @@ describe('chapter flow', () => {
       'Night 3',
       '',
     ]);
+  });
+
+  it('warns only about what still applies before waiting for dark', () => {
+    expect(waitQuestion(0, false)).toBe('Wait for dark? You cannot come back here.');
+    expect(waitQuestion(1, false)).toContain('1 fish pack — throw it');
+    expect(waitQuestion(2, true)).toContain('2 fish packs — throw them');
+    expect(waitQuestion(2, true)).toContain('tape');
   });
 
   it('checks closeness on the ground plane', () => {

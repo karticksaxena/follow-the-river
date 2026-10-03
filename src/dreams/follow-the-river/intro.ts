@@ -252,9 +252,29 @@ function makeTick(
   };
 }
 
-/** Builds the house and riverbank at dusk and runs the intro; `onDone` when Mom sends you off. */
-export async function runIntro(ctx: DreamContext, onDone: () => void): Promise<Intro> {
+function freeIntroScene(sc: IntroScene): void {
+  sc.fish.dispose();
+  sc.mom.dispose();
+  sc.news.dispose();
+  disposeScene(sc.scene);
+}
+
+const NO_INTRO: Intro = { dispose: () => undefined };
+
+/**
+ * Builds the house and riverbank at dusk and runs the intro; `onDone` when Mom sends you off.
+ * If `isCancelled()` is true once the scene is built, it is freed and nothing else is touched.
+ */
+export async function runIntro(
+  ctx: DreamContext,
+  onDone: () => void,
+  isCancelled: () => boolean = () => false,
+): Promise<Intro> {
   const sc = await buildIntroScene(ctx);
+  if (isCancelled()) {
+    freeIntroScene(sc);
+    return NO_INTRO;
+  }
   const hud = createHud(ctx.overlay.root);
   const cam = ctx.stage.camera.position;
   const st: State = {
@@ -295,10 +315,7 @@ export async function runIntro(ctx: DreamContext, onDone: () => void): Promise<I
       stop();
       st.water?.stop();
       hud.dispose();
-      sc.fish.dispose();
-      sc.mom.dispose();
-      sc.news.dispose();
-      disposeScene(sc.scene);
+      freeIntroScene(sc);
     },
   };
 }

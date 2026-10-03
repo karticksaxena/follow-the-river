@@ -28,8 +28,10 @@ export interface DreamContext {
   isPaused: () => boolean;
   /** Show player-paced pages (pauses the game until the player finishes reading). */
   read: (pages: readonly string[], onDone?: () => void) => void;
-  /** Player-paced question with buttons; resolves with the chosen index. Pauses the game. */
-  choose: (text: string, labels: readonly string[]) => Promise<number>;
+  /** Player-paced question with buttons; resolves with the chosen index. `focus` is the button Enter picks (default 0). Pauses the game. */
+  choose: (text: string, labels: readonly string[], focus?: number) => Promise<number>;
+  /** Freeze input (no pause menu) until the next `read`/`choose` closes; for scene swaps. */
+  hold: () => void;
   /** End the dream and return to the dream cards (fades out first). */
   finish: () => void;
 }

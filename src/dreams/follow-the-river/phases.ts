@@ -2,7 +2,7 @@ import type * as THREE from 'three/webgpu';
 import type { SaveStore } from '../../engine/save';
 import type { PickupDef } from './areas/types';
 import { strikesFor } from './fish';
-import { MAX_HEALTH, phaseTitle, spawnFor } from './flow';
+import { MAX_HEALTH, phaseTitle, spawnFor, waitQuestion } from './flow';
 import { HINTS, type HintId } from './hints';
 import { applyLighting, LIGHTING } from './lighting';
 import type { Run, Systems } from './run';
@@ -78,6 +78,7 @@ export function beginPhase(f: Flow): void {
   sys.flashlight.on = night;
   const at = spawnFor(save.phase, area);
   ctx.player.teleport(at.x, at.z, at.yaw);
+  sys.world.lights.sky.position.set(at.x, 0, at.z); // the dome follows the player; paused frames skip that
   f.onReset();
 }
 
@@ -92,8 +93,10 @@ export function announce(f: Flow, title: boolean): void {
 
 /** Asks, then saves the day, fades to black, starts the night and fades back in. */
 export async function waitForDark(f: Flow): Promise<void> {
-  const { ctx } = f.sys;
-  const pick = await ctx.choose('Wait for dark? You cannot come back here.', ['Wait', 'Not yet']);
+  const { ctx, area } = f.sys;
+  const tapeLeft = area.pickups.some((p) => p.kind === 'tape' && !f.run.taken.has(p.id));
+  const question = waitQuestion(f.run.live.supplies.fishPacks, tapeLeft);
+  const pick = await ctx.choose(question, ['Wait', 'Not yet'], 1); // Enter must not pick the irreversible one
   if (f.disposed || pick !== 0) return;
   f.run.frozen = true;
   f.save = completePhase(f.save, f.run.live);

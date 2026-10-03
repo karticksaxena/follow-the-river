@@ -1,5 +1,8 @@
+import * as THREE from 'three/webgpu';
 import { showMessage } from '../../engine/menus';
 import { browserStorage, createSaveStore, type SaveStore } from '../../engine/save';
+import { withTimeout } from '../../engine/time';
+import { LOAD_TIMEOUT_MS } from '../load';
 import type { DreamContext, DreamModule } from '../types';
 import { CITY } from './areas/city';
 import { startChapter, type Chapter } from './chapter';
@@ -19,12 +22,11 @@ const PLAYABLE: readonly Phase[] = ['day1', 'night1'];
 /** Show "Loading…" only when a scene swap takes longer than this. */
 const LOADING_DELAY_MS = 300;
 const THE_END = ['You made it to the boathouse.', 'Night 1 survived.', 'To be continued…'];
+const LOAD_FAILED = "Couldn't load the next part. Check your internet connection and try again.";
 
 /** The intro is played by `runIntro`; this fallback (a finished run restarting) skips it. */
 function playable(save: RunSave): RunSave {
-  if (save.phase === 'intro') return completePhase(save, restartPhase(save));
-  if (PLAYABLE.includes(save.phase)) return save;
-  return playable(freshRun());
+  return save.phase === 'intro' ? completePhase(save, restartPhase(save)) : save;
 }
 
 /** Dev only: `?phase=day1|night1` starts that phase with fresh supplies, ignoring the save. */
@@ -62,34 +64,59 @@ export function createDream(): DreamModule {
   async function enter(from: RunSave): Promise<void> {
     if (!ctx) return;
     if (from.phase !== 'intro') {
-      chapter = await build(from);
+      // A save past what is playable gets "Start over" in begin(), not a Day 1 built behind it.
+      if (PLAYABLE.includes(from.phase)) chapter = await build(from);
       return;
     }
-    const built = await runIntro(ctx, () => void finishIntro());
+    const built = await runIntro(
+      ctx,
+      () => void finishIntro(),
+      () => disposed,
+    );
     if (disposed) built.dispose();
     else intro = built;
   }
 
-  /** Fade out, run `swap` (with "Loading…" if slow), fade in, title card. */
+  /** Fade out, run `swap` (with "Loading…" if slow), fade in, title card. Input is frozen throughout. */
   async function transition(swap: () => Promise<void>): Promise<void> {
     if (!ctx) return;
     const { overlay } = ctx;
+    ctx.hold();
     await overlay.fade(true);
     if (disposed) return;
     const loading = setTimeout(() => showMessage(overlay, '', 'Loading…'), LOADING_DELAY_MS);
-    await swap();
-    clearTimeout(loading);
-    if (disposed || (!chapter && !intro)) return;
+    let failed = false;
+    try {
+      await withTimeout(swap(), LOAD_TIMEOUT_MS);
+    } catch {
+      failed = true;
+    } finally {
+      clearTimeout(loading);
+    }
+    if (disposed) return;
+    if (failed || (!chapter && !intro)) {
+      dropScene();
+      await ctx.choose(LOAD_FAILED, ['Back to dreams']);
+      return ctx.finish();
+    }
     overlay.closePanel();
     await overlay.fade(false);
-    if (!disposed) chapter?.announce(true);
+    if (disposed) return;
+    if (chapter) chapter.announce(true);
+    else ctx.read(['The dream begins again.']); // the player's click regains control
   }
 
-  function dropScene(): void {
+  function release(): void {
     chapter?.dispose();
     chapter = null;
     intro?.dispose();
     intro = null;
+  }
+
+  /** Frees the scene; the stage gets an empty one first so three never draws freed resources. */
+  function dropScene(): void {
+    if (ctx) ctx.stage.scene = new THREE.Scene();
+    release();
   }
 
   /** Mom has sent you off: save the end of the intro, swap to Day 1. */
@@ -121,7 +148,11 @@ export function createDream(): DreamModule {
       const pick = await ctx.choose(label, ['Continue', 'Start over']);
       if (disposed) return;
       if (pick === 1) return startOver();
-      if (!PLAYABLE.includes(save.phase)) return ctx.read(THE_END, () => ctx?.finish());
+    }
+    if (!PLAYABLE.includes(save.phase)) {
+      const done = 'This is as far as the dream goes for now.';
+      const again = await ctx.choose(done, ['Start over', 'Back to dreams']);
+      return again === 0 ? startOver() : ctx.finish();
     }
     chapter?.announce(true);
   }
@@ -141,7 +172,7 @@ export function createDream(): DreamModule {
     },
     dispose() {
       disposed = true;
-      dropScene();
+      release();
     },
   };
 }

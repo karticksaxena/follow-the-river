@@ -34,7 +34,7 @@ Tooling mirrors `~/Code/base-repo-ts/SETUP.md`: oxlint type-aware (`.oxlintrc.js
 - **Desktop only:** keyboard + mouse; full screen on Start; touch-only devices get the "play on a computer" screen.
 - **Saves:** only through `createSaveStore` (`kartiks-dreams:` prefix); blocked or corrupt storage must never crash.
 - **DOM:** text via `textContent` / `el()` — never `innerHTML` with dynamic strings. No `console` in committed code.
-- **Assets:** CC0 only; every file listed in `public/assets/LICENSES.md` (source URL + licence). Kenney GLBs are unlit — load through `loadModel` (it relights them).
+- **Assets:** CC0 for art/sound; fonts are OFL/Apache via @fontsource — everything listed in `public/assets/LICENSES.md` (source URL + licence). Kenney GLBs are unlit — load through `loadModel` (it relights them).
 - **Versions:** never hardcode versions in docs; install `@latest` stable and check `pnpm view <pkg> dist-tags` for prereleases. TypeScript must be a major that ships `lib/tsserver.js` (the typescript-lsp plugin needs it).
 
 ## Agents

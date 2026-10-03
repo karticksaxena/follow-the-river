@@ -25,6 +25,18 @@ export function nearSpot(
   return (x - spot.x) ** 2 + (z - spot.z) ** 2 <= radius * radius;
 }
 
+/** The "Wait for dark?" question, with only the warnings that apply. */
+export function waitQuestion(fishPacks: number, tapeLeft: boolean): string {
+  const parts = ['Wait for dark?'];
+  if (fishPacks > 0) {
+    const [noun, pronoun] = fishPacks === 1 ? ['pack', 'it'] : ['packs', 'them'];
+    parts.push(`You still hold ${fishPacks} fish ${noun} — throw ${pronoun} to the fish first.`);
+  }
+  if (tapeLeft) parts.push('You have not found the tape yet.');
+  parts.push('You cannot come back here.');
+  return parts.join(' ');
+}
+
 /** 'Day 1', 'Night 2'… ('' for intro and end). */
 export function phaseTitle(phase: Phase): string {
   const n = Number(phase.slice(-1));

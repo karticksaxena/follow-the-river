@@ -176,7 +176,7 @@ export const CITY: AreaDef = {
   startZ: START_Z,
   endZ: END_Z,
   daySpawn: { x: 0, z: 6, yaw: 0 },
-  waitSpot: { x: 1.5, z: -113, yaw: Math.PI },
+  waitSpot: { x: 0.5, z: -113, yaw: Math.PI },
   barricadeZ: BARRICADE_Z,
   nightStart: { x: 1.5, z: -124, yaw: 0 },
   safeZ: -400,

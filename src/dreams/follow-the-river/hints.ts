@@ -5,6 +5,7 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   pickup: [
     'Things you can use glow faintly in the dark: batteries, arrows, fish packs.',
     'Walk up to one and press E to pick it up.',
+    'Click to shoot your bow. F turns your flashlight on and off.',
   ],
   shack: [
     'It is pitch black in here.',
@@ -21,6 +22,7 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   ],
   night: [
     'Night. They are fast now.',
+    'Click shoots the bow. F is your flashlight.',
     'Run downstream to the boathouse. Shine your flashlight in their faces to stop them for a moment.',
     'Stay close to the water. Something in the river is hunting them too.',
   ],

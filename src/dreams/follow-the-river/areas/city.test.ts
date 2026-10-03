@@ -28,6 +28,15 @@ describe('CITY', () => {
     expect(CITY.safeZ).toBeGreaterThan(CITY.endZ);
   });
 
+  it('puts the wait spot at the campfire, not at the throwing edge', () => {
+    const fire = CITY.props.find((p) => p.model === 'campfire-pit');
+    expect(fire).toBeDefined();
+    expect(
+      Math.hypot(CITY.waitSpot.x - (fire?.x ?? 0), CITY.waitSpot.z - (fire?.z ?? 0)),
+    ).toBeLessThan(1);
+    expect(EDGE_X - CITY.waitSpot.x).toBeGreaterThan(1);
+  });
+
   it('places day pickups and lurkers before the barricade, not inside shack walls', () => {
     const walls = CITY.shacks.flatMap(shackColliders);
     for (const p of [...CITY.pickups, ...CITY.lurkers]) {

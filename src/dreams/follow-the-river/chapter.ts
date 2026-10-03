@@ -53,6 +53,8 @@ function newRun(save: RunSave): Run {
 function teardown(sys: Systems, stop: () => void): void {
   const { camera } = sys.ctx.stage;
   stop();
+  // Free the scene first: the systems below remove their own nodes (alarm box, fish shadow plane).
+  disposeScene(sys.world.scene);
   if (import.meta.env.DEV) Reflect.deleteProperty(window, 'kdRiver');
   sys.ambience.dispose();
   sys.horde.dispose();
@@ -65,7 +67,6 @@ function teardown(sys: Systems, stop: () => void): void {
   sys.flashlight.dispose();
   camera.removeFromParent();
   camera.rotation.set(0, camera.rotation.y, 0);
-  disposeScene(sys.world.scene);
 }
 
 /**

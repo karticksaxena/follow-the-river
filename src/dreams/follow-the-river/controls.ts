@@ -7,9 +7,8 @@ import type { Events, Run, Systems } from './run';
 import { isNight, spend } from './state';
 import type { PlayerSense } from './zombies/horde';
 
-/** How close (m) to the wait spot, and how long (s) a "No arrows" notice stays up. */
+/** How close (m) to the wait spot E asks to wait for dark. */
 const WAIT_RADIUS = 2;
-const NOTICE_SECONDS = 1.4;
 const CLICK_VOLUME = 0.5;
 const KEYS = ['KeyF', 'KeyE', 'Mouse0'] as const;
 
@@ -17,7 +16,7 @@ type Target = 'pickup' | 'fish' | 'wait' | null;
 
 export interface Controls {
   /** Handles F, E and click for this frame, then works out what E would do next. */
-  update(dt: number): void;
+  update(): void;
   /** Drops key presses made while paused so they don't fire on resume. */
   drain(): void;
   /** The prompt for what E would do, or null. */
@@ -32,8 +31,6 @@ interface Ctl {
   sense: PlayerSense;
   target: Target;
   pickup: PickupDef | null;
-  notice: string | null;
-  noticeLeft: number;
 }
 
 const click = (c: Ctl): void => void c.sys.ctx.audio.once(c.sys.sounds.click, CLICK_VOLUME);
@@ -48,9 +45,7 @@ function shoot(c: Ctl): void {
   if (!c.sys.bow.ready) return;
   const left = spend(c.run.live.supplies, 'arrows', 1);
   if (!left) {
-    click(c);
-    c.notice = 'No arrows';
-    c.noticeLeft = NOTICE_SECONDS;
+    click(c); // the HUD shows 0 arrows
     return;
   }
   c.run.live.supplies = left;
@@ -82,8 +77,9 @@ function find(c: Ctl): void {
   const night = isNight(c.run.phase);
   c.pickup = night ? null : nearestPickup(x, z, c.sys.area.pickups, c.run.taken);
   if (c.pickup) c.target = 'pickup';
-  else if (!night && canThrow(x, EDGE_X, c.run.live.supplies.fishPacks)) c.target = 'fish';
+  // The wait spot is tested first so the prompt doesn't flip at the campfire, by the water.
   else if (!night && nearSpot(x, z, c.sys.area.waitSpot, WAIT_RADIUS)) c.target = 'wait';
+  else if (!night && canThrow(x, EDGE_X, c.run.live.supplies.fishPacks)) c.target = 'fish';
   else c.target = null;
 }
 
@@ -93,10 +89,8 @@ function use(c: Ctl): void {
   else if (c.target === 'wait') c.events.wait();
 }
 
-function tick(c: Ctl, dt: number): void {
+function tick(c: Ctl): void {
   const { keys } = c.sys.ctx;
-  c.noticeLeft -= dt;
-  if (c.noticeLeft <= 0) c.notice = null;
   if (keys.consumePress('KeyF')) toggleLight(c);
   if (keys.consumePress('Mouse0')) shoot(c);
   find(c);
@@ -107,7 +101,6 @@ function tick(c: Ctl, dt: number): void {
 }
 
 function promptOf(c: Ctl): string | null {
-  if (c.notice) return c.notice;
   if (c.target === 'pickup' && c.pickup) return promptFor(c.pickup, c.run.live.supplies);
   if (c.target === 'fish') return 'E: throw a fish pack';
   return c.target === 'wait' ? 'E: wait for dark' : null;
@@ -126,11 +119,9 @@ export function createControls(
     sense,
     target: null,
     pickup: null,
-    notice: null,
-    noticeLeft: 0,
   };
   return {
-    update: (dt) => tick(c, dt),
+    update: () => tick(c),
     drain() {
       for (const code of KEYS) sys.ctx.keys.consumePress(code);
     },
