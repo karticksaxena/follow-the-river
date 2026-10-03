@@ -7,7 +7,7 @@ export interface Settings {
   volume: number;
 }
 
-export const DEFAULT_SETTINGS: Readonly<Settings> = { sensitivity: 1, volume: 0.8 };
+export const DEFAULT_SETTINGS: Readonly<Settings> = { sensitivity: 1.5, volume: 0.8 };
 export const SENSITIVITY_RANGE = { min: 0.2, max: 3 } as const;
 
 export function isSettings(value: unknown): value is Settings {
