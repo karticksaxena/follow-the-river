@@ -153,7 +153,9 @@ const PICKUPS: readonly PickupDef[] = [
 
 const LURKERS: readonly LurkerDef[] = [
   { x: SHACK_MID_X, z: -12, yaw: FACE_DOOR },
-  { x: SHACK_MID_X, z: -50, yaw: FACE_DOOR },
+  // The ambush: a "corpse" in s3's back corner, just over WAKE (4 m) from the tape, so it only
+  // rises when the tape is taken (or the player pokes around the corner).
+  { x: -16.2, z: -56.15, yaw: 0, lying: true },
   { x: SHACK_MID_X, z: -74, yaw: FACE_DOOR, lying: true },
   { x: SHACK_MID_X, z: -94, yaw: FACE_DOOR },
   { x: -6, z: -70, yaw: 0, lying: true },
