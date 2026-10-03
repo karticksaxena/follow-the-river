@@ -1,5 +1,5 @@
 import { toggleFullscreen } from './fullscreen';
-import { pagerActionForKey, startPager, stepPager, type PagerAction } from './pager';
+import { pagerActionForKeyEvent, startPager, stepPager, type PagerAction } from './pager';
 import { SENSITIVITY_RANGE, type Settings } from './settings';
 import { button, el, type Overlay } from './ui';
 
@@ -36,9 +36,14 @@ export function showPages(overlay: Overlay, pages: readonly string[], onDone: ()
     next.textContent = state.index + 1 === state.total ? 'Continue ✓' : 'Next →';
   };
   const onKey = (event: KeyboardEvent): void => {
-    // A focused button already reacts to Enter/Space natively; don't count the key twice.
-    if (event.target instanceof HTMLButtonElement) return;
-    const action = pagerActionForKey(event.code);
+    // Another screen replaced these pages: stop listening instead of acting on stale state.
+    if (!panel.isConnected) return removeEventListener('keydown', onKey);
+    const action = pagerActionForKeyEvent({
+      code: event.code,
+      repeat: event.repeat,
+      modifier: event.altKey || event.ctrlKey || event.metaKey,
+      onButton: event.target instanceof HTMLButtonElement,
+    });
     if (!action) return;
     event.preventDefault();
     act(action);
@@ -50,14 +55,14 @@ export function showPages(overlay: Overlay, pages: readonly string[], onDone: ()
     overlay.closePanel();
     onDone();
   };
-  overlay.panel((panel) => {
+  const panel = overlay.panel((body) => {
     const row = el('div', 'row');
     row.append(
       back,
       next,
       button('Skip', () => act('skip'), 'btn quiet'),
     );
-    panel.append(text, count, row, el('p', 'keys', 'Enter / → next · ← back'));
+    body.append(text, count, row, el('p', 'keys', 'Enter / → next · ← back'));
   });
   addEventListener('keydown', onKey);
   render();

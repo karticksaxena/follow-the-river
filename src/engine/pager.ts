@@ -27,3 +27,31 @@ export function pagerActionForKey(code: string): PagerAction | null {
   if (code === 'ArrowLeft' || code === 'Backspace') return 'prev';
   return null;
 }
+
+export interface ReadingKey {
+  code: string;
+  /** The key is held down and the browser is auto-repeating it. */
+  repeat: boolean;
+  /** Alt, Ctrl or Cmd is held (a browser shortcut such as Alt+← back). */
+  modifier: boolean;
+  /** A button has focus; Enter and Space already click it natively. */
+  onButton: boolean;
+}
+
+/**
+ * The page action for a key press, or null to leave the key alone. Ignores held-down
+ * repeats (no racing through pages), browser shortcuts, and Enter/Space on a focused
+ * button (the button's own click handles those). Arrows and Backspace always work.
+ */
+export function pagerActionForKeyEvent(key: ReadingKey): PagerAction | null {
+  if (key.repeat || key.modifier) return null;
+  if (
+    key.onButton &&
+    key.code !== 'ArrowRight' &&
+    key.code !== 'ArrowLeft' &&
+    key.code !== 'Backspace'
+  ) {
+    return null;
+  }
+  return pagerActionForKey(key.code);
+}
