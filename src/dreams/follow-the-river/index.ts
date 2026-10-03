@@ -1,15 +1,37 @@
-import * as THREE from 'three/webgpu';
-import type { DreamModule } from '../types';
+import type * as THREE from 'three/webgpu';
+import type { DreamContext, DreamModule } from '../types';
+import { createFlashlight } from './flashlight';
+import { buildRiverbank, riverbankColliders, SPAWN } from './riverbank';
 
-// Temporary (Task 8): an empty world so the registry has something to load. Task 9 replaces it.
+/** Plan 1 grey box: proves walking, collisions, darkness and the flashlight. Plan 2 replaces it. */
 export function createDream(): DreamModule {
+  let flashlight: THREE.SpotLight | null = null;
+  let stop: (() => void) | null = null;
+  let camera: THREE.Camera | null = null;
   return {
-    start(ctx) {
-      ctx.stage.scene = new THREE.Scene();
-      return Promise.resolve();
+    async start(ctx: DreamContext) {
+      const scene = await buildRiverbank();
+      camera = ctx.stage.camera;
+      scene.add(camera);
+      ctx.stage.scene = scene;
+      ctx.player.colliders = riverbankColliders();
+      ctx.player.teleport(SPAWN.x, SPAWN.z, SPAWN.yaw);
+      const light = createFlashlight(camera);
+      flashlight = light;
+      let toldAboutLight = false;
+      stop = ctx.stage.addUpdater(() => {
+        if (ctx.isPaused()) return;
+        if (ctx.keys.consumePress('KeyF')) light.visible = !light.visible;
+        if (!toldAboutLight && camera && camera.position.z < -8) {
+          toldAboutLight = true;
+          ctx.read(['It is getting dark. Press F to turn your flashlight on or off.']);
+        }
+      });
     },
     dispose() {
-      // Nothing to clean up yet.
+      stop?.();
+      if (flashlight && camera) camera.remove(flashlight, flashlight.target);
+      camera?.removeFromParent();
     },
   };
 }
