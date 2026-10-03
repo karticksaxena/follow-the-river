@@ -1,26 +1,65 @@
-import * as THREE from 'three/webgpu';
-import { createStage } from './engine/stage';
+import { runDream, type App } from './app';
+import { createAudioBus } from './engine/audio';
+import { isDesktop } from './engine/device';
+import { KeyState } from './engine/input';
+import { showMessage, showUnsupported } from './engine/menus';
+import { browserStorage, createSaveStore } from './engine/save';
+import { clampSettings, isSettings, loadSettings } from './engine/settings';
+import { createStage, type Stage } from './engine/stage';
+import { createOverlay } from './engine/ui';
+import { startHome } from './home/home';
 import './style.css';
 
-// Temporary (Task 2): proves the stage renders. Task 11 replaces this file.
+async function tryStage(root: HTMLElement): Promise<Stage | null> {
+  try {
+    return await createStage(root);
+  } catch {
+    return null;
+  }
+}
+
 async function boot(): Promise<void> {
   const root = document.getElementById('app');
-  if (!root) throw new Error('index.html needs #app');
-  const stage = await createStage(root);
+  const overlayRoot = document.getElementById('overlay');
+  if (!root || !overlayRoot) throw new Error('index.html needs #app and #overlay');
+  const overlay = createOverlay(overlayRoot);
+  if (!isDesktop((query) => window.matchMedia(query))) return showUnsupported(overlay);
+  const stage = await tryStage(root);
+  if (!stage) {
+    return showMessage(
+      overlay,
+      "Kartik's Dreams",
+      'Your browser could not start 3D graphics. Try the latest Chrome or Safari.',
+    );
+  }
   document.documentElement.dataset.backend = stage.backend;
-  stage.scene.background = new THREE.Color(0x101418);
-  stage.scene.fog = new THREE.Fog(0x101418, 2, 12);
-  stage.scene.add(new THREE.HemisphereLight(0x8899aa, 0x223311, 0.6));
-  const cube = new THREE.Mesh(
-    new THREE.BoxGeometry(),
-    new THREE.MeshLambertMaterial({ color: 0x884422 }),
-  );
-  cube.position.set(0, 0.5, -3);
-  stage.scene.add(cube);
-  stage.camera.position.set(0, 1.6, 0);
-  stage.addUpdater((dt) => {
-    cube.rotation.y += dt;
-  });
+  const keys = new KeyState();
+  keys.attach(window);
+  const store = createSaveStore(browserStorage(), 'settings', isSettings);
+  const audio = createAudioBus(stage.camera);
+  const app: App = {
+    stage,
+    overlay,
+    audio,
+    keys,
+    settings: loadSettings(store),
+    saveSettings(settings) {
+      app.settings = clampSettings(settings);
+      store.save(app.settings);
+      audio.setVolume(app.settings.volume);
+    },
+  };
+  audio.setVolume(app.settings.volume);
+  // Dev-only handle for browser checks, e.g. `kd.stage.camera.position`.
+  if (import.meta.env.DEV) Object.assign(window, { kd: app });
+  const goHome = async (): Promise<void> => {
+    const home = await startHome(app, async (info) => {
+      const error = await runDream(app, info, () => void goHome());
+      if (error === null) home.dispose();
+      return error;
+    });
+  };
+  await goHome();
 }
 
 void boot();
