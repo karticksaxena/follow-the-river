@@ -34,7 +34,13 @@ describe('Dras model', () => {
     const bones = names(j, 'nodes');
     for (const b of ['Head', 'Jaw', 'Spine1', 'Spine5', 'Tail1', 'Tail2'])
       expect(bones).toContain(b);
-    expect(names(j, 'animations').toSorted()).toEqual(['Lunge', 'Swim']);
+    expect(names(j, 'animations').toSorted()).toEqual([
+      'Beached',
+      'Exhale',
+      'Lunge',
+      'Swim',
+      'TailLift',
+    ]);
   });
   it('was measured', () => {
     expect(ANATOMY.length).toBe(7);

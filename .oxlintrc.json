@@ -40,5 +40,5 @@
       }
     ]
   },
-  "ignorePatterns": ["node_modules/", "dist/", "coverage/", ".claude/"]
+  "ignorePatterns": ["node_modules/", "dist/", "coverage/", ".claude/", "tools/**/*.mjs"]
 }

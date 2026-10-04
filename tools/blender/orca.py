@@ -7,7 +7,8 @@ Small glossy eyes sit just above the mouth line and below the front of each eye 
 its own shell, weighted 100 % to bone `Jaw` (code opens it); mouth interior and 11 teeth per jaw side.
 
 Head toward Blender +Y (three -Z, downstream), up +Z (three +Y), origin at the body centre, length exactly 7 m.
-Bones: Head, Jaw (child of Head), Spine1..5, Tail1, Tail2. Clips: Swim (48, loops), Lunge (24).
+Bones: Head, Jaw (child of Head), Spine1..5, Tail1, Tail2. Clips: Swim (48, loops), Lunge (24), and the beached death:
+Beached (96, loops, 4 s), TailLift (36, 1.5 s), Exhale (72, 3 s, holds still). Those three assume she lies on her belly.
 Prints one `ANATOMY {...}` JSON line (metres, three.js axes) measured from the built mesh.
 
 Run headless from the repo root:
@@ -539,7 +540,7 @@ def clip(arm, name, frames, pose, step=2):
     arm.animation_data.action = None
 
 
-def main():
+def build():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     b = Builder()
     t_corner = body_cage(b)
@@ -576,9 +577,116 @@ def main():
     clip(arm, "Swim", 48, lambda i, f: amp[i] * math.sin(2 * math.pi * f / 48 - 0.55 * i))
     arch = [0.35, -0.30, -0.05, -0.02, 0.05, 0.12, 0.25, 0.25]
     clip(arm, "Lunge", 24, lambda i, f: arch[i] * math.sin(math.pi * f / 24))
+    beached_clips(arm)
+    return arm
+
+
+# --- The beached death. Bones only (no root motion). Pitch: positive = the tail-ward part goes down; the
+# chain pivots at each bone's head, so the Spine1..5 pitches roughly cancel to keep the rear body in place.
+# BEACHED_REST is the pose she lies in; Beached, TailLift and Exhale all start from it (TailLift ends in it).
+#            Head   S1      S2      S3      S4     S5     T1     T2
+BEACHED_REST = [0.0, 0.0, 0.0, 0.03, 0.06, 0.07, 0.09, 0.07]
+BEACHED_JAW = 0.010  # radians open at rest: lips a hair apart, the weight of the jaw
+
+
+def smooth(x):
+    x = min(max(x, 0.0), 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def breath(p):
+    """0 = rest, 1 = full in-breath. A slow in-breath, a held moment, then a quicker out-breath, then still."""
+    if p < 0.46:
+        return smooth(p / 0.46)
+    if p < 0.58:
+        return 1.0 + 0.06 * smooth((p - 0.46) / 0.12)  # the held moment creeps up a touch
+    if p < 0.84:
+        return 1.06 * (1 - smooth((p - 0.58) / 0.26) ** 0.8)
+    return 0.0
+
+
+def beached_pose(f):
+    """Beached: frame f of 96 -> (bone pitches, jaw open). The chest heaves (Spine1-3), the head lifts on the in-breath."""
+    p, v = f / 96, breath(f / 96)
+    twitch = math.exp(-((p - 0.72) / 0.025) ** 2)  # one tiny quick flick of the flukes on the out-breath
+    d = [0.0] * 8
+    d[0] = -0.011 * v   # head: the nose lifts a little
+    d[1] = -0.012 * v   # chest: the ribs swing up off the pebbles ...
+    d[2] = 0.025 * v    # ... and the pitches cancel, so the rear body only lifts a little
+    d[3] = -0.002 * v
+    d[6] = -0.012 * v + 0.03 * twitch
+    d[7] = 0.045 * twitch - 0.015 * v
+    jaw = BEACHED_JAW + 0.065 * smooth((p - 0.10) / 0.36) * (1 - smooth((p - 0.62) / 0.18))
+    return [BEACHED_REST[i] + d[i] for i in range(8)], jaw
+
+
+def taillift_pose(f):
+    """TailLift: frame f of 36. One weak, trembling lift of the flukes, a held instant, a heavy drop and a small rebound."""
+    t = f / 36
+    if t < 0.38:
+        a = smooth(t / 0.38) ** 0.7 + 0.03 * math.sin(t * 60) * smooth(t / 0.38)  # lift, a little shaky
+    elif t < 0.47:
+        a = 1.0 - 0.02 * (t - 0.38) / 0.09
+    elif t < 0.70:
+        a = 0.98 * (1 - ((t - 0.47) / 0.23) ** 2)  # gravity: the drop accelerates
+    elif t < 0.80:
+        a = -0.06 * math.sin(math.pi * (t - 0.70) / 0.10)  # it lands, sinks a hair, comes back
+    else:
+        a = 0.0
+    d = [0.0] * 8
+    d[4], d[5], d[6], d[7] = -0.02 * a, -0.06 * a, -0.17 * a, -0.19 * a  # flukes up 0.36 rad (~21 deg) over rest at 1.0
+    return [BEACHED_REST[i] + d[i] for i in range(8)], BEACHED_JAW + 0.01 * a
+
+
+# Exhale ends here: lower than rest, everything slack. The head and back settle, the jaw closes.
+EXHALE_END = [r + x for r, x in zip(BEACHED_REST, [0.0, -0.002, 0.008, 0.012, 0.004, 0.004, 0.012, 0.02])]
+
+
+def exhale_pose(f):
+    """Exhale: frame f of 72. A last small in-breath, one long sigh as the body sags, then still for the last 0.5 s."""
+    t = f / 72
+    up = smooth(t / 0.16) * (1 - smooth((t - 0.16) / 0.10))  # a final catch of breath
+    sag = smooth((t - 0.16) / 0.67) ** 1.3 if t < 0.83 else 1.0  # the long slow sag, done at 2.5 s, then held
+    d = [0.0] * 8
+    d[0], d[1], d[2], d[3] = -0.003 * up, -0.014 * up, 0.020 * up, -0.003 * up
+    pose = [BEACHED_REST[i] + d[i] + (EXHALE_END[i] - BEACHED_REST[i]) * sag for i in range(8)]
+    jaw = (BEACHED_JAW + 0.06 * up) * (1 - sag)  # the jaw closes completely
+    return pose, jaw
+
+
+def pose_clip(arm, name, frames, pose, step=2):
+    """Keys every bone each `step` frames from pose(f) -> (8 pitches for BN, jaw open). Bones only, no root motion."""
+    action = bpy.data.actions.new(name)
+    arm.animation_data_create()
+    arm.animation_data.action = action
+    for f in range(0, frames + 1, step):
+        pitches, jaw = pose(f)
+        for i, bone in enumerate(BN + ["Jaw"]):
+            pb = arm.pose.bones[bone]
+            sign = 1 if pb.bone.matrix_local.to_3x3().col[0].x > 0 else -1
+            pb.rotation_mode = "XYZ"
+            pb.rotation_euler = (sign * (-jaw if bone == "Jaw" else pitches[i]), 0, 0)
+            pb.keyframe_insert("rotation_euler", frame=f)
+    track = arm.animation_data.nla_tracks.new()
+    track.name = name
+    track.strips.new(name, 0, action)
+    arm.animation_data.action = None
+
+
+def beached_clips(arm):
+    pose_clip(arm, "Beached", 96, beached_pose)
+    pose_clip(arm, "TailLift", 36, taillift_pose)
+    pose_clip(arm, "Exhale", 72, exhale_pose)
+    for pb in arm.pose.bones:  # the export reads the live pose for the node tree: leave her in the bind pose
+        pb.rotation_euler = (0, 0, 0)
+
+
+def main():
+    arm = build()
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", export_animation_mode="NLA_TRACKS")
     print("EXPORTED", OUT)
 
 
-main()
+if __name__ == "__main__":
+    main()
