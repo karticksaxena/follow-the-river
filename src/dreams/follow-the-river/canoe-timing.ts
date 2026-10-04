@@ -75,11 +75,6 @@ export function travelled(t: number, stopAt: number | null = null): number {
   return ramp(stopAt) + speed * u - (speed - drift) * eased;
 }
 
-/** Pure: 1 while Mom rows, easing to 0 just after she stops. */
-export function rowAmount(t: number): number {
-  return 1 - smooth((t - STOP_AT) / 1.5);
-}
-
 /** The director's memory: the next talk, whether Mom has stopped, whether the closing pages are out. */
 export interface Script {
   beat: number;
@@ -110,4 +105,30 @@ export function nextCue(s: Script, t: number, reading: boolean): Cue | null {
     return { kind: 'closing', pages: CLOSING_PAGES };
   }
   return null;
+}
+
+/** Calf: side of the canoe (m), pace-keeping drift and how deep it starts. */
+export const CALF = { side: 4.2, ahead: 1.6, hidden: -1.7, cruise: -0.15, blow: 0.35 } as const;
+export interface CalfPose {
+  /** Canoe-local offset and height above the world origin. */
+  x: number;
+  z: number;
+  y: number;
+  /** Pitch (nose up while rising). */
+  pitch: number;
+  visible: boolean;
+  /** 0 hidden .. 1 fully surfaced. */
+  surfaced: number;
+}
+
+/** Pure: the calf beside the canoe at `t`: rises, then keeps pace, weaving a little. */
+export function calfPose(t: number, out: CalfPose): CalfPose {
+  const k = smooth((t - (RIDE.seconds - RIDE.calfLead)) / RIDE.surface);
+  out.surfaced = k;
+  out.visible = k > 0;
+  out.x = CALF.side + Math.sin(t * 0.5) * 0.5;
+  out.z = CALF.ahead + Math.sin(t * 0.37) * 0.7;
+  out.y = CALF.hidden + (CALF.cruise - CALF.hidden) * k + Math.sin(t * 1.7) * 0.04 * k;
+  out.pitch = (1 - k) * 0.5;
+  return out;
 }

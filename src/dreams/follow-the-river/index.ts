@@ -75,10 +75,13 @@ export function createDream(): DreamModule {
     if (!c) return;
     c.stage.scene = new THREE.Scene(); // dark behind the ride's build, never a stale stage
     c.hold();
-    const credits = (): void => c.read(ENDING_PAGES.credits, () => c.finish());
-    void loadSounds(c.audio)
-      .then((sounds) => playCanoeRide(c, sounds, { replay: true }))
-      .then(credits, credits); // a failed load still ends with the credits
+    // Quitting mid-replay disposes the dream: nothing may open after that.
+    const credits = (): void => {
+      if (!disposed) c.read(ENDING_PAGES.credits, () => c.finish());
+    };
+    const ride = (sounds: Awaited<ReturnType<typeof loadSounds>>): Promise<void> =>
+      disposed ? Promise.resolve() : playCanoeRide(c, sounds, { replay: true });
+    void loadSounds(c.audio).then(ride).then(credits, credits); // a failed load still ends with the credits
   };
 
   /** A night is survived: show the area's arrival pages, then hand over to the next chapter. */

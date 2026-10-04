@@ -3,14 +3,15 @@ import type { DreamContext } from '../types';
 import { buildCanoeScene, pathSlope, pathX, WATER_LEVEL, type CanoeScene } from './canoe-scene';
 import { createShot, SHOT } from './canoe-shot';
 import {
+  calfPose,
   CLOSING_PAGES,
   newScript,
   nextCue,
   OPENING_PAGES,
   RIDE,
-  smooth,
   STOP_AT,
   travelled,
+  type CalfPose,
   type Script,
 } from './canoe-timing';
 import { CINEMATIC } from './flashback';
@@ -20,16 +21,18 @@ import { picker, rateIn, type Sounds } from './sounds';
 
 export {
   BEATS,
+  CALF,
+  calfPose,
   CLOSING_PAGES,
   newScript,
   nextCue,
   OPENING_PAGES,
   RIDE,
-  rowAmount,
   speedAt,
   STOP_AT,
   STOP_PAUSE,
   travelled,
+  type CalfPose,
   type Cue,
   type Script,
 } from './canoe-timing';
@@ -46,8 +49,6 @@ export const SEAT = {
 } as const;
 /** How far Mom and Kartik may turn their heads (radians). */
 const HEAD_LIMITS = { yaw: 1.2, pitch: 0.7 };
-/** Calf: side of the canoe (m), pace-keeping drift and how deep it starts. */
-export const CALF = { side: 4.2, ahead: 1.6, hidden: -1.7, cruise: -0.15, blow: 0.35 } as const;
 export const VOLUME = {
   water: 0.25,
   birds: 0.3,
@@ -91,30 +92,6 @@ export function toWorld(at: Pose, lx: number, lz: number, out: { x: number; z: n
   out.z = at.z - lx * s + lz * c;
 }
 
-export interface CalfPose {
-  /** Canoe-local offset and height above the world origin. */
-  x: number;
-  z: number;
-  y: number;
-  /** Pitch (nose up while rising). */
-  pitch: number;
-  visible: boolean;
-  /** 0 hidden .. 1 fully surfaced. */
-  surfaced: number;
-}
-
-/** Pure: the calf beside the canoe at `t`: rises, then keeps pace, weaving a little. */
-export function calfPose(t: number, out: CalfPose): CalfPose {
-  const k = smooth((t - (RIDE.seconds - RIDE.calfLead)) / RIDE.surface);
-  out.surfaced = k;
-  out.visible = k > 0;
-  out.x = CALF.side + Math.sin(t * 0.5) * 0.5;
-  out.z = CALF.ahead + Math.sin(t * 0.37) * 0.7;
-  out.y = CALF.hidden + (CALF.cruise - CALF.hidden) * k + Math.sin(t * 1.7) * 0.04 * k;
-  out.pitch = (1 - k) * 0.5;
-  return out;
-}
-
 interface Ride {
   ctx: DreamContext;
   sounds: Sounds;
@@ -135,7 +112,8 @@ interface Ride {
   shot: ReturnType<typeof createShot> | null;
   shotT: number;
   fading: boolean;
-  /** Called when the ride is over and the screen is black. */
+  /** The end shot has faded to black: the ride ends as soon as the game is not paused. */
+  ended: boolean;
   onEnd: () => void;
   /** Mom's and Kartik's head bones. */
   heads: { mom: THREE.Object3D; kartik: THREE.Object3D };
@@ -335,13 +313,18 @@ function stepShot(r: Ride, shot: NonNullable<Ride['shot']>): void {
   }
 }
 
+/** Pure: the ride (and the end shot) runs while a page is open over it, or once started and not paused. */
+export function rideLive(reading: boolean, started: boolean, paused: boolean): boolean {
+  return reading || (started && !paused);
+}
+
 /** Per frame: the ride clock, the talks, the camera (the seat, then the end shot), animations. */
 function frame(r: Ride, dt: number): void {
   const { ctx, cs } = r;
-  const live = r.reading || r.shot !== null || (r.started && !ctx.isPaused());
+  const live = rideLive(r.reading, r.started, ctx.isPaused());
   r.dt = live ? dt : 0;
   if (live) {
-    r.t = Math.min(RIDE.seconds + RIDE.tail, r.t + dt);
+    r.t += dt; // the world runs far past the drift: no clamp to freeze the canoe in the shot
     cs.mom.update(dt);
     cs.kartik.update(dt);
     cs.calf.mixer.update(dt);
@@ -355,7 +338,7 @@ function frame(r: Ride, dt: number): void {
   else seatCamera(r);
   cs.sky.position.copy(ctx.stage.camera.position);
   r.motion.env.tier = ctx.stage.tier;
-  r.motion.update(dt);
+  r.motion.update(r.dt);
   if (!r.blown && r.calf.surfaced > 0.6) {
     r.blown = true;
     const blow = r.blows();
@@ -382,6 +365,47 @@ export function playCanoeRide(
   });
 }
 
+/** The ride's state at t = 0: the scene's actors, the sounds' pickers, the fireflies. */
+function makeRide(ctx: DreamContext, sounds: Sounds, cs: CanoeScene): Ride {
+  const { stage } = ctx;
+  const r: Ride = {
+    ctx,
+    sounds,
+    cs,
+    t: 0,
+    dt: 0,
+    started: false,
+    script: newScript(),
+    reading: false,
+    look: 0,
+    shot: null,
+    shotT: 0,
+    fading: false,
+    ended: false,
+    onEnd: () => {
+      r.ended = true;
+    },
+    heads: { mom: cs.mom.bone('Head'), kartik: cs.kartik.bone('Head') },
+    over: false,
+    blown: false,
+    rowing: true,
+    hands: findHands(cs.mom.group),
+    lastYaw: 0,
+    pose: { x: 0, y: 0, z: 0, yaw: 0, roll: 0 },
+    calf: { x: 0, z: 0, y: 0, pitch: 0, visible: false, surfaced: 0 },
+    spot: { x: 0, z: 0 },
+    blades: makeBlades(cs, ctx),
+    strokes: picker(sounds.paddles),
+    blows: picker(sounds.blows),
+    motion: createMotion(cs.scene, stage.camera, {
+      fires: [],
+      fireflies: { kind: 'ring', y: WATER_LEVEL + 0.3 },
+    }),
+  };
+  r.motion.env.fireflies = true; // it is dawn: the banks are alive
+  return r;
+}
+
 async function run(
   ctx: DreamContext,
   sounds: Sounds,
@@ -404,38 +428,7 @@ async function run(
   const water = ctx.audio.loop(sounds.water, VOLUME.water);
   const birds = sounds.birds ? ctx.audio.loop(sounds.birds, 0) : null;
   const graded = ctx.grade('sunrise');
-  const r: Ride = {
-    ctx,
-    sounds,
-    cs,
-    t: 0,
-    dt: 0,
-    started: false,
-    script: newScript(),
-    reading: false,
-    look: 0,
-    shot: null,
-    shotT: 0,
-    fading: false,
-    onEnd: () => teardown(true),
-    heads: { mom: cs.mom.bone('Head'), kartik: cs.kartik.bone('Head') },
-    over: false,
-    blown: false,
-    rowing: true,
-    hands: findHands(cs.mom.group),
-    lastYaw: 0,
-    pose: { x: 0, y: 0, z: 0, yaw: 0, roll: 0 },
-    calf: { x: 0, z: 0, y: 0, pitch: 0, visible: false, surfaced: 0 },
-    spot: { x: 0, z: 0 },
-    blades: makeBlades(cs, ctx),
-    strokes: picker(sounds.paddles),
-    blows: picker(sounds.blows),
-    motion: createMotion(cs.scene, stage.camera, {
-      fires: [],
-      fireflies: { kind: 'ring', y: WATER_LEVEL + 0.3 },
-    }),
-  };
-  r.motion.env.fireflies = true; // it is dawn: the banks are alive
+  const r = makeRide(ctx, sounds, cs);
   let live = true;
   const teardown = (finished = false): void => {
     if (!live) return;
@@ -462,6 +455,7 @@ async function run(
     if (stage.scene !== cs.scene) return teardown(); // someone else took the stage
     try {
       frame(r, dt);
+      if (r.ended && !ctx.isPaused()) return teardown(true); // never open the credits over the pause menu
       birds?.setVolume(VOLUME.birds * Math.min(1, r.t / VOLUME.birdsFade));
     } catch (error) {
       teardown();

@@ -12,7 +12,7 @@ import {
   nextCue,
   PADDLE_DIP,
   RIDE,
-  rowAmount,
+  rideLive,
   speedAt,
   STOP_AT,
   STOP_PAUSE,
@@ -91,12 +91,7 @@ describe('toWorld', () => {
   });
 });
 
-describe('rowing and the calf', () => {
-  it('rows until the last seconds, then stops', () => {
-    expect(rowAmount(0)).toBe(1);
-    expect(rowAmount(RIDE.seconds)).toBe(0);
-  });
-
+describe('the calf', () => {
   it('stays hidden, then surfaces beside the canoe a few metres away and keeps pace', () => {
     expect(calfPose(RIDE.seconds - RIDE.calfLead - 1, calfBlank()).visible).toBe(false);
     const c = calfPose(RIDE.seconds - 2, calfBlank());
@@ -294,5 +289,14 @@ describe('the director', () => {
 
   it('stops Mom on time even while a page is open', () => {
     expect(nextCue(newScript(), STOP_AT, true)?.kind).toBe('stop');
+  });
+});
+
+describe('rideLive', () => {
+  it('freezes while paused (the end shot too), runs behind an open page, never before the start', () => {
+    expect(rideLive(false, true, true)).toBe(false);
+    expect(rideLive(false, true, false)).toBe(true);
+    expect(rideLive(true, true, true)).toBe(true);
+    expect(rideLive(false, false, false)).toBe(false);
   });
 });
