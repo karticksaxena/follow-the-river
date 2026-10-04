@@ -1,8 +1,6 @@
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as THREE from 'three/webgpu';
-import type { PropPlacement } from './areas/types';
 import { EDGE_X, KERB_WIDTH, OVERRUN, RIVER_X, riverSpan } from './river';
-import { seeded } from './skyline';
 
 export type BankKind = 'embankment' | 'natural';
 
@@ -24,9 +22,6 @@ export const BANK = {
   railX: 2.95, // flush with the wall: the player stops at x 2.7, the rail never clips the view
   postHeight: 0.9,
   postSpacing: 2.5,
-  reedStep: [3, 5],
-  reedX: [5.6, 6.4],
-  reedScale: 0.5,
 } as const;
 /** Where the walkable ground must end, so it never overlaps the kerb (x). */
 export const groundEndX = (kind: BankKind): number =>
@@ -154,28 +149,4 @@ export function addBanks(
     new THREE.Mesh(railGeometry(BANK.railX, z0, z1), rail),
     new THREE.Mesh(railGeometry(mirrorX(BANK.railX), z0, z1), rail),
   );
-}
-
-/** Reeds and grass clumps just above the waterline on both banks, every 3-5 m (seeded). */
-export function reedPlacements(fromZ: number, toZ: number): PropPlacement[] {
-  const random = seeded(3);
-  const out: PropPlacement[] = [];
-  const [s0, s1] = BANK.reedStep;
-  const [x0, x1] = BANK.reedX;
-  for (let side = 0; side < 2; side++) {
-    for (let z = fromZ; z >= toZ; z -= s0 + random() * (s1 - s0)) {
-      const x = x0 + random() * (x1 - x0);
-      out.push({
-        kit: 'nature',
-        // Dry wheat-like stalks read as reeds; the kit's grass is a bright teal that glowed under the torch.
-        model: 'crops_wheatStageB',
-        x: side ? mirrorX(x) : x,
-        y: bankY('natural', x),
-        z,
-        yaw: random() * Math.PI * 2,
-        scale: BANK.reedScale,
-      });
-    }
-  }
-  return out;
 }

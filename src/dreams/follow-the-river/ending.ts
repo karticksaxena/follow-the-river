@@ -63,7 +63,7 @@ export const WAVE = {
   seconds: 25,
   /** Strikes the orca is armed with: far more than the wave has zombies. */
   strikes: 99,
-  /** Its last stand: seconds between strikes (a normal night 1.4) and reach from the water (3.5). */
+  /** Its last stand: seconds between strikes (a normal night 1.1) and reach from the water (4.5). */
   orcaCooldown: 0.6,
   orcaReach: 7,
   /** Upstream of the player (+z), and the spread between lanes along the bank (m). */

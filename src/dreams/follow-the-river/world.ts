@@ -3,7 +3,7 @@ import { addBatched } from '../../engine/batch';
 import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
 import type { AreaDef, PropPlacement } from './areas/types';
-import { addBanks, groundEndX, reedPlacements } from './banks';
+import { addBanks, groundEndX } from './banks';
 import { KIT_SCALE, kitUrl } from './kits';
 import { createWorldLights, type WorldLights } from './lighting';
 import { addLake, addRiver, EDGE_X, LAKE, OVERRUN, plane, RIVER_WIDTH } from './river';
@@ -20,8 +20,6 @@ export interface World {
 /** Colliders are the prop's footprint shrunk a little so players don't snag on corners. */
 const COLLIDER_SHRINK = 0.95;
 const BARRICADE_DEPTH = 0.6;
-/** Reeds run this far past the strip's ends (m): fog hides the rest. */
-const REED_MARGIN = 40;
 
 const box3 = new THREE.Box3();
 const size = new THREE.Vector3();
@@ -90,13 +88,6 @@ function addWaters(scene: THREE.Scene, area: AreaDef): Promise<void> {
   return addSkyline(scene, area.skyline, area.startZ, lake.z, 0);
 }
 
-/** The area's props plus, on natural banks, reeds and grass along the waterline (no colliders). */
-function placements(area: AreaDef): readonly PropPlacement[] {
-  if (area.bank !== 'natural') return area.props;
-  const end = area.lake ? area.lake.z + 1 : area.endZ - REED_MARGIN;
-  return [...area.props, ...reedPlacements(area.startZ + REED_MARGIN, end)];
-}
-
 /** Builds an area: lights, ground, river, skyline, props, shacks and every blocker. */
 export async function buildWorld(area: AreaDef): Promise<World> {
   const scene = new THREE.Scene();
@@ -104,7 +95,7 @@ export async function buildWorld(area: AreaDef): Promise<World> {
   addGround(scene, area);
   const colliders = stripBlockers(area);
   const [props] = await Promise.all([
-    Promise.all(placements(area).map(loadProp)),
+    Promise.all(area.props.map(loadProp)),
     addWaters(scene, area),
     ...area.shacks.map((shack) => addShack(scene, shack)),
   ]);

@@ -123,10 +123,10 @@ export function makeWet(body: THREE.Object3D): void {
 }
 
 export const FISH = {
-  strikesPerPack: 3,
-  baseStrikes: 2,
-  reach: 3.5,
-  cooldown: 1.4,
+  strikesPerPack: 4,
+  baseStrikes: 4,
+  reach: 4.5,
+  cooldown: 1.1,
   follow: 2.5,
 };
 
