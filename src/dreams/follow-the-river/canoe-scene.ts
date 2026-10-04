@@ -67,26 +67,19 @@ export function rng(seed: number): () => number {
 const WATER_LOOK: WaterLook = { speed: 1.6, deep: 0x2b5750, streak: 0x9cc2b0, glow: 0x1d4a3c };
 
 /**
- * The canoe's banks at sunrise: the pink low sun on the grass and mud read as snow (A16 round 2),
- * so the ground is darker and richer than ground.ts's DAWN_BANK (gain 0.6, saturation 1.35). Tuning knobs.
+ * The canoe's banks at sunrise: damp dark earth and dull olive grass, clearly darker than the sky and
+ * the water. Retuned (A16 round 4) once the terrain faced up and was really lit; saturation stays
+ * near 1 because boosting the reddish mud texture made the earth red. Tuning knobs.
  */
-const CANOE_BANK = { gain: 0.36, saturation: 1.7 } as const;
-
-/**
- * The river's haze. The sunrise preset's pale fog (0x887a68, from 12 m) washes the whole land to a
- * pink-grey snowfield seen from the canoe and from the crane shot: albedo (texture x gain x grade x
- * vertex colour) is dark, so the fog was what coloured the banks. A darker earthy haze that starts
- * farther out keeps the land earth and grass to the treeline. Tuning knobs.
- */
-const CANOE_FOG = { color: 0x3c3a2a, near: 30, far: 150 } as const;
+const CANOE_BANK = { gain: 0.5, saturation: 1.1 } as const;
 
 /** Canoe, wood and ground colours (sRGB hex). Tuning knobs. */
 const COLORS = {
   leaves: [0x74ae3e],
   bark: 0x5b4331,
   canoe: 0x8a5a36,
-  mud: 0x4f3e26,
-  meadow: [0x4c7d2a, 0x3d6b25],
+  mud: 0x4a3f2c,
+  meadow: [0x56762e, 0x46652a],
   hullFloor: 0x6b4a2e,
 } as const;
 
@@ -141,13 +134,14 @@ export function meshY(x: number, z: number, zNear: number = TERRAIN.behind): num
   const h10 = terrainY(x0 + cell, z0);
   const h01 = terrainY(x0, z0 - cell);
   const h11 = terrainY(x0 + cell, z0 - cell);
-  // makeTerrain's index order: (i, i+cols, i+1) and (i+1, i+cols, i+cols+1).
+  // terrainGeometry's triangles: (i, i+1, i+cols) and (i+1, i+cols+1, i+cols).
   return u + v <= 1
     ? h00 + (h10 - h00) * u + (h01 - h00) * v
     : h11 + (h01 - h11) * (1 - u) + (h10 - h11) * (1 - v);
 }
 
-function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
+/** The terrain grid (counter-clockwise seen from above, so its faces and normals point up). */
+export function terrainGeometry(zNear: number, zFar: number): THREE.BufferGeometry {
   const { cell, halfWidth } = TERRAIN;
   const cols = Math.round((2 * halfWidth) / cell) + 1;
   const rows = Math.round((zNear - zFar) / cell) + 1;
@@ -179,7 +173,7 @@ function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
   for (let r = 0; r < rows - 1; r++) {
     for (let k = 0; k < cols - 1; k++) {
       const i = r * cols + k;
-      index.set([i, i + cols, i + 1, i + 1, i + cols, i + cols + 1], n);
+      index.set([i, i + 1, i + cols, i + 1, i + cols + 1, i + cols], n);
       n += 6;
     }
   }
@@ -189,8 +183,12 @@ function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
   geometry.setAttribute('blend', new THREE.BufferAttribute(mud, 1));
   geometry.setIndex(new THREE.BufferAttribute(index, 1));
   geometry.computeVertexNormals();
+  return geometry;
+}
+
+function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
   const terrain = new THREE.Mesh(
-    geometry,
+    terrainGeometry(zNear, zFar),
     surfaceMaterial({ base: 'grass', blend: 'mud', vertexColors: true, grade: CANOE_BANK }),
   );
   terrain.receiveShadow = true;
@@ -321,11 +319,6 @@ export async function buildCanoeScene(length: number, stage: CanoeStage): Promis
   const lights = createWorldLights(scene);
   attachKeyShadows(lights.key, stage.tier); // the sun's shadows: the forest, the canoe, Mom
   applyLighting(lights, LIGHTING.sunrise);
-  if (scene.fog instanceof THREE.Fog) {
-    scene.fog.color.set(CANOE_FOG.color);
-    scene.fog.near = CANOE_FOG.near;
-    scene.fog.far = CANOE_FOG.far;
-  }
   const terrain = makeTerrain(zNear, zFar);
   const water = createWaterMesh(TERRAIN.halfWidth * 2.4, zNear - zFar, WATER_LOOK);
   water.rotation.x = -Math.PI / 2;

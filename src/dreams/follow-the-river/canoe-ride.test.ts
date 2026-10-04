@@ -30,6 +30,7 @@ import {
   pathX,
   RIVER_HALF,
   rng,
+  terrainGeometry,
   terrainY,
   WATER_LEVEL,
 } from './canoe-scene';
@@ -321,5 +322,29 @@ describe('the hull floor', () => {
       expect(hullHalfWidth(-z)).toBeCloseTo(hullHalfWidth(z));
     }
     expect(HULL.y).toBeGreaterThan(0.12 + 0.03); // clear of the water (origin -0.12) and its bob
+  });
+});
+
+describe('the terrain faces up', () => {
+  it('has an upward geometric normal on every triangle and upward vertex normals (no back-face culled land)', () => {
+    const g = terrainGeometry(-100, -140);
+    const pos = g.getAttribute('position');
+    const normal = g.getAttribute('normal');
+    const index = g.getIndex();
+    if (!index) throw new Error('no index');
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const c = new THREE.Vector3();
+    let facesDown = 0;
+    for (let i = 0; i < index.count; i += 3) {
+      a.fromBufferAttribute(pos, index.getX(i));
+      b.fromBufferAttribute(pos, index.getX(i + 1));
+      c.fromBufferAttribute(pos, index.getX(i + 2));
+      if (b.sub(a).cross(c.sub(a)).y <= 0) facesDown++;
+    }
+    expect(facesDown).toBe(0);
+    let low = 0;
+    for (let i = 0; i < normal.count; i++) if (normal.getY(i) <= 0.5) low++;
+    expect(low / normal.count).toBeLessThan(0.02); // only a steep bank edge may lean past 60 degrees
   });
 });
