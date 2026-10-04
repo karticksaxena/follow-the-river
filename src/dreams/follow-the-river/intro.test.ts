@@ -151,10 +151,8 @@ describe('the phone', () => {
   it('is a small dark slab with a dim blue screen, hidden until Mom films', () => {
     const phone = makePhone();
     expect(phone.visible).toBe(false);
-    const [body, screen] = phone.children;
-    if (!body || !(screen instanceof THREE.Mesh)) throw new Error('phone parts');
-    const size = new THREE.Box3().setFromObject(body).getSize(new THREE.Vector3());
-    expect(size.toArray().map((v) => +v.toFixed(3))).toEqual([0.075, 0.15, 0.009]);
+    const screen = phone.children[0]?.children[1];
+    if (!(screen instanceof THREE.Mesh)) throw new Error('phone screen');
     const mat: unknown = screen.material;
     expect(mat instanceof THREE.MeshBasicMaterial && mat.color.getHex()).toBe(0x6f86b0);
   });

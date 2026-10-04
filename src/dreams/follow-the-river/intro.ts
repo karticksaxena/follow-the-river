@@ -16,6 +16,7 @@ import {
 } from './intro-scene';
 import { applyDim, LIGHTING } from './lighting';
 import { createMomActor, TURN_RATE, wrapAngle, type MomActor } from './mom-actor';
+import { createFilmRoll, rollStep } from './phone';
 import { lookAt } from './rig';
 import { introVoice, stopVoice, voiceHooks } from './voice';
 
@@ -119,6 +120,9 @@ interface State {
   /** A page of Mom's is open (the game is paused, but she keeps animating and looks at you). */
   reading: boolean;
   gaze: GazeState;
+  /** 0..1: how far her wrist has rolled the phone's screen toward her face. */
+  film: number;
+  rollWrist: ReturnType<typeof createFilmRoll>;
   disposed: boolean;
   time: number;
   /** Seconds left of easing the camera toward the river. */
@@ -336,9 +340,12 @@ function makePerform(actions: Actions, st: State, hud: Hud, onDone: () => void) 
 function animateMom(sc: IntroScene, st: State, camera: THREE.Camera, dt: number): void {
   sc.mom.update(dt);
   gazeStep(st.gaze, momGaze(st.step, st.reading), dt, GAZE.weight);
-  if (!st.gaze.kind || st.gaze.weight <= 0.001 || !sc.mom.group.visible) return;
-  const target = st.gaze.kind === 'you' ? camera.getWorldPosition(GAZE_TARGET) : TV_EYE;
-  lookAt(sc.mom.bone('Head'), target, st.gaze.weight, GAZE);
+  if (st.gaze.kind && st.gaze.weight > 0.001 && sc.mom.group.visible) {
+    const target = st.gaze.kind === 'you' ? camera.getWorldPosition(GAZE_TARGET) : TV_EYE;
+    lookAt(sc.mom.bone('Head'), target, st.gaze.weight, GAZE);
+  }
+  st.film = rollStep(st.film, sc.phone.visible, dt); // wrist turns the screen to her face
+  if (sc.phone.visible || st.film > 0.001) st.rollWrist(sc.mom.bone('WristR'), st.film);
 }
 
 /** Per-frame motion: Mom, the TV picture and flicker, the orca, and the timed waits. */
@@ -399,6 +406,8 @@ export async function runIntro(
     busy: false,
     reading: false,
     gaze: { kind: null, weight: 0 },
+    film: 0,
+    rollWrist: createFilmRoll(),
     disposed: false,
     time: 0,
     look: 0,
