@@ -82,6 +82,16 @@ export interface State {
   onHit: (damage: number) => void;
 }
 
+/** Reused every frame so the objective call allocates nothing. */
+const goalIn: Parameters<typeof objective>[0] = {
+  night: false,
+  fighting: false,
+  wave: 0,
+  waves: 0,
+  ending: false,
+  lake: false,
+};
+
 function newSense(): PlayerSense {
   return {
     x: 0,
@@ -282,15 +292,14 @@ function tickView(p: State, dt: number): void {
   hudState.damage = DIFFICULTY[sys.ctx.difficulty()].damage;
   const fighting = isNight(run.phase) && run.ending === 'no' && run.waves.fighting;
   hudState.wave = fighting ? run.waves.cleared + 1 : 0;
-  hudState.goal = objective({
-    night: isNight(run.phase),
-    fighting,
-    wave: run.waves.cleared,
-    waves: hudState.waves,
-    ending: run.ending !== 'no',
-    waiting: fighting && isWaiting(p),
-    lake: sys.area.lake !== undefined,
-  });
+  goalIn.night = isNight(run.phase);
+  goalIn.fighting = fighting;
+  goalIn.wave = run.waves.cleared;
+  goalIn.waves = hudState.waves;
+  goalIn.ending = run.ending !== 'no';
+  goalIn.waiting = fighting && isWaiting(p);
+  goalIn.lake = sys.area.lake !== undefined;
+  hudState.goal = objective(goalIn);
   sys.hud.set(hudState);
   sys.hud.prompt(p.controls.prompt());
 }
