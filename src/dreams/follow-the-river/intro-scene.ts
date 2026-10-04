@@ -24,17 +24,39 @@ const FENCE_PIECE = 1.28 * FENCE_SCALE;
 const HOUSE_X = -15;
 
 /** Where things stand (x, z), and how close the player must be to use them. */
+const PACE_Z = 2.1; // Mom's pacing line: behind the couch back (ends 1.65), short of the wall (2.5)
+const HALL_Z = 1.2; // through the middle of the doorway (z 0.65..1.75)
+const OUTSIDE_X = -5.5; // out of sight past the door
+
 export const AT = {
   tv: { x: ROOM_X, z: -2.1 },
-  momInside: { x: ROOM_X + 1.5, z: -1.9 },
+  momInside: { x: ROOM_X - 1.8, z: PACE_Z },
   momDoor: { x: ROOM_X - 2.6, z: 0.5 },
-  door: { x: ROOM_X - 3.2, z: 1.2 },
+  door: { x: ROOM_X - 3.2, z: HALL_Z },
   momRiver: { x: EDGE_X - 1.4, z: 0 },
+  momRiverStart: { x: EDGE_X - 3, z: 1.2 }, // ahead and to the side of the player, in view
+  momRiverNear: { x: EDGE_X - 2.4, z: 0 }, // where she waits before the last steps
+  momRiverBack: { x: EDGE_X - 2.2, z: 0 }, // the step back before she films
   spawnRoom: { x: ROOM_X, z: 1.05 },
   spawnRiver: { x: EDGE_X - 4, z: 0 },
 } as const;
 export const REACH = { tv: 2.5, mom: 2.2, door: 1.4 } as const;
 export const YAW_EAST = -Math.PI / 2; // camera yaw looking toward +X (the river)
+
+/** Mom's indoor routes (world). Every leg stays on open floor; see intro.test.ts. */
+export const MOM_PATH = {
+  pace: [AT.momInside, { x: ROOM_X + 1.8, z: PACE_Z }, { x: ROOM_X, z: PACE_Z }],
+  paceDwell: 4, // seconds of tense idling at each pacing point
+  out: [
+    { x: ROOM_X - 2.6, z: PACE_Z }, // along the pacing line, valid from anywhere on it
+    { x: ROOM_X - 2.6, z: HALL_Z },
+    AT.door,
+    { x: ROOM_X + OUTSIDE_X, z: HALL_Z },
+  ],
+  in: [AT.door, AT.momDoor],
+  /** What she glances at while idling: the TV, the doorway and the window (knob, unverified). */
+  glances: [AT.tv, AT.door, { x: ROOM_X + 3.5, z: 0 }],
+} as const;
 
 const box = (x0: number, x1: number, z0: number, z1: number, dx = 0): Box => ({
   minX: x0 + dx,
@@ -43,6 +65,9 @@ const box = (x0: number, x1: number, z0: number, z1: number, dx = 0): Box => ({
   maxZ: z1,
 });
 
+/** Blocks the player just outside the doorway; Mom walks through it when she leaves. */
+export const DOOR_CAP: Box = box(-4.6, -4, 0.4, 2, ROOM_X);
+
 /** Walls (doorway open at z 0.65..1.75, capped just outside), couch back and the TV. */
 export const ROOM_COLLIDERS: readonly Box[] = [
   box(-4, 4, 2.5, 3, ROOM_X),
@@ -50,7 +75,7 @@ export const ROOM_COLLIDERS: readonly Box[] = [
   box(3.5, 4, -3, 3, ROOM_X),
   box(-4, -3.5, -3, 0.65, ROOM_X),
   box(-4, -3.5, 1.75, 3, ROOM_X),
-  box(-4.6, -4, 0.4, 2, ROOM_X),
+  DOOR_CAP,
   box(-1, 1, 1.4, 1.65, ROOM_X),
   box(-0.5, 0.5, -2.5, -1.7, ROOM_X),
 ];
@@ -72,6 +97,8 @@ function findClip(clips: readonly THREE.AnimationClip[], name: string): THREE.An
 export interface Mom {
   group: THREE.Group;
   pack: THREE.Object3D;
+  /** Clip she returns to when a one-shot clip finishes. */
+  rest: string;
   play(name: string, once?: boolean): void;
   update(dt: number): void;
   dispose(): void;
@@ -109,12 +136,13 @@ export function createMom(
     current = next;
   };
   mixer.addEventListener('finished', (e) => {
-    if (e.action === current) play('Idle');
+    if (e.action === current) play(mom.rest);
   });
   play('Idle');
-  return {
+  const mom: Mom = {
     group,
     pack,
+    rest: 'Idle',
     play,
     update: (dt) => void mixer.update(dt),
     dispose() {
@@ -122,6 +150,7 @@ export function createMom(
       mixer.uncacheRoot(body);
     },
   };
+  return mom;
 }
 
 function lineOfFence(
