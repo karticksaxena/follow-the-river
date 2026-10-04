@@ -1,5 +1,6 @@
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as THREE from 'three/webgpu';
+import { surfaceMaterial, type SurfaceName } from '../../engine/surfaces';
 import { createRailing, type Railing } from './railing';
 import { bentPlane, EDGE_X, KERB_WIDTH, OVERRUN, RIVER_X, riverSpan, WATER_Y } from './river';
 import { type Bend, BEND, farBankInset, mouthFlare, noBend, rowZs, SHORE } from './shore-shape';
@@ -97,6 +98,7 @@ export function stripGeometry(
   const pos: number[] = [];
   const nor: number[] = [];
   const col: number[] = [];
+  const blend: number[] = [];
   const idx: number[] = [];
   const c = new THREE.Color();
   const side = mirror ? -1 : 1;
@@ -124,6 +126,7 @@ export function stripGeometry(
         nor.push(nx, ny, 0);
         c.setHex(p.color);
         col.push(c.r, c.g, c.b);
+        blend.push(p === pts[0] ? 1 : 0); // the top edge fades into the land's own surface
       }
       if (r > 0) {
         const q = base + 2 * r;
@@ -135,6 +138,7 @@ export function stripGeometry(
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('blend', new THREE.Float32BufferAttribute(blend, 1));
   g.setIndex(idx);
   return g;
 }
@@ -166,7 +170,8 @@ const MOUTH_ROW_STEP = 1;
  * Both banks and the riverbed over the river's span (see `riverSpan`); the grass colours tint
  * the bank tops so they melt into the land. `endOverrun` is 0 where a lake takes over, and then
  * `lakeZ` (its shore line) rounds the river mouth: both banks flare out into the shore.
- * Returns the near railing (embankments only), which the orca can break.
+ * `land` is the ground's surface (the natural bank's top blends into it). Returns the near railing
+ * (embankments only), which the orca can break.
  */
 export function addBanks(
   scene: THREE.Scene,
@@ -176,9 +181,15 @@ export function addBanks(
   endOverrun = OVERRUN,
   bend: Bend = noBend,
   lakeZ?: number,
+  land: SurfaceName = 'grass',
 ): Railing | null {
   const { z0, z1 } = riverSpan(fromZ, toZ, endOverrun);
-  const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  const material = surfaceMaterial(
+    kind === 'embankment'
+      ? { base: 'pavement', vertexColors: true }
+      : { base: 'mud', blend: land, vertexColors: true },
+  );
+  material.side = THREE.DoubleSide;
   const near = bankProfile(kind, nearGrass);
   const far = bankProfile(kind, farGrass);
   const flare = lakeZ === undefined ? 0 : SHORE.mouthRadius;
@@ -207,6 +218,7 @@ export function addBanks(
     bentPlane(
       [mirrorX(last) - last + 2 * flare, z0 - z1],
       BANK.sand,
+      'mud',
       [RIVER_X, BED_Y, (z0 + z1) / 2],
       bend,
     ),

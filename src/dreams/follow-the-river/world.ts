@@ -2,9 +2,11 @@ import * as THREE from 'three/webgpu';
 import { addBatched } from '../../engine/batch';
 import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
+import { texturesReady } from '../../engine/surfaces';
 import type { AreaDef, PropPlacement } from './areas/types';
 import { addBanks, groundEndX } from './banks';
 import { addCampfire } from './campfire';
+import { groundSurfaces } from './ground';
 import { KIT_SCALE, kitUrl } from './kits';
 import { addLake } from './lake';
 import { createWorldLights, type WorldLights } from './lighting';
@@ -79,7 +81,7 @@ export function bendOf(area: AreaDef): Bend {
 function addGround(scene: THREE.Scene, area: AreaDef): void {
   const { z0, z1 } = groundSpan(area);
   const at = [groundEndX(area.bank) - 60, 0, (z0 + z1) / 2] as const;
-  scene.add(bentPlane([120, z0 - z1], area.ground, at, bendOf(area)));
+  scene.add(bentPlane([120, z0 - z1], area.ground, groundSurfaces(area).ground, at, bendOf(area)));
 }
 
 /** The river (stopping at a lake's shore, where the lake begins) and its skyline. */
@@ -89,15 +91,23 @@ async function addWaters(scene: THREE.Scene, area: AreaDef): Promise<Railing | n
   const grass = [area.ground, area.farBank] as const;
   const bend = bendOf(area);
   const farBankColor = area.farBank;
+  const { far, ground } = groundSurfaces(area);
   if (!lake) {
-    addRiver(scene, area.startZ, area.endZ, { farBankColor, embankment, bend });
-    const railing = addBanks(scene, area.bank, [area.startZ, area.endZ], grass, OVERRUN, bend);
+    addRiver(scene, area.startZ, area.endZ, { farBankColor, farSurface: far, embankment, bend });
+    const span = [area.startZ, area.endZ] as const;
+    const railing = addBanks(scene, area.bank, span, grass, OVERRUN, bend, undefined, ground);
     await addSkyline(scene, area.skyline, area.startZ, area.endZ, undefined, bend);
     return railing;
   }
-  addRiver(scene, area.startZ, lake.z, { farBankColor, endOverrun: 0, embankment, bend });
-  const railing = addBanks(scene, area.bank, [area.startZ, lake.z], grass, 0, bend, lake.z);
-  addLake(scene, lake.z, area.ground, area.farBank);
+  addRiver(scene, area.startZ, lake.z, {
+    farBankColor,
+    farSurface: far,
+    endOverrun: 0,
+    embankment,
+    bend,
+  });
+  const railing = addBanks(scene, area.bank, [area.startZ, lake.z], grass, 0, bend, lake.z, ground);
+  addLake(scene, lake.z, area.ground, area.farBank, ground);
   await addSkyline(scene, area.skyline, area.startZ, lake.z, 0, bend);
   return railing;
 }
@@ -114,6 +124,7 @@ export async function buildWorld(area: AreaDef): Promise<World> {
     addWaters(scene, area),
     ...area.shacks.map((shack) => addShack(scene, shack)),
   ]);
+  await texturesReady(); // the ground never pops in
   for (const { collider } of props) if (collider) colliders.push(collider);
   colliders.push(fire);
   addBatched(

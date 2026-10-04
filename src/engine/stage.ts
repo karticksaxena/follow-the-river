@@ -12,6 +12,7 @@ import {
   type Tier,
 } from './quality';
 import { CAMERA_FAR } from './sky';
+import { setSurfaceTier } from './surfaces';
 import { clampDelta } from './time';
 import { runUpdaters, type Updater } from './updaters';
 
@@ -68,6 +69,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   let tier: Tier = 'high';
   const post = createPost(renderer, camera, tier);
   tier = post.setTier(tier);
+  setSurfaceTier(tier);
   const updaters = new Set<Updater>();
   const timer = new THREE.Timer();
   timer.connect(document);
@@ -88,6 +90,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
       setting = graphics;
       auto = graphics === 'auto';
       tier = post.setTier(graphics === 'auto' ? 'high' : graphics);
+      setSurfaceTier(tier);
       quality.since = 0;
     },
     grade: (preset, seconds) => post.grade(preset, seconds),
@@ -112,7 +115,10 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   /** Resolution first, then (Auto only) the tier; each at most every `QUALITY.minGap` s. */
   const adapt = (dt: number): void => {
     const change = adaptQuality(quality, tier, auto, dt * 1000, dt);
-    if (change === 'tier') tier = post.setTier(lowerTier(tier));
+    if (change === 'tier') {
+      tier = post.setTier(lowerTier(tier));
+      setSurfaceTier(tier);
+    }
     if (change) onResize();
   };
   await renderer.setAnimationLoop((time) => {

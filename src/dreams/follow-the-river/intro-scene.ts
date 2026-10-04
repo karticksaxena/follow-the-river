@@ -2,6 +2,7 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as THREE from 'three/webgpu';
 import type { Box } from '../../engine/collide';
 import { loadModel, loadSkinned } from '../../engine/models';
+import { texturesReady } from '../../engine/surfaces';
 import type { DreamContext } from '../types';
 import { addBanks, groundEndX } from './banks';
 import { createFish, type Fish } from './fish';
@@ -175,7 +176,7 @@ function lineOfFence(
 }
 
 function buildOutside(scene: THREE.Scene, house: THREE.Object3D, fence: THREE.Object3D): void {
-  const ground = plane(400, 400, 0x1c1a16);
+  const ground = plane(400, 400, 0x1c1a16, 'grass');
   ground.position.set(groundEndX('natural') - 200, -0.03, 0);
   addRiver(scene, 60, -60);
   addBanks(scene, 'natural', [60, -60], [0x1c1a16, 0x24271f]);
@@ -256,5 +257,6 @@ export async function buildIntroScene(ctx: DreamContext): Promise<IntroScene> {
   mom.group.position.set(AT.momInside.x, 0, AT.momInside.z); // world, not room-local
   scene.add(room, mom.group);
   buildOutside(scene, house, fence);
+  await texturesReady();
   return { scene, lights, fish, news, tvLight, mom, sounds };
 }

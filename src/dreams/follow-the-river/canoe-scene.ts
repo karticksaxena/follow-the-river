@@ -5,6 +5,7 @@ import { disposeScene } from '../../engine/dispose';
 import { loadModel, loadSkinned } from '../../engine/models';
 import type { Tier } from '../../engine/quality';
 import { attachKeyShadows } from '../../engine/shadows';
+import { surfaceMaterial, texturesReady } from '../../engine/surfaces';
 import { createMom, type Mom } from './intro-scene';
 import { characterUrl, KIT_SCALE, kitUrl } from './kits';
 import { applyLighting, createWorldLights, LIGHTING, SKY_NAME } from './lighting';
@@ -138,6 +139,7 @@ function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
   const rows = Math.round((zNear - zFar) / cell) + 1;
   const pos = new Float32Array(cols * rows * 3);
   const col = new Float32Array(cols * rows * 3);
+  const mud = new Float32Array(cols * rows);
   const noise = rng(7);
   const c = new THREE.Color();
   const a = new THREE.Color();
@@ -152,7 +154,9 @@ function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
       a.setHex(COLORS.meadow[0]);
       b.setHex(COLORS.meadow[1]);
       c.lerpColors(a, b, noise());
-      if (y < 0.25) c.lerp(a.setHex(COLORS.mud), 1 - smooth((y + 0.2) / 0.5) * 0.8);
+      const wet = y < 0.25 ? 1 - smooth((y + 0.2) / 0.5) * 0.8 : 0;
+      if (wet > 0) c.lerp(a.setHex(COLORS.mud), wet);
+      mud[i] = wet; // the mud surface fades in where the colour does
       col.set([c.r, c.g, c.b], i * 3);
     }
   }
@@ -168,9 +172,13 @@ function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geometry.setAttribute('blend', new THREE.BufferAttribute(mud, 1));
   geometry.setIndex(new THREE.BufferAttribute(index, 1));
   geometry.computeVertexNormals();
-  const terrain = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const terrain = new THREE.Mesh(
+    geometry,
+    surfaceMaterial({ base: 'grass', blend: 'mud', vertexColors: true }),
+  );
   terrain.receiveShadow = true;
   return terrain;
 }
@@ -402,6 +410,7 @@ export async function buildCanoeScene(length: number, stage: CanoeStage): Promis
     loadSkinned(characterUrl('mom')),
     loadSkinned(characterUrl('orca')),
     addForest(scene, zNear, zFar),
+    texturesReady(),
   ]);
   const mom = createMom(momAsset, new THREE.Group());
   mom.rest = 'Row';

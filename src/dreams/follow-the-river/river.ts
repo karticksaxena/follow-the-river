@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { type SurfaceName, surfaceMaterial } from '../../engine/surfaces';
 import { type Bend, noBend, rowsFor, SHORE } from './shore-shape';
 import { createWaterMesh, setWaterAttribute } from './water';
 
@@ -19,11 +20,16 @@ const WATER_COLUMN = 1.5;
 /** An embankment's kerb is this wide (m); the ground on either side stops where it starts. */
 export const KERB_WIDTH = 0.6;
 
-/** A horizontal Lambert plane (ground, banks). */
-export function plane(width: number, depth: number, color: number): THREE.Mesh {
+/** A horizontal ground plane textured by `surface` (world-space, so no UVs), tinted by `color`; asphalt gets puddles. */
+export function plane(
+  width: number,
+  depth: number,
+  color: number,
+  surface: SurfaceName,
+): THREE.Mesh {
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(width, depth),
-    new THREE.MeshLambertMaterial({ color }),
+    surfaceMaterial({ base: surface, tint: color, puddles: surface === 'asphalt' }),
   );
   mesh.rotation.x = -Math.PI / 2;
   mesh.receiveShadow = true;
@@ -95,10 +101,11 @@ export function bendPlane(geo: THREE.BufferGeometry, centreZ: number, bend: Bend
 export function bentPlane(
   [width, depth]: readonly [number, number],
   color: number,
+  surface: SurfaceName,
   [x, y, z]: readonly [number, number, number],
   bend: Bend,
 ): THREE.Mesh {
-  const mesh = plane(width, depth, color);
+  const mesh = plane(width, depth, color, surface);
   mesh.geometry.dispose();
   mesh.geometry = new THREE.PlaneGeometry(width, depth, 1, rowsFor(depth));
   bendPlane(mesh.geometry, z, bend);
@@ -107,8 +114,9 @@ export function bentPlane(
 }
 
 export interface RiverOptions {
-  /** Land colour beyond the far bank. */
+  /** Land colour (the tint) and surface beyond the far bank. */
   farBankColor?: number;
+  farSurface?: SurfaceName;
   /** How far the river runs past `toZ`: 0 where a lake takes over. */
   endOverrun?: number;
   /** True where the banks are city embankments: the far land starts past the far kerb. */
@@ -127,7 +135,13 @@ export function addRiver(
   toZ: number,
   o: RiverOptions = {},
 ): void {
-  const { farBankColor = 0x24271f, endOverrun = OVERRUN, embankment = false, bend = noBend } = o;
+  const {
+    farBankColor = 0x24271f,
+    farSurface = 'mud',
+    endOverrun = OVERRUN,
+    embankment = false,
+    bend = noBend,
+  } = o;
   const { z0, z1 } = riverSpan(fromZ, toZ, endOverrun);
   // Where a lake takes over, the far land stops where the lake's shore begins.
   const landEnd = endOverrun === 0 ? z1 + LAKE.pebbleDepth : z1;
@@ -135,6 +149,7 @@ export function addRiver(
   const farBank = bentPlane(
     [FAR_LAND_WIDTH, z0 - landEnd],
     farBankColor,
+    farSurface,
     [farX + FAR_LAND_WIDTH / 2, 0, (z0 + landEnd) / 2],
     bend,
   );

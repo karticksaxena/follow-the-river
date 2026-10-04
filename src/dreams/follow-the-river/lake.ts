@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { surfaceMaterial, type SurfaceName } from '../../engine/surfaces';
 import {
   EDGE_X,
   FAR_EDGE_X,
@@ -23,7 +24,7 @@ export function shoreHeight(depth: number): number {
 }
 
 /** A height field over `r` that follows the lake outline: pebbles at the water, land beyond. */
-function shoreMesh(r: Rect, frame: LakeFrame, landColor: number): THREE.Mesh {
+function shoreMesh(r: Rect, frame: LakeFrame, landColor: number, land: SurfaceName): THREE.Mesh {
   // The side by the river: its edge follows the banks' flare, so the mouth is rounded.
   const west = r.x1 === EDGE_X;
   const inner = west ? r.x1 : r.x0;
@@ -40,8 +41,9 @@ function shoreMesh(r: Rect, frame: LakeFrame, landColor: number): THREE.Mesh {
   const cz = (r.z0 + r.z1) / 2;
   const p = geo.attributes.position;
   const col = new Float32Array(p.count * 3);
+  const blend = new Float32Array(p.count);
   const pebble = new THREE.Color(PEBBLE_COLOR);
-  const land = new THREE.Color(landColor);
+  const landTint = new THREE.Color(landColor);
   const c = new THREE.Color();
   for (let i = 0; i < p.count; i++) {
     const z = p.getZ(i) + cz;
@@ -53,12 +55,17 @@ function shoreMesh(r: Rect, frame: LakeFrame, landColor: number): THREE.Mesh {
     const d = lakeDepth(x, z, frame);
     p.setY(i, shoreHeight(d));
     const t = Math.min(1, Math.max(0, (-d - LAKE.slopeStart) / PEBBLE_FADE));
-    c.copy(pebble).lerp(land, t * t * (3 - 2 * t));
+    blend[i] = t * t * (3 - 2 * t);
+    c.copy(pebble).lerp(landTint, blend[i]);
     c.toArray(col, i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('blend', new THREE.BufferAttribute(blend, 1));
   geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const mesh = new THREE.Mesh(
+    geo,
+    surfaceMaterial({ base: 'pebbles', blend: land, vertexColors: true }),
+  );
   mesh.position.set(cx, 0, cz);
   mesh.receiveShadow = true;
   return mesh;
@@ -79,7 +86,13 @@ export function waterlineDistance(x: number, z: number, frame: LakeFrame): numbe
  * whose outline wanders (coves, points, rounded corners, a far shore), so no straight water edge
  * is ever in view. Built once.
  */
-export function addLake(scene: THREE.Scene, z: number, landColor: number, bankColor: number): void {
+export function addLake(
+  scene: THREE.Scene,
+  z: number,
+  landColor: number,
+  bankColor: number,
+  land: SurfaceName,
+): void {
   const r = lakeRects(z);
   const frame: LakeFrame = { z, west: LAKE.west, east: LAKE.east };
   const water = createWaterMesh(r.water.x1 - r.water.x0, r.water.z0 - r.water.z1, LAKE_FLOW);
@@ -97,7 +110,7 @@ export function addLake(scene: THREE.Scene, z: number, landColor: number, bankCo
   water.position.set(cx, WATER_Y, cz);
   scene.add(
     water,
-    shoreMesh(r.shoreWest, frame, landColor),
-    shoreMesh(r.shoreEast, frame, bankColor),
+    shoreMesh(r.shoreWest, frame, landColor, land),
+    shoreMesh(r.shoreEast, frame, bankColor, land),
   );
 }
