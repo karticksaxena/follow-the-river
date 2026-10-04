@@ -1,43 +1,79 @@
-# Plan 9: the last iteration ("from now the game should be flawless")
+# Plan 9: the last iteration ("this should be picture perfect, then we launch")
 
-> **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:executing-plans` (or `superpowers:subagent-driven-development`) to carry this out task by task.
-> - Also use `grounded-research` for any asset, sound, API or version.
-> - Also use the repo skill `webgpu-threejs-tsl` for every three.js / TSL change.
-> - Subagents run on Sonnet only (`model: "sonnet"`).
-> - Work in a git worktree (`.claude/worktrees/plan-9`, branch `plan-9`) with its own Vite port. :5173 is Kartik's: leave it alone.
-> - Commit per task. When everything is verified, fast-forward local `main`. NEVER push.
+> **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:executing-plans` (Kartik's choice) to carry this out task by task. Steps use checkbox (`- [ ]`) syntax.
+> - Use `grounded-research` for any asset, sound, API or version; use the repo skill `webgpu-threejs-tsl` for every three.js / TSL change.
+> - Subagents run on Sonnet only (`model: "sonnet"`). Blender and asset-building tasks go to Sonnet agents with exact briefs; the controller reviews their output by eye.
+> - Work in a git worktree `.claude/worktrees/plan-9` (branch `plan-9`) with its own Vite port (5180). :5173 is Kartik's: never touch it.
+> - Commit per task (upgrades in their own commits so a regression can be bisected). When everything is verified, fast-forward local `main`. NEVER push.
 
-**Spec:** `docs/superpowers/specs/2026-10-03-kartiks-dreams-design.md`. Kartik's feedback below is binding and overrides it.
+**Goal:** fix every one of Kartik's play-test complaints (sections 2 and 3) and ship the graphics and animation upgrades he chose, so the game can launch with no visible issue.
 
-**State at writing:** `main` at `851f1b8`, 402 tests, `pnpm run check` green.
+**Architecture:** Two tracks. **Track A** (Tasks A1–A16) is launch acceptance: every numbered complaint plus his answers (Dras rename and naming tape, difficulty, Kartik's model, the farewell cinematic, the canoe ending). **Track B** (Tasks B1–B5) is the look-and-feel upgrade (full-resolution render, AgX, GTAO, SMAA, a physical sky, Quaternius nature models, wind, extra mocap clips). If time runs out, A done and B partial is shippable; the reverse is not. Each task ends with a player's-eye Chrome check (section 0), not only unit tests.
+
+**Tech Stack:** Vite, TypeScript strict, three.js r186.1 `WebGPURenderer` + TSL (`three/webgpu`, `three/tsl`, `three/addons/...`), Vitest, oxlint, Prettier, Blender 4.x headless for assets, macOS `afconvert` and Python stdlib for sounds.
+
+**Spec:** `docs/superpowers/specs/2026-10-03-kartiks-dreams-design.md`. Kartik's feedback and answers below are binding and override it (notably: the spec's "540-row render" is replaced by Track B1).
+
+**State at writing:** `main` at `b20de62` (Plan 9 docs on top of `851f1b8`), 402 tests, `pnpm run check` green.
+
+## Global Constraints
+
+- Imports: three core from `three/webgpu`, TSL from `three/tsl`, addons from `three/addons/...js`. No `three` alias.
+- Never bright: dark night and fog colours, dim lights. The one deliberate exception is the sunrise (the end of the farewell and the canoe ride). Light and fog values are named constants.
+- No world edge: ground and water run past the play area and fog ends the view.
+- Player-paced text only (`ctx.read` / `showPages`), never timers. No em dashes in game text.
+- DOM text via `textContent` / `el()`; no `innerHTML` with dynamic strings; no `console` in committed code.
+- Saves only through `createSaveStore`; corrupt or old saves (v1, v2 without new fields) and old settings must load.
+- Assets CC0 (US-government public-domain recordings are allowed and listed as such); every new file listed in `public/assets/LICENSES.md` with source URL and licence; rebuild steps in `tools/assets/README.md`.
+- No per-frame allocation in hot loops; functions < 50 lines; files < 500 lines.
+- `pnpm run check` (lint + typecheck + format + tests + build) green before every commit.
+- Desktop only, keyboard and mouse. `?webgl` (WebGL 2) must render everything WebGPU renders.
+- Never hardcode versions in docs.
+
+## Review Focus
+
+1. **Esc / pointer-lock loss in the middle of a cinematic** (the farewell, the canoe ride): the pause menu opens, Resume returns to the cinematic, and afterwards the weapons, HUD and controls come back exactly once (no weapon in view during the cinematic, none missing after). Test it in Task A9.
+2. **Death or quit mid-ending or mid-canoe**: no cutscene flag left on, no creature left stranded, no black fader, no HUD hidden on the next run. Tested in Tasks A9 and A11.
+3. **`?webgl`** with GTAO, SMAA, DOF and the physical sky renders the same scenes (not black, no shader error). Tested in Task B1 and the final QA.
+4. **Old saves and settings** without `difficulty` (and v1 saves) load and default to Normal. Tested in Task A6.
+5. **Window resize and the adaptive resolution**: no oscillation (hysteresis), changes at most every 2 s, never below the floor, reflector and bloom targets follow. Tested in Task B1.
 
 ---
 
 ## 0. HOW TO TEST (Kartik's main complaint: "what do you even test?")
 
 Every task ends with a **player's-eye check** in Chrome, not just numbers. Look at each screenshot and ask: "would a player think this is broken?" Specifically check:
-- object colours against a reference (the orca must stay black and white);
-- the viewmodel / HUD during cutscenes;
-- objects floating or sunk;
-- things popping in;
-- whether text matches the animation;
+- object colours against a reference (Dras must stay black and white, sick blotches only as the story says);
+- the viewmodel and HUD during cutscenes (must be gone);
+- objects floating or sunk; things popping in;
+- whether text matches the animation on screen at that moment;
+- light that blows out faces or water (bloom, lantern, sun glare);
 - fade state after transitions;
-- frame rate.
+- frame time (median and p95, GPU-waited).
 
-**Chrome harness** (the tab is hidden; Chrome throttles rAF and `setTimeout`):
+**Chrome harness** (the tab is hidden; Chrome throttles rAF and `setTimeout`; tested this session):
 ```js
 Object.defineProperty(document,'hidden',{get:()=>false,configurable:true});
+for (let i=0;i<50 && !window.kd;i++) await new Promise(r=>setTimeout(r,200));
 const anim = kd.stage.renderer._animation, loop = anim._animationLoop; anim.stop();
-let T = performance.now();
+window.__T = performance.now();
 const tick = () => new Promise(r => { const c = new MessageChannel(); c.port1.onmessage = () => r(); c.port2.postMessage(0); });
-window.__step = async (n) => { for (let i = 0; i < n; i++) { T += 16.7; anim.nodes.nodeFrame.update(); loop(T); if (i % 5 === 0) await tick(); } };
+window.__step = async (n, dt=16.7) => { for (let i = 0; i < n; i++) { window.__T += dt; anim.nodes.nodeFrame.update(); loop(window.__T); if (i % 5 === 0) await tick(); } };
 window.__click = (label) => { const b=[...document.querySelectorAll('#overlay button')].find(b=>b.textContent.includes(label)); b?.click(); return !!b; };
+window.__panel = () => document.querySelector('#overlay .panel')?.textContent?.slice(0,160) ?? null;
+const st = document.createElement('style'); st.textContent='*{transition-duration:0ms !important}'; document.head.append(st);
+window.__pressE = async () => { window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyE'})); await window.__step(2); window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyE'})); await window.__step(2); };
+window.__gpuFrames = async (n) => { const dev = kd.stage.renderer.backend.device; const t=[]; for (let i=0;i<n;i++){ const a=performance.now(); window.__T+=16.7; anim.nodes.nodeFrame.update(); loop(window.__T); await dev.queue.onSubmittedWorkDone(); t.push(performance.now()-a);} t.sort((x,y)=>x-y); return {median:t[n>>1], p95:t[Math.floor(n*0.95)], max:t[n-1]}; };
 ```
-- Boot: Start (about 600 frames), 'Follow the River', 'Enter the dream', wait for `window.kdRiver`, then Skip the pages.
-- `kdRiver` is the chapter's systems (`ctx`, `horde`, `fish`, `gates`, `world`...).
-- To reach a scene module directly: `await import('/src/dreams/follow-the-river/canoe-ride.ts')`.
-- The page reloads on any file edit: re-run the setup.
-- Measure FPS by timing real frames, without the manual stepping.
+- Boot: `__click('Start')`, `__step(260)`, `__click('Follow the River')`, `__click('Enter the dream')`, then loop `__step(5)` + 100 ms waits until `window.kdRiver`, then skip pages (click `Skip`, else `Continue`).
+- Fades resolve through `setTimeout` (throttled in a hidden tab): after a transition, if the screen is black, check `document.querySelector('.fader').className` and remove `black` by hand.
+- Closing a reader under `?nolock` can pop the pause menu: click `Resume`.
+- Teleport: set `kd.stage.camera.position` (the player moves the camera itself). E: `__pressE()`.
+- **Before overriding anything on `kdRiver` (for example `horde.spawn`), keep the original** (`const spawn = kdRiver.horde.spawn;`). Overwriting it without a copy cost a page reload this session.
+- `kdRiver` is the chapter's `Systems` (`ctx`, `horde`, `fish`, `gates`, `world`, ...); `Run` is not exposed (Task A9 adds `window.kdRun` in DEV).
+- Scene modules directly: `await import('/src/dreams/follow-the-river/canoe-ride.ts')`; a fake `ctx` for the ride: `{stage: kd.stage, overlay: kd.overlay, audio: kd.audio, keys: kd.keys, isPaused: () => false, hold(){}, read(pages, done){ window.__reads.push({pages, done}); }, choose: async()=>0, finish(){}}`.
+- The page reloads on any file edit: re-run the setup. Use a frozen detached worktree for long play-throughs (`git worktree add --detach .claude/worktrees/playtest9 HEAD`, own port).
+- Frame time: `await __gpuFrames(300)`. Baseline measured this session: Night 3 dawn at 1108×540 = median 2.7 ms, p95 4.6 ms.
 
 ---
 
@@ -139,52 +175,40 @@ window.__click = (label) => { const b=[...document.querySelectorAll('#overlay bu
 25. **A black screen after the game ends** (screenshot: "Kartik's Dreams / Start" on black).
     - Root cause found: `session.ts finish()` does `overlay.fade(true).then(leave)`, and `goHome` → `startHome` never calls `overlay.fade(false)`.
     - Fix: fade in at home start. Check the bedroom renders and nothing is left over from the canoe scene.
+26. **Mom's face "firing like a firecracker"** at dawn (screenshot 32): a blown-out glow at her face and eyes. See section 3.
+27. **"You are putting no realism at all"**: Track B (Kartik chose "Sharp stylised").
 
-## 3. Tasks (each: TDD where pure, then a player's-eye Chrome check, then commit)
+## 3. Confirmed root causes (measured or reproduced this session; do not re-investigate)
 
-- **T1 Quick fixes:**
-  - throw revert (#1);
-  - phone prop (#2);
-  - name Kartik in all text (grep "K," "K." "K —" in `tapes.ts`/`intro.ts`/`ending*`);
-  - home fade-in (#25);
-  - torch stun (#13);
-  - viewmodel/HUD hidden in all cutscenes and the farewell (#17 part);
-  - "Mom stops rowing" sync (#23);
-  - trees grounded (#22).
-- **T2 The creature's look:** white bug (#3); gradual realistic sickness via TSL (#4); wheezy blow; the per-zombie progression.
-- **T3 The creature's behaviour:**
-  - fin never over the land (#5);
-  - every kill carried in its jaws into the water (#6);
-  - the ending strikes only near you and Mom (#15);
-  - the visible swim-in strand (#16).
-- **T4 Rename + lore:**
-  - all text says Dras / Subject R-7 / it, never "orca" (on-screen strings only; code identifiers may stay);
-  - tapes explain the freshwater variant engineered to clean the river;
-  - **a new flashback: Mom naming it "Dras" at the tank** (reuse `flashback-scene.ts` tape 2's tank set).
-- **T5 Waves rework** (#8–11): longer zones; time-driven random spawns per wave plus a few ambushes; escalating waves; objective hints; tests.
-- **T6 Balance + difficulty menu** (#12, #14):
-  - Story / Normal / Hard in settings, chosen in a menu on "Enter the dream";
-  - scarce crates; river-edge ammo/arrow pickups;
-  - per-difficulty knobs (zombie speed, wave size, ammo, stun).
-- **T7 Invisible wall** (#7): find and remove it; make the water's edge reachable on all banks; test.
-- **T8 Kartik's model** (agent, Blender):
-  - Quaternius man casual from the men pack (already downloaded for `zombify.py`; see `tools/assets/README.md`), as `characters/kartik.glb`, with Sit / Kneel / Idle / Walk clips (reuse the `mom_clips.py` approach);
-  - plus a first-person arm+hand viewmodel cut from him.
-- **T9 Farewell cinematic** (#17, #18): kneel beside you; both hands on it; head lift and eye turn; the orbit camera; the CC0 creature reply sound; then the pack.
-- **T10 Sunrise + FPS** (#19): profile and fix the frame drops; a real sunrise palette (warm yellow sun, blue sky, the moon fading).
-- **T11 Canoe ride** (#20, #21, #24): paddle-stroke sounds plus water and birds (CC0); the talk with Mom; the zoom-out ending shot with Kartik in the boat; credits.
-- **T12 Full play-through QA, Chrome, as a player:**
-  - the cold open → intro → every day and night (with deaths, checkpoint resumes, difficulty levels) → the ending → home;
-  - screenshots at every beat;
-  - FPS check;
-  - fix anything a player would notice;
-  - update docs (results), `LICENSES.md`, memory; merge to main.
+| # | Complaint | Root cause (evidence) |
+|---|---|---|
+| 3 | Creature white | `tintSick` sets every material to `white.lerp(SICK.tint, k)`. In Night 3 all three materials read `c0b3b0` (browser, `orca-black`, `orca-white`, `orca-grey`). Mid-leap it reads as a pink-beige shark (screenshot). |
+| 5 | Fin over the bank | Natural banks (`banks.ts bankProfile('natural')`) keep mud above the water out to x≈6.75 (y −1 is reached between x 6 and 7), while the cruise lane is x∈[5.5, 8.5] (`cruiseTargetX`: EDGE_X + 4 ± 1.5). The body and fin cruise over the mud. |
+| 6 | Zombie "lives on the ground" when eaten | The ending's sweep calls `takeByFish`: state `taken`, clip `Hit` (a knock-down), slides +x at 2 m/s while sinking 1.2 m/s from y 0, so it sinks into the ground on the bank. A grab whose bite misses (`biteRange` 2.5) returns empty-mouthed and the zombie lives on. A held zombie's pose in the jaws was never screenshotted: Task A3 step 1 checks it. |
+| 7 | Invisible wall at the right bank (Night 2) | The river blocker (`world.ts stripBlockers`) starts at x = EDGE_X = 3, the top of the natural slope; the visible mud runs on to x≈6.75. The player stops at x 2.7 looking at 4 m of walkable-looking bank. Task A4 step 1 confirms by walking +x in Night 2 and logging the box hit. |
+| 8–10 | Barricade right in front of the crate, nobody comes | Each zone is 32 m (wave z −148 → gate −180) with the crate at z−2; night fog ends at 45–55 m, so the barricade is in view from the crate. Spawns only fire when the player walks past ambush trigger z (`stepWaves`), so standing still spawns nobody. |
+| 12 | Arrows kill everything | One arrow hit kills (`bow.ts resolveHit` → `horde.kill`), and the arrow sticks where the zombie stood and is picked back up (`RECOVER_RADIUS`), so arrows are effectively infinite. Crates add 4 arrows, a battery and ammo for every gun. |
+| 13 | Stun too long | `STUN = { exposure: 0.4, seconds: 2.5 }` (`zombies/brain.ts:40`). |
+| 15 | Creature eats them far away in the last stand | `WAVE.orca.reach` 7 is measured from the bank edge, not from you; zombies spawn 34 m upstream at x 2..−4, all inside reach, so it strikes as soon as they appear. |
+| 16 | Appears out of nowhere | `STRAND.approach` 1.6 s, travelling underwater (`launchY` = rest.y − 2.8) from wherever it was, then leaps. |
+| 17 | Gun in view, no hands, no Mom | The farewell keeps gameplay ticking: `controls.switchWeapons` sets the current viewmodel visible every frame; the HUD has no cinematic class here; Mom walks to a spot 0.9 m from the camera and is off-screen; there are no hand meshes at all (screenshot this session: bow in view, beige creature, HUD up). |
+| 19 | Dawn "FPS so low I see each frame" | Not a performance drop: GPU-waited frames during the dawn are median 2.7 ms / p95 4.6 ms. The light is repainted only every 0.25 s (`DAWN.step`), so the brightening steps at 4 Hz like a slideshow. `applyLighting` costs 7 µs: do not re-profile it. The dawn preset itself is grey (`LIGHTING.dawn`: sky 0x2a3036/0x625d5a, disc 0x8a837c soft 0.9), not a sunrise. |
+| 20 | Canoe "motorboat" | `sounds.dawn` (`dawnSamples`: a C-major pad on a 65 Hz fundamental with detuned beating copies) drones under `sounds.water`. |
+| 22 | Floating trees in the canoe scene | Items sit on the analytic `terrainY` but the terrain mesh is a 2.5 m grid of flat triangles; on the concave bank top the mesh lies below the curve. Measured over 193k placements: gap up to 0.54 m, 503 placements over 0.2 m, worst at d≈12 m from the river centre (where trees cluster). |
+| 23 | "Mom stops rowing" but rowing goes on | She does switch to Sit at t≈67.75 s (screenshot at 72.6 s: sitting, paddle across her lap), but `travelled()` keeps the canoe at 2.4 m/s through the closing pages and the drone keeps playing: the boat never slows. |
+| 25 | Black screen after the credits | `session.finish` fades to black then `leave()`; `startHome` never fades back in. |
+| 26 | Mom's face "firing like a firecracker" at dawn (new, screenshot 32) | `ending-scene.ts update()` hangs the lantern's PointLight in world space at `(mom.x + 0.5, 1.3, mom.z)`: face height, 0.5 m from her face, intensity 5, distance 28; with no tone mapping and bloom threshold 0.7 her face and eyes blow out. The lantern mesh rides her wrist in the pack slot, so the light and the lamp are not even in the same place. |
+| 27 | "No realism at all" (new) | 540-row render scaled up, no anti-aliasing, no tone mapping (raw sRGB clipping), no ambient occlusion, a two-colour painted sky dome, Kenney's flat low-poly nature kit, no wind, lights placed by eye. Track B. |
+| 2 | Phone missing | `intro.ts` goodbye plays `Idle_Gun_Pointing` with nothing in her hand. |
+| 1 | Baseball throw | `intro.ts throwAction` plays the retargeted UAL2 `OverhandThrow` (`Throw`, release 0.8 s). |
 
-## 4. Existing facts to reuse
+## 4. Rulings (scope and design decisions taken while planning)
 
-- Mom's clips: `mom.glb` has Sit, Row, Kneel, Throw (`tools/blender/mom_clips.py`, from UAL CC0 at `scratchpad/assets/zombie-candidates/ual1|ual2`).
-- Mom's canoe paddle is pinned between `WristL`/`WristR` (`canoe-ride.ts holdPaddle`).
-- The ending: `ending.ts` (steps mom → fight → strand → song → hand → pack → dawn → ride → credits), `ending-farewell.ts` (FAREWELL spots, `Run.interact` E hook), `orca-strand.ts`, `orca-sick.ts`, `orca-grab.ts` (StrikeStyle, pace, sweep), `fish.ts`/`fish-state.ts`.
-- Waves: `waves.ts` (`WaveDef.ambushes`, `stepWaves`, gates), areas' `waves` blocks, `play.ts` `tickWaves`/`spawnAmbush`, `phases.ts` (checkpoint, topUp).
-- Weapons: `gun.ts` (Armory), `weapons.ts` GUNS; sounds `public/assets/sounds/weapons/*` (CC0 Free Firearm Sound Library).
-- The canoe: `canoe-scene.ts`, `canoe-ride.ts` (RIDE 72 s, the calf, CLOSING_PAGES).
+- Ruling: first-person arms holding every weapon is in no complaint and no answer. It is Task B5, the last task, optional, never blocks launch. Only the farewell's reaching hand (Task A10) is required.
+- Ruling: Mom's bag in the last stand (`armForLastStand`, ammo to the brim) stays: it is a story beat ("Take this"). It scales by difficulty (Task A6): full on Story, half on Normal, a third on Hard.
+- Ruling: "Watch the ending again" plays the canoe ride and credits instead of text-only `REPLAY_PAGES` (Task A11), and its wording joins the rename (Task A2).
+- Ruling: the canoe ride keeps running behind its dialogue pages (it is ambient; nothing can happen to you), so the conversation never freezes the river.
+- Ruling: difficulty lives in `Settings` (shared, saved, changeable from the pause menu) and is asked once when a new run starts. Old settings without it default to Normal.
+- Ruling: zombies take two body hits on Normal and Hard (a head hit always kills; the shotgun's close blast always kills), one on Story. This, scarce ammo, no recovering an arrow that killed, and short stuns are together what makes the creature and the guns matter.
+- Ruling: one sky system. `SkyMesh` (r186, verified in `node_modules/three/examples/jsm/objects/SkyMesh.js`: `turbidity`, `rayleigh`, `mieCoefficient`, `mieDirectionalG`, `sunPosition`, `showSunDisc`, cloud uniforms) for dusk, day, dawn and sunrise; at night the sun is below the horizon, so a dark star dome plus the moon disc (kept from today) take over, blended by sun elevation. Every night preset is checked "never bright" by screenshot.
+
