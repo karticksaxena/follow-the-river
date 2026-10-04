@@ -4,6 +4,7 @@ import { addBatched } from '../../engine/batch';
 import { loadModel } from '../../engine/models';
 import { KIT_SCALE, kitUrl } from './kits';
 import { FAR_EDGE_X } from './river';
+import { type Bend, noBend } from './shore-shape';
 
 export interface Silhouette {
   x: number;
@@ -118,7 +119,8 @@ function farBankItem(style: SkylineStyle, s: Silhouette, i: number): Item {
 
 /**
  * Places the far-bank silhouettes (windows facing the river) and a tree line behind the bank,
- * spanning `startZ` to `endZ` plus a margin so no end of the row is visible.
+ * spanning `startZ` to `endZ` plus a margin so no end of the row is visible. Past the walkable ends
+ * the rows follow the river's `bend`, so the view turns out of sight instead of running straight.
  * Static meshes are merged per material and map cell (addBatched).
  */
 export async function addSkyline(
@@ -127,6 +129,7 @@ export async function addSkyline(
   startZ = 0,
   endZ = -110,
   endMargin = MARGIN,
+  bend: Bend = noBend,
 ): Promise<void> {
   const from = startZ + MARGIN;
   const span = startZ - endZ + MARGIN + endMargin;
@@ -139,7 +142,7 @@ export async function addSkyline(
   const models = await Promise.all(items.map((item) => item.load));
   items.forEach((item, i) => {
     const model = models[i];
-    model.position.set(item.x, 0, item.z);
+    model.position.set(item.x + bend(item.z), 0, item.z);
     model.rotation.y = item.yaw;
     model.scale.setScalar(item.scale);
   });

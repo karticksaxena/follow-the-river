@@ -1,7 +1,8 @@
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as THREE from 'three/webgpu';
 import { createRailing, type Railing } from './railing';
-import { EDGE_X, KERB_WIDTH, OVERRUN, RIVER_X, riverSpan, WATER_Y } from './river';
+import { bentPlane, EDGE_X, KERB_WIDTH, OVERRUN, RIVER_X, riverSpan, WATER_Y } from './river';
+import { type Bend, BEND, farBankInset, noBend, rowsFor } from './shore-shape';
 
 export type BankKind = 'embankment' | 'natural';
 
@@ -72,12 +73,27 @@ export function bankY(kind: BankKind, x: number): number {
 
 const mirrorX = (x: number): number => 2 * RIVER_X - x;
 
-/** A strip along z (z0 near > z1 far) swept from the profile; flat-shaded per segment. */
+/** How a bank strip follows the river: `bend` shifts it sideways, `inset` pushes its water line in. */
+interface Wander {
+  bend: Bend;
+  /** Metres the bank's water line has moved toward the river's middle at z (the far bank only). */
+  inset?: (z: number) => number;
+}
+
+/** Mesh rows every strip is cut into: one where it is straight, rows of `rowStep` m where it wanders. */
+const WANDER_ROW_STEP = 4;
+
+/**
+ * A strip along z (z0 near > z1 far) swept from the profile; flat-shaded per segment. Each row's
+ * profile is shifted by the wander: a far bank that pushes in gets a level lip out to its water
+ * line (points past the first move; the first stays on the grass).
+ */
 function stripGeometry(
   pts: readonly ProfilePoint[],
   z0: number,
   z1: number,
   mirror: boolean,
+  { bend, inset }: Wander,
 ): THREE.BufferGeometry {
   const pos: number[] = [];
   const nor: number[] = [];
@@ -85,26 +101,37 @@ function stripGeometry(
   const idx: number[] = [];
   const c = new THREE.Color();
   const side = mirror ? -1 : 1;
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1];
-    const b = pts[i];
+  const rows = rowsFor(z0 - z1, inset ? WANDER_ROW_STEP : BEND.step);
+  // A level lip: the first point again, which the inset slides out from.
+  const profile = inset ? [pts[0], ...pts] : pts;
+  const slide = inset ? 1 : Infinity;
+  for (let i = 1; i < profile.length; i++) {
+    const a = profile[i - 1];
+    const b = profile[i];
     const len = Math.hypot(b.x - a.x, b.y - a.y);
-    if (len === 0) continue;
-    const nx = (-(b.y - a.y) / len) * side;
-    const ny = (b.x - a.x) / len;
+    if (len === 0 && i !== slide) continue;
+    const nx = len === 0 ? 0 : (-(b.y - a.y) / len) * side;
+    const ny = len === 0 ? 1 : (b.x - a.x) / len;
     const base = pos.length / 3;
-    for (const [p, z] of [
-      [a, z0],
-      [b, z0],
-      [b, z1],
-      [a, z1],
-    ] as const) {
-      pos.push(mirror ? mirrorX(p.x) : p.x, p.y, z);
-      nor.push(nx, ny, 0);
-      c.setHex(p.color);
-      col.push(c.r, c.g, c.b);
+    for (let r = 0; r <= rows; r++) {
+      const z = z0 - ((z0 - z1) * r) / rows;
+      const shift = bend(z);
+      const push = inset ? inset(z) : 0;
+      for (const [p, j] of [
+        [a, i - 1],
+        [b, i],
+      ] as const) {
+        const x = p.x + (j >= slide ? push : 0);
+        pos.push((mirror ? mirrorX(x) : x) + shift, p.y, z);
+        nor.push(nx, ny, 0);
+        c.setHex(p.color);
+        col.push(c.r, c.g, c.b);
+      }
+      if (r > 0) {
+        const q = base + 2 * r;
+        idx.push(q - 2, q - 1, q + 1, q - 2, q + 1, q);
+      }
     }
-    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -145,26 +172,29 @@ export function addBanks(
   [fromZ, toZ]: readonly [number, number],
   [nearGrass, farGrass]: readonly [number, number],
   endOverrun = OVERRUN,
+  bend: Bend = noBend,
 ): Railing | null {
   const { z0, z1 } = riverSpan(fromZ, toZ, endOverrun);
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   const near = bankProfile(kind, nearGrass);
   const far = bankProfile(kind, farGrass);
+  // The walkable bank stays straight (gameplay reads its edge); only the far bank wanders, and
+  // never an embankment, which is built.
+  const farWander: Wander = kind === 'natural' ? { bend, inset: farBankInset } : { bend };
   scene.add(
-    new THREE.Mesh(stripGeometry(near, z0, z1, false), material),
-    new THREE.Mesh(stripGeometry(far, z0, z1, true), material),
+    new THREE.Mesh(stripGeometry(near, z0, z1, false, { bend }), material),
+    new THREE.Mesh(stripGeometry(far, z0, z1, true, farWander), material),
   );
   const last = near[near.length - 1].x;
-  const bed = new THREE.Mesh(
-    new THREE.PlaneGeometry(mirrorX(last) - last, z0 - z1),
-    new THREE.MeshLambertMaterial({ color: BANK.sand }),
+  scene.add(
+    bentPlane([mirrorX(last) - last, z0 - z1], BANK.sand, [RIVER_X, BED_Y, (z0 + z1) / 2], bend),
   );
-  bed.rotation.x = -Math.PI / 2;
-  bed.position.set(RIVER_X, BED_Y, (z0 + z1) / 2);
-  scene.add(bed);
   if (kind !== 'embankment') return null;
+  // The railing is straight: it stops where the river starts to bend away.
+  const rz0 = Math.min(z0, fromZ + BEND.lead);
+  const rz1 = Math.max(z1, toZ - BEND.lead);
   const rail = new THREE.MeshLambertMaterial({ color: BANK.rail });
-  scene.add(new THREE.Mesh(railGeometry(mirrorX(BANK.railX), z0, z1), rail));
+  scene.add(new THREE.Mesh(railGeometry(mirrorX(BANK.railX), rz0, rz1), rail));
   const style = { x: BANK.railX, postHeight: BANK.postHeight, spacing: BANK.postSpacing };
-  return createRailing(scene, style, z0, z1, rail);
+  return createRailing(scene, style, rz0, rz1, rail);
 }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { resolveCircle } from '../../../engine/collide';
-import { EDGE_X, LAKE, RIVER_X } from '../river';
+import { EDGE_X, LAKE, RIVER_X, shoreY } from '../river';
 import { shackBounds, shackColliders } from '../shack';
+import { lakeDepth, lakeEdgeZ } from '../shore-shape';
 import { FOREST } from './forest';
 
 const inside = (
@@ -70,7 +71,7 @@ describe('FOREST', () => {
     if (!e || !m) return;
     expect(m.z).toBeLessThan(LAKE_Z + LAKE.pebbleDepth); // on the pebble band
     expect(m.z).toBeGreaterThan(FOREST.endZ - 1); // not in the end wall or the water
-    expect(m.x).toBeGreaterThan(LAKE.pebbleWest);
+    expect(m.x).toBeGreaterThan(LAKE.west);
     expect(m.x).toBeLessThan(EDGE_X); // west of the river mouth
     expect(Math.hypot(m.x - e.x, m.z - e.z)).toBeGreaterThan(4);
     expect(Math.hypot(m.x - e.x, m.z - e.z)).toBeLessThan(7);
@@ -87,8 +88,20 @@ describe('FOREST', () => {
     expect(FOREST.props.some((p) => p.collide && p.z < LAKE_Z)).toBe(false);
   });
 
-  it('keeps every prop out of the lake except the far pines (none on the pebbles or river mouth)', () => {
-    const wet = FOREST.props.filter((p) => p.z < LAKE_Z && p.x > LAKE.west && p.x < LAKE.east);
+  it('sets the shore rocks on the wandering waterline, sunk a little into the slope', () => {
+    const rocks = FOREST.props.filter(
+      (p) => p.model.startsWith('rock_large') && p.z < LAKE_Z + 6 && p.z > LAKE_Z - 13,
+    );
+    expect(rocks.length).toBeGreaterThan(5);
+    for (const r of rocks) {
+      expect(r.y).toBeCloseTo(shoreY(r.z - lakeEdgeZ(r.x, LAKE_Z)) - 0.1, 6);
+      expect(r.z).toBeGreaterThan(lakeEdgeZ(r.x, LAKE_Z)); // on the land side of the water
+    }
+  });
+
+  it('keeps every prop out of the lake outline (none in the water or the river mouth)', () => {
+    const frame = { z: LAKE_Z, west: LAKE.west, east: LAKE.east };
+    const wet = FOREST.props.filter((p) => lakeDepth(p.x, p.z, frame) > 0);
     expect(wet).toEqual([]);
   });
 

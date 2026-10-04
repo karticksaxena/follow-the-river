@@ -37,27 +37,24 @@ describe('the lake', () => {
     expect(r.water.x1).toBeGreaterThan(EDGE_X + 60);
   });
 
-  it('keeps the pebble band on the land side and clear of the river mouth', () => {
+  it('keeps the shore terrain on both sides of the river mouth, level with the water line there', () => {
     const z = FOREST.lake?.z ?? 0;
     const r = lakeRects(z);
-    for (const p of [r.pebblesWest, r.pebblesEast]) {
-      expect(p.z1).toBe(z);
-      expect(p.z0).toBeGreaterThan(z);
+    for (const p of [r.shoreWest, r.shoreEast]) {
+      expect(p.z0).toBe(z + LAKE.pebbleDepth);
+      expect(p.z1).toBeLessThanOrEqual(z - OVERRUN);
     }
-    expect(r.pebblesWest.x1).toBeLessThanOrEqual(EDGE_X);
-    expect(r.pebblesEast.x0).toBeGreaterThanOrEqual(FAR_EDGE_X);
+    expect(r.shoreWest.x1).toBeLessThanOrEqual(EDGE_X);
+    expect(r.shoreEast.x0).toBeGreaterThanOrEqual(FAR_EDGE_X);
+    expect(r.water.x0).toBeLessThan(LAKE.west); // the water reaches past the wandering side shores
     expect(r.water.x1).toBeGreaterThanOrEqual(FAR_EDGE_X + 60);
   });
 
   it('has no overlapping flat planes past the shore (no z-fighting)', () => {
     const r = lakeRects(-392);
-    const flat = [r.water, r.flankWest, r.flankEast];
-    for (const a of flat) {
-      for (const b of flat) {
-        if (a === b) continue;
-        expect(a.x1 <= b.x0 || b.x1 <= a.x0).toBe(true);
-      }
-    }
+    expect(r.shoreWest.x1 <= r.shoreEast.x0).toBe(true);
+    // The river's water ends where the lake's begins; the lake water never reaches back north.
+    expect(r.water.z0).toBe(-392);
   });
 });
 

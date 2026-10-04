@@ -1,5 +1,6 @@
 import { EDGE_X, FAR_EDGE_X, LAKE, RIVER_X, shoreY } from '../river';
 import { shackBounds } from '../shack';
+import { lakeEdgeZ } from '../shore-shape';
 import { seeded } from '../skyline';
 import type { AreaDef, LurkerDef, PickupDef, PropPlacement, ScareDef, ShackDef } from './types';
 
@@ -75,10 +76,13 @@ function lakeShore(): PropPlacement[] {
   for (let x = -34; x < FAR_EDGE_X + 29; x += 9) {
     if (x > EDGE_X - 4 && x < FAR_EDGE_X + 1) continue; // the river mouth stays open
     const model = random() < 0.5 ? 'rock_largeA' : 'rock_largeC';
-    const z = LAKE_Z + 0.5 + random() * 2;
+    const rx = x + random() * 4;
+    // The rocks follow the wandering shore: a little up the beach from the local water line.
+    const edge = lakeEdgeZ(rx, LAKE_Z);
+    const z = edge + 0.5 + random() * 2;
     out.push({
-      ...at(model, x + random() * 4, z, random() * TAU, 0.3 + random() * 0.3),
-      y: shoreY(z - LAKE_Z) - 0.1, // sunk a little into the slope
+      ...at(model, rx, z, random() * TAU, 0.3 + random() * 0.3),
+      y: shoreY(z - edge) - 0.1, // sunk a little into the slope
     });
   }
   return out;

@@ -6,10 +6,12 @@ import type { AreaDef, PropPlacement } from './areas/types';
 import { addBanks, groundEndX } from './banks';
 import { addCampfire } from './campfire';
 import { KIT_SCALE, kitUrl } from './kits';
+import { addLake } from './lake';
 import { createWorldLights, type WorldLights } from './lighting';
 import type { Railing } from './railing';
-import { addLake, addRiver, EDGE_X, LAKE, OVERRUN, plane, RIVER_WIDTH } from './river';
+import { addRiver, bentPlane, EDGE_X, LAKE, OVERRUN, RIVER_WIDTH } from './river';
 import { addShack, shackBounds, shackColliders } from './shack';
+import { bendFor, type Bend } from './shore-shape';
 import { addSkyline } from './skyline';
 
 export interface World {
@@ -69,11 +71,15 @@ export function groundSpan(area: AreaDef): { z0: number; z1: number } {
   };
 }
 
+/** The river bends away past both walkable ends, but not at a lake, where the lake takes over. */
+export function bendOf(area: AreaDef): Bend {
+  return bendFor(area.startZ, area.endZ, !area.lake);
+}
+
 function addGround(scene: THREE.Scene, area: AreaDef): void {
   const { z0, z1 } = groundSpan(area);
-  const ground = plane(120, z0 - z1, area.ground);
-  ground.position.set(groundEndX(area.bank) - 60, 0, (z0 + z1) / 2);
-  scene.add(ground);
+  const at = [groundEndX(area.bank) - 60, 0, (z0 + z1) / 2] as const;
+  scene.add(bentPlane([120, z0 - z1], area.ground, at, bendOf(area)));
 }
 
 /** The river (stopping at a lake's shore, where the lake begins) and its skyline. */
@@ -81,16 +87,18 @@ async function addWaters(scene: THREE.Scene, area: AreaDef): Promise<Railing | n
   const { lake } = area;
   const embankment = area.bank === 'embankment';
   const grass = [area.ground, area.farBank] as const;
+  const bend = bendOf(area);
+  const farBankColor = area.farBank;
   if (!lake) {
-    addRiver(scene, area.startZ, area.endZ, { farBankColor: area.farBank, embankment });
-    const railing = addBanks(scene, area.bank, [area.startZ, area.endZ], grass);
-    await addSkyline(scene, area.skyline, area.startZ, area.endZ);
+    addRiver(scene, area.startZ, area.endZ, { farBankColor, embankment, bend });
+    const railing = addBanks(scene, area.bank, [area.startZ, area.endZ], grass, OVERRUN, bend);
+    await addSkyline(scene, area.skyline, area.startZ, area.endZ, undefined, bend);
     return railing;
   }
-  addRiver(scene, area.startZ, lake.z, { farBankColor: area.farBank, endOverrun: 0, embankment });
-  const railing = addBanks(scene, area.bank, [area.startZ, lake.z], grass, 0);
+  addRiver(scene, area.startZ, lake.z, { farBankColor, endOverrun: 0, embankment, bend });
+  const railing = addBanks(scene, area.bank, [area.startZ, lake.z], grass, 0, bend);
   addLake(scene, lake.z, area.ground, area.farBank);
-  await addSkyline(scene, area.skyline, area.startZ, lake.z, 0);
+  await addSkyline(scene, area.skyline, area.startZ, lake.z, 0, bend);
   return railing;
 }
 
