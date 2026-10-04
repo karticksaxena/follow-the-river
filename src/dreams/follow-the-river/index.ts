@@ -7,6 +7,7 @@ import type { DreamContext, DreamModule } from '../types';
 import { areaFor } from './areas';
 import type { AreaDef } from './areas/types';
 import { startChapter, type Chapter } from './chapter';
+import { runColdOpen, TITLE_PAGES, type ColdOpen } from './coldopen';
 import { REPLAY_PAGES } from './ending';
 import { phaseTitle } from './flow';
 import { runIntro, type Intro } from './intro';
@@ -25,6 +26,8 @@ const PLAYABLE: readonly Phase[] = ['day1', 'night1', 'day2', 'night2', 'day3', 
 /** Show "Loading…" only when a scene swap takes longer than this. */
 const LOADING_DELAY_MS = 300;
 const LOAD_FAILED = "Couldn't load the next part. Check your internet connection and try again.";
+/** The page whose click regains control after a scene swap. */
+const RESUME_PAGES: readonly string[] = ['The dream begins again.'];
 
 /** The intro is played by `runIntro`; this fallback (a finished run restarting) skips it. */
 function playable(save: RunSave): RunSave {
@@ -44,6 +47,9 @@ export function createDream(): DreamModule {
   let store: SaveStore<RunSave> | null = null;
   let chapter: Chapter | null = null;
   let intro: Intro | null = null;
+  /** The cold open (how it started) plays once per new run, before the intro. */
+  let cold: ColdOpen | null = null;
+  let coldDue = false;
   let save: RunSave = freshRun();
   let resumable = false;
   let disposed = false;
@@ -75,12 +81,23 @@ export function createDream(): DreamModule {
     return null;
   }
 
-  /** The intro scene for a fresh run, else the chapter for the save's phase. */
+  /** The cold open, then the intro scene for a fresh run; else the chapter for the save's phase. */
   async function enter(from: RunSave): Promise<void> {
     if (!ctx) return;
     if (from.phase !== 'intro') {
       // A finished run gets the ending menu in begin(), not a chapter built behind it.
       if (PLAYABLE.includes(from.phase)) chapter = await build(from);
+      return;
+    }
+    if (coldDue) {
+      coldDue = false;
+      const built = await runColdOpen(
+        ctx,
+        () => void toIntro(),
+        () => disposed,
+      );
+      if (disposed) built.dispose();
+      else cold = built;
       return;
     }
     const built = await runIntro(
@@ -92,8 +109,11 @@ export function createDream(): DreamModule {
     else intro = built;
   }
 
-  /** Fade out, run `swap` (with "Loading…" if slow), fade in, title card. Input is frozen throughout. */
-  async function transition(swap: () => Promise<void>): Promise<void> {
+  /**
+   * Fade out, run `swap` (with "Loading…" if slow), fade in, title card. Input is frozen throughout;
+   * without a chapter, reading `pages` is what hands control back.
+   */
+  async function transition(swap: () => Promise<void>, pages = RESUME_PAGES): Promise<void> {
     if (!ctx) return;
     const { overlay } = ctx;
     ctx.hold();
@@ -109,7 +129,7 @@ export function createDream(): DreamModule {
       clearTimeout(loading);
     }
     if (disposed) return;
-    if (failed || (!chapter && !intro)) {
+    if (failed || (!chapter && !intro && !cold)) {
       dropScene();
       await ctx.choose(LOAD_FAILED, ['Back to dreams']);
       return ctx.finish();
@@ -118,7 +138,7 @@ export function createDream(): DreamModule {
     await overlay.fade(false);
     if (disposed) return;
     if (chapter) chapter.announce(true);
-    else ctx.read(['The dream begins again.']); // the player's click regains control
+    else ctx.read(pages); // the player's click regains control
   }
 
   function release(): void {
@@ -126,12 +146,22 @@ export function createDream(): DreamModule {
     chapter = null;
     intro?.dispose();
     intro = null;
+    cold?.dispose();
+    cold = null;
   }
 
   /** Frees the scene; the stage gets an empty one first so three never draws freed resources. */
   function dropScene(): void {
     if (ctx) ctx.stage.scene = new THREE.Scene();
     release();
+  }
+
+  /** The cold open is over (or skipped): swap to the intro under the title card. */
+  function toIntro(): Promise<void> {
+    return transition(async () => {
+      dropScene();
+      await enter(save);
+    }, TITLE_PAGES);
   }
 
   /** Mom has sent you off: save the end of the intro, swap to Day 1. */
@@ -160,6 +190,7 @@ export function createDream(): DreamModule {
       store?.clear();
       save = freshRun();
       resumable = false;
+      coldDue = true;
       await enter(save);
     });
   }
@@ -192,6 +223,7 @@ export function createDream(): DreamModule {
       const loaded = forced ?? (stored && normalizeSave(stored));
       save = loaded ?? freshRun();
       resumable = !forced && loaded !== null && loaded.phase !== 'intro';
+      coldDue = !forced && !resumable; // a new run (not Continue, not a dev `?phase=`)
       await enter(save);
     },
     begin() {
