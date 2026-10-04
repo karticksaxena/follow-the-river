@@ -1054,3 +1054,99 @@ it('lookAt turns the head toward a target but never past its limits', () => { /*
 - [ ] **Step 6:** tests PASS; `pnpm run check`.
 - [ ] **Step 7: Chrome check:** the audio can't be heard by the agent: verify by logging which buffers play when (`kd.audio` wrapper spy) at the beaching, the answer, each paddle stroke (stroke times vs blade crossings), and that no `dawn` pad source exists. Kartik listens by hand (listed in the results).
 - [ ] **Step 8: commit** `feat: Dras' real calls, paddle strokes in sync with Mom's rowing, birds at sunrise; the motorboat drone is gone` (+ LICENSES rows).
+
+### Task A13: The render pipeline (full resolution with adaptive quality, AgX, ambient occlusion, SMAA, depth of field for cutscenes)
+
+**Files:**
+- Modify: `src/engine/stage.ts`, `src/engine/post.ts`, `src/engine/resolution.ts` (+ `resolution.test.ts`), `src/dreams/follow-the-river/flashlight.ts` (retune), `ending-scene.ts` (`MOM_LANTERN` retune), `lighting.ts` (intensities retuned under AgX), `src/dreams/types.ts` + `session.ts` (`DreamContext.focus`).
+- Create: `src/engine/quality.ts` (+ `quality.test.ts`).
+
+**Interfaces:**
+- Produces: `QUALITY` knobs and `stepQuality(q: Quality, frameMs: number, dt: number): boolean` (pure: true when the step changed); `Stage.quality: Readonly<Quality>`; `Post.focus(on: boolean, distance?: number): void` and `DreamContext.focus(on: boolean, distance?: number)` (depth of field for cutscenes; the first call compiles, so `warm()` runs it once behind a black fade).
+- The 540-row `RENDER_HEIGHT` and `internalResolution` are deleted (spec line overridden by Kartik's answer).
+
+- [ ] **Step 1: verify the APIs** in `node_modules/three` (done while planning, re-check): `ao(depth, normal, camera)` in `examples/jsm/tsl/display/GTAONode.js` (doc block lines 15–40: a normal/depth pre-pass, then `scenePass.contextNode = builtinAOContext(aoPass.getTextureNode().sample(screenUV).r)`), `builtinAOContext` exported from `three/tsl`, `smaa(node)` (`SMAANode.js:729`), `dof(node, viewZ, focus, focalLength, bokeh)` (`DepthOfFieldNode.js:572`), `RenderPipeline.outputColorTransform` and `renderOutput` (`src/renderers/common/RenderPipeline.js:75,192`), `THREE.AgXToneMapping`.
+- [ ] **Step 2: failing tests** (`quality.test.ts`):
+```ts
+const fresh = (): Quality => ({ step: 0, slow: 0, fast: 0, since: 10, ema: 16 });
+it('drops one step after 2 s of slow frames, never twice within the gap', () => {
+  const q = fresh();
+  let changes = 0;
+  for (let t = 0; t < 3; t += 1 / 40) if (stepQuality(q, 25, 1 / 40)) changes++;
+  expect(q.step).toBe(1);
+  expect(changes).toBe(1);
+});
+it('climbs back only after 5 s of fast frames', () => { /* step 2 → 1 after ≥5 s at 8 ms */ });
+it('never goes past the last step, and does not oscillate around the thresholds', () => {
+  const q = fresh();
+  let flips = 0;
+  for (let t = 0; t < 60; t += 1 / 60) if (stepQuality(q, t % 2 < 1 ? 17 : 14, 1 / 60)) flips++;
+  expect(flips).toBe(0); // between fastMs and slowMs nothing changes
+  for (let t = 0; t < 60; t += 1 / 60) stepQuality(q, 40, 1 / 60);
+  expect(q.step).toBe(QUALITY.steps.length - 1);
+});
+```
+with `export const QUALITY = { steps: [1, 0.85, 0.72, 0.6, 0.5], maxPixelRatio: 1.5, slowMs: 18.5, fastMs: 12.5, slowFor: 2, fastFor: 5, minGap: 2, smoothing: 0.1 } as const;` (the pixel ratio is `min(devicePixelRatio, maxPixelRatio) × steps[step]`).
+- [ ] **Step 3: implement.**
+  - `stage.ts`: `renderer.toneMapping = THREE.AgXToneMapping; renderer.toneMappingExposure = POST.exposure;` `antialias: false` stays (SMAA does it); `fit()` sets `renderer.setPixelRatio(ratio)` and `renderer.setSize(innerWidth, innerHeight, false)`; the loop feeds `stepQuality(q, dt * 1000, dt)` and refits when it returns true (at most every `minGap` s, so the reflector and bloom targets are reallocated rarely); DEV: `kd.stage.quality`.
+  - `post.ts`:
+```ts
+const prePass = pass(new THREE.Scene(), camera);
+prePass.setMRT(mrt({ output: normalView }));
+const occlusion = ao(prePass.getTextureNode('depth'), prePass.getTextureNode(), camera);
+occlusion.resolutionScale = POST.aoScale; // 0.5
+occlusion.radius.value = POST.aoRadius; // 0.6 m
+const scenePass = pass(new THREE.Scene(), camera);
+scenePass.contextNode = builtinAOContext(occlusion.getTextureNode().sample(screenUV).r);
+const color = scenePass.getTextureNode('output');
+const glow = bloom(color, POST.bloomStrength, POST.bloomRadius, POST.bloomThreshold);
+const edge = smoothstep(float(0.75), float(0.2), screenUV.sub(0.5).length());
+const dark = float(1).sub(float(POST.vignette).mul(float(1).sub(edge)));
+const graded = film(color.add(glow).mul(dark), uniform(POST.grain));
+pipeline.outputColorTransform = false;
+const gameplay = smaa(renderOutput(graded));
+const focusAt = uniform(3);
+const cinematic = smaa(renderOutput(film(dof(color.add(glow).mul(dark), scenePass.getViewZNode(), focusAt, uniform(POST.focalLength), uniform(POST.bokeh)), uniform(POST.grain))));
+pipeline.outputNode = gameplay;
+```
+  `render(scene)` sets both passes' `scene`; `focus(on, d)` swaps `outputNode` (+ `pipeline.needsUpdate = true`) and sets `focusAt.value`. Retune `POST.bloomThreshold` for HDR (start 1.0) so only lamps and the sun glow.
+  - Retune under AgX by screenshot: `FLASHLIGHT.intensity` (start 30) so a zombie at 0.5 m is bright but not white and at 12 m still readable; `MOM_LANTERN.intensity` (start 1.5); `LIGHTING.*` hemi/key so the nights stay as dark as today (compare night screenshots before/after at the same spots: mean luminance within ±10 %).
+  - If the lake fight (20 zombies, two reflectors) p95 at step 0 is above 16 ms, the scaler handles it; if even step 4 is above 16 ms, switch the AO to the single-pass MRT variant (`mrt({ output, normal: normalView })` and `color.mul(ao)`) and ledger the ruling.
+- [ ] **Step 4:** tests PASS; `pnpm run check`.
+- [ ] **Step 5: Chrome check:** the same eight spots before and after (home bedroom, intro living room, intro riverbank, Day 1 street, Night 1 wave, Night 2 corn, Night 3 lake fight, canoe): sharp edges, no shimmering, objects sit on the ground (AO under cars, crates, Mom's feet), nights as dark as before, the flashlight at 0.5 m not white, Mom's face by the lantern not blown out. `__gpuFrames(300)` at each: p95 ≤ 16 ms (log the settled quality step). `?webgl`: all eight render, no console errors. Resize the window three times: the picture refits, no stretched frame, reflections still right.
+- [ ] **Step 6: commit** `feat: full-resolution render with adaptive quality, AgX, ambient occlusion, SMAA, and depth of field for cutscenes`.
+
+### Task A14: A real sunrise at the lake (per frame, the moon sets, the sun comes up warm, the sky turns blue)
+
+**Files:**
+- Modify: `src/engine/sky.ts` (`SkyMesh` layer), `src/dreams/follow-the-river/lighting.ts` (+test: `LightPreset.sky`, `mixPresetInto`, `SUNRISE` moved here from `canoe-scene.ts`), `ending.ts` (`dawn()`), `canoe-scene.ts` (uses the shared sunrise).
+
+**Interfaces:**
+- Produces: `LightPreset.sky?: { turbidity: number; rayleigh: number; mie: number; mieG: number }` (present: the physical `SkyMesh` draws the sky with the sun at `key.elevation/azimuth`; absent: the painted dome); `mixPresetInto(a, b, t, out): LightPreset` (no allocation: `out` is reused); `applyLighting` handles both sky kinds; `LIGHTING.predawn`, `LIGHTING.sunrise`; `WorldLights.physical: SkyMesh`.
+
+- [ ] **Step 1: failing tests** (`lighting.test.ts`):
+```ts
+it('mixes in place, the same as mixPreset', () => {
+  const out = structuredClone(LIGHTING.night);
+  for (const t of [0, 0.3, 1]) expect(mixPresetInto(LIGHTING.night, LIGHTING.predawn, t, out)).toEqual(mixPreset(LIGHTING.night, LIGHTING.predawn, t));
+});
+it('the sunrise is a real sunrise: the sun above the horizon, warm key light, blue sky; the night stays dark', () => {
+  const s = LIGHTING.sunrise;
+  expect(s.key.elevation).toBeGreaterThan(0.05);
+  const key = new THREE.Color(s.key.color);
+  expect(key.r).toBeGreaterThan(key.b); // warm
+  expect(s.sky).toBeDefined();
+  const night = new THREE.Color(LIGHTING.night.skyTop);
+  expect(night.r + night.g + night.b).toBeLessThan(0.15);
+});
+```
+- [ ] **Step 2: implement.** `sky.ts`: `createSkyLayers(scene)` adds the painted dome (as today) and a `SkyMesh` (`three/addons/objects/SkyMesh.js`; uniforms `turbidity`, `rayleigh`, `mieCoefficient`, `mieDirectionalG`, `sunPosition`, `showSunDisc`), both following the camera, `fog: false`, scaled inside the camera's far plane (the shader uses view direction, so scale only has to fit). Presets:
+```ts
+predawn: { skyTop: 0x0b1222, skyHorizon: 0x2a2a44, fog: { color: 0x1d2230, near: 6, far: 70 }, hemi: { sky: 0x4a5878, ground: 0x10120f, intensity: 0.45 }, key: { color: 0xcfd8ff, intensity: 0.3, elevation: 0.35, azimuth: -2.6 }, disc: { color: 0xdfe8ff, size: 4, soft: 0.25 } },
+sunrise: { skyTop: 0x6f9fd0, skyHorizon: 0xf0c890, fog: { color: 0xc9c2b0, near: 10, far: 110 }, hemi: { sky: 0xbcd2e8, ground: 0x4a5a36, intensity: 1.4 }, key: { color: 0xffc27a, intensity: 2.2, elevation: 0.12, azimuth: 3.0 }, disc: { color: 0xffe2a8, size: 8, soft: 0.6 }, sky: { turbidity: 6, rayleigh: 2.2, mie: 0.006, mieG: 0.85 } },
+```
+  (the azimuth puts the sun over the dam, where the canoe heads next).
+  - `ending.ts dawn()` (14 s, per frame, no allocation; `DAWN = { seconds: 14, moonSets: 0.35, sunUp: 0.4 }`): 0 → 0.35 night → predawn (the moon disc fades out and sinks 10°, the lantern dims 50 %); at 0.35 the `SkyMesh` takes over with the sun at −4° (a dark blue twilight matched to the predawn horizon, checked by screenshot so the switch is invisible), the sun rises to `sunrise.key.elevation` by 1.0, key light white-blue → warm, fog and hemi follow; birds fade in (Task A12). Mom gets up and turns to the sun at 0.5, then comes to you (as today).
+- [ ] **Step 3:** tests PASS; `pnpm run check`.
+- [ ] **Step 4: Chrome check:** screenshots at t = 0, 2, 4, 5, 6, 8, 11, 14 s looking over the lake toward the dam, then one facing Mom: moon white and setting, then a warm sun rising, the sky turning blue, no visible jump at the switch (compare 4 and 5 s); sample `lights.key.color` every frame for 2 s: it changes every frame (no 4 Hz steps); `__gpuFrames(300)` during the dawn: p95 ≤ 16 ms.
+- [ ] **Step 5: commit** `feat: a real sunrise over the lake, changing every frame`.
