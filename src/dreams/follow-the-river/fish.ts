@@ -60,7 +60,8 @@ export interface Fish {
   lastLunge(horde: Horde, player: { x: number; z: number }): void;
   /** Night: strikes left this phase. */
   readonly strikes: number;
-  arm(strikes: number): void;
+  /** Arms `strikes` for the night; `cooldown` (s) between them and `reach` (m) from the water (the finale goes further). */
+  arm(strikes: number, cooldown?: number, reach?: number): void;
   /** Throw a pack: arc into the water, splash, the orca surfaces once to take it. */
   feed(from: Vec3): void;
   /** Swims alongside the player (fin just breaking the surface); strikes zombies at night. */
@@ -107,6 +108,9 @@ interface FishState {
   surfaceIn: number; // seconds until the next surfacing
   strikes: number;
   cooldown: number;
+  /** Seconds between strikes while armed, and how far from the water (m) it can take one. */
+  strikeCooldown: number;
+  strikeReach: number;
   placed: boolean;
   yaw: number;
   rise: Rise | null;
@@ -200,7 +204,7 @@ function cruise(f: FishState, dt: number, player: { x: number; z: number }): voi
 function tryStrike(f: FishState, player: { x: number; z: number }, horde: Horde): void {
   f.count = 0;
   horde.forEachAlive(f.collect);
-  const id = pickStrike(f.buffer, f.count, player, EDGE_X);
+  const id = pickStrike(f.buffer, f.count, player, EDGE_X, f.strikeReach);
   if (id === null) return;
   let zx = 0;
   let zz = 0;
@@ -211,7 +215,7 @@ function tryStrike(f: FishState, player: { x: number; z: number }, horde: Horde)
     }
   }
   f.strikes--;
-  f.cooldown = FISH.cooldown;
+  f.cooldown = f.strikeCooldown;
   startRise(f, {
     toX: Math.max(zx, EDGE_X + 1),
     toZ: zz,
@@ -453,6 +457,8 @@ function createState(
     surfaceIn: nextSurfacing(Math.random()),
     strikes: 0,
     cooldown: 0,
+    strikeCooldown: FISH.cooldown,
+    strikeReach: FISH.reach,
     placed: false,
     yaw: 0,
     rise: null,
@@ -484,8 +490,10 @@ export async function createFish(
     get strikes() {
       return f.strikes;
     },
-    arm(n) {
+    arm(n, cooldown = FISH.cooldown, reach = FISH.reach) {
       f.strikes = n;
+      f.strikeCooldown = cooldown;
+      f.strikeReach = reach;
     },
     // A second feed() before the first pack lands replaces it (one pack in flight at a time).
     feed: (from) => feedFish(f, from),

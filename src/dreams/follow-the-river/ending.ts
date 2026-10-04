@@ -1,7 +1,14 @@
 import type * as THREE from 'three/webgpu';
 import type { AreaDef } from './areas/types';
 import { nightTuning } from './difficulty';
-import { buildEndingScene, facing, type EndingScene } from './ending-scene';
+import {
+  buildEndingScene,
+  facing,
+  retreatPoint,
+  SHORE,
+  stopShort,
+  type EndingScene,
+} from './ending-scene';
 import { atSafeSpot } from './flow';
 import { applyLighting, LIGHTING, mixPreset, type LightPreset } from './lighting';
 import { EDGE_X } from './river';
@@ -56,6 +63,9 @@ export const WAVE = {
   seconds: 25,
   /** Strikes the orca is armed with: far more than the wave has zombies. */
   strikes: 99,
+  /** Its last stand: seconds between strikes (a normal night 1.4) and reach from the water (3.5). */
+  orcaCooldown: 0.6,
+  orcaReach: 7,
   /** Upstream of the player (+z), and the spread between lanes along the bank (m). */
   upstream: 34,
   laneGap: 1.5,
@@ -65,6 +75,7 @@ export const WAVE = {
 } as const;
 export const DAWN = { seconds: 8, step: 0.25, volume: 0.35 } as const;
 const CRY_VOLUME = 0.8;
+const FLINCH = { lookUp: 12 } as const; // m up the bank Mom watches during the fight
 
 /** How many zombies of the wave should exist `elapsed` seconds in (all of them once the last group is due). */
 export function waveDue(elapsed: number): number {
@@ -178,15 +189,32 @@ function spawnWave(h: EndingHost, spawned: { n: number }, elapsed: number): void
   }
 }
 
+/** Mom backs toward the water (kept on the pebbles) and watches the bank. */
+function backOff(h: EndingHost, st: State): void {
+  const { meetAt: mom, lake } = h.sys.area;
+  if (!st.scene || !mom || !lake) return;
+  const cam = h.sys.ctx.stage.camera.position;
+  const { actor } = st.scene;
+  void actor.walkTo([retreatPoint(mom, lake.z)]).then(() => {
+    if (!st.cancelled) actor.faceTo(cam.x, cam.z + FLINCH.lookUp);
+  });
+}
+
 /** The wave, the orca's strikes, its last lunge and its sinking. Resolves when it is gone. */
 async function fight(h: EndingHost, st: State): Promise<void> {
   const { fish, horde, ctx, sounds } = h.sys;
   const cam = ctx.stage.camera.position;
   const spawned = { n: 0 };
   let t = 0;
-  fish.arm(WAVE.strikes);
+  let left: number = WAVE.strikes;
+  backOff(h, st);
+  fish.arm(WAVE.strikes, WAVE.orcaCooldown, WAVE.orcaReach);
   await until(st, (dt) => {
     t += dt;
+    if (fish.strikes < left) {
+      left = fish.strikes;
+      st.scene?.mom.play('HitRecieve', true); // the orca struck: she flinches
+    }
     spawnWave(h, spawned, t);
     horde.alert(cam.x, cam.z, WAVE.hearing);
     return t >= WAVE.seconds;
@@ -214,8 +242,17 @@ async function dawn(h: EndingHost, st: State): Promise<void> {
   const from = nightPreset(h.sys.area);
   let t = 0;
   let nextPaint = 0;
+  let turned = false;
+  const lake = h.sys.area.lake;
+  const mom = st.scene?.mom.group.position;
+  if (lake && mom) st.scene?.actor.faceTo(mom.x, lake.z - 10); // looks out over the water
   await until(st, (dt) => {
     t += dt;
+    if (!turned && t >= DAWN.seconds / 2) {
+      turned = true;
+      const cam = ctx.stage.camera.position;
+      st.scene?.actor.faceTo(cam.x, cam.z); // then back to you
+    }
     const k = Math.min(1, t / DAWN.seconds);
     pad.setVolume(DAWN.volume * k);
     if (t >= nextPaint || k >= 1) {
@@ -224,6 +261,16 @@ async function dawn(h: EndingHost, st: State): Promise<void> {
     }
     return k >= 1;
   });
+}
+
+/** Mom walks to the player, stops `SHORE.meet` m short and faces them. */
+async function comeToPlayer(h: EndingHost, st: State): Promise<void> {
+  const actor = st.scene?.actor;
+  if (!actor || !st.scene) return;
+  const cam = h.sys.ctx.stage.camera.position;
+  const at = stopShort(st.scene.mom.group.position, cam, SHORE.meet);
+  await actor.walkTo([at]);
+  if (!st.cancelled) actor.faceTo(cam.x, cam.z);
 }
 
 /** The whole ending, step by step; every await is followed by a cancelled check. */
@@ -239,6 +286,8 @@ async function play(h: EndingHost, st: State): Promise<void> {
       flashlight.on = false;
       h.persist(); // the wave is won: from here the run is saved as finished
       h.sys.horde.reset();
+      await comeToPlayer(h, st);
+      if (st.cancelled) return;
       await read(h, ENDING_PAGES.silence);
     } else if (step === 'dawn') await dawn(h, st);
     else if (step === 'epilogue') await read(h, ENDING_PAGES.epilogue);
@@ -279,7 +328,7 @@ export function createEnding(h: EndingHost): Ending {
     },
     update(dt) {
       if (!st.started || st.cancelled || h.sys.ctx.isPaused()) return;
-      st.scene?.mom.update(dt);
+      st.scene?.update(dt);
       if (st.wait?.pred(dt)) {
         const { resolve } = st.wait;
         st.wait = null;

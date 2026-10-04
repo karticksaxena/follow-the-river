@@ -2,6 +2,8 @@ import * as THREE from 'three/webgpu';
 import { loadSkinned } from '../../engine/models';
 import { createMom, type Mom } from './intro-scene';
 import { characterUrl } from './kits';
+import { createMomActor, type MomActor, type Pt } from './mom-actor';
+import { EDGE_X, shoreY } from './river';
 import type { Systems } from './run';
 
 /** Tuning knobs. Mom's lantern is the chapter's lantern, beside her on the pebbles. */
@@ -14,8 +16,32 @@ export function facing(x: number, z: number, toX: number, toZ: number): number {
   return Math.atan2(toX - x, toZ - z);
 }
 
+/** Shore limits for Mom's retreat (metres): never in the water, never off the pebbles. */
+export const SHORE = { backOff: 2, lakeMargin: 1, edgeMargin: 0.5, meet: 1.5 } as const;
+
+/** Pure: where Mom backs off to — `backOff` m toward the water, clamped onto the pebble shore. */
+export function retreatPoint(meet: Pt, lakeZ: number): Pt {
+  return {
+    x: Math.min(meet.x, EDGE_X - SHORE.edgeMargin),
+    z: Math.max(meet.z - SHORE.backOff, lakeZ + SHORE.lakeMargin),
+  };
+}
+
+/** Pure: the spot `gap` m short of `to` on the line from `from` (or `from` itself if closer). */
+export function stopShort(from: Pt, to: Pt, gap: number): Pt {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const d = Math.hypot(dx, dz);
+  if (d <= gap) return { x: from.x, z: from.z };
+  const k = (d - gap) / d;
+  return { x: from.x + dx * k, z: from.z + dz * k };
+}
+
 export interface EndingScene {
   mom: Mom;
+  actor: MomActor;
+  /** Per frame: Mom's walk/idle, her animation, and the lantern in her hand. */
+  update(dt: number): void;
   /** Puts Mom on the shore facing `(toX, toZ)` and lights the lantern in her hand. */
   place(toX: number, toZ: number, lantern: THREE.PointLight): void;
   /** Hides Mom and gives the lantern back where it was. */
@@ -34,15 +60,33 @@ function makeLantern(): THREE.Mesh {
 export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
   const spot = sys.area.meetAt;
   if (!spot) throw new Error('the ending needs a meeting spot (meetAt)');
+  const lakeZ = sys.area.lake?.z ?? null;
   const mom = createMom(await loadSkinned(characterUrl('mom')), makeLantern());
   mom.group.visible = false;
   sys.world.scene.add(mom.group);
   const home = new THREE.Vector3();
+  const actor = createMomActor(mom);
+  let held: THREE.PointLight | null = null;
   return {
     mom,
+    actor,
+    update(dt) {
+      actor.update(dt);
+      mom.update(dt);
+      // Her feet follow the pebble shore where it slopes toward the water.
+      if (lakeZ !== null) mom.group.position.y = shoreY(mom.group.position.z - lakeZ);
+      held?.position.set(mom.group.position.x + 0.5, MOM_LANTERN.height, mom.group.position.z);
+    },
     place(toX, toZ, lantern) {
+      actor.stop();
       mom.group.position.set(spot.x, 0, spot.z);
       mom.group.rotation.y = facing(spot.x, spot.z, toX, toZ);
+      actor.faceTo(toX, toZ);
+      actor.idleTense([
+        { x: toX, z: toZ + 12 },
+        { x: toX, z: toZ },
+      ]); // anxious: up the bank, then at you
+      held = lantern;
       mom.pack.visible = true;
       mom.group.visible = true;
       home.copy(lantern.position);
@@ -51,6 +95,8 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
       lantern.intensity = MOM_LANTERN.intensity;
     },
     remove(lantern) {
+      actor.stop();
+      held = null;
       mom.group.visible = false;
       lantern.position.copy(home);
     },

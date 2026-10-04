@@ -140,12 +140,13 @@ export function pickStrike(
   count: number,
   player: { x: number; z: number },
   edgeX: number,
+  reach: number = FISH.reach,
 ): number | null {
   let best: number | null = null;
   let bestDist = Infinity;
   for (let i = 0; i < count; i++) {
     const x = candidates[i * 3 + 1];
-    if (edgeX - x > FISH.reach) continue;
+    if (edgeX - x > reach) continue;
     const dx = x - player.x;
     const dz = candidates[i * 3 + 2] - player.z;
     const dist = dx * dx + dz * dz;

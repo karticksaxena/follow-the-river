@@ -13,7 +13,7 @@ import {
   waveSpot,
   type EndingStep,
 } from './ending';
-import { facing } from './ending-scene';
+import { facing, retreatPoint, stopShort } from './ending-scene';
 import { EDGE_X } from './river';
 
 describe('ending steps', () => {
@@ -103,5 +103,28 @@ describe('Mom on the shore', () => {
   it('is the lantern spot of the area (no other area has one)', () => {
     expect(CITY.meetAt).toBeUndefined();
     expect(SUBURBS.meetAt).toBeUndefined();
+  });
+});
+
+describe("Mom's movement", () => {
+  it('retreats toward the water but stays on the pebbles', () => {
+    const mom = FOREST.meetAt;
+    const lake = FOREST.lake;
+    if (!mom || !lake) throw new Error('forest needs meetAt and lake');
+    const p = retreatPoint(mom, lake.z);
+    expect(p.z).toBeLessThan(mom.z);
+    expect(p.z).toBeGreaterThanOrEqual(lake.z + 1);
+    expect(p.x).toBeLessThanOrEqual(EDGE_X - 0.5);
+    expect(retreatPoint({ x: 9, z: lake.z + 1.2 }, lake.z)).toEqual({
+      x: EDGE_X - 0.5,
+      z: lake.z + 1,
+    });
+  });
+
+  it('stops short of the player on the line to them', () => {
+    const p = stopShort({ x: 0, z: 0 }, { x: 0, z: 6 }, 1.5);
+    expect(p.x).toBeCloseTo(0);
+    expect(p.z).toBeCloseTo(4.5);
+    expect(stopShort({ x: 1, z: 1 }, { x: 1, z: 2 }, 1.5)).toEqual({ x: 1, z: 1 });
   });
 });
