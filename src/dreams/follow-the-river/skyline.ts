@@ -2,6 +2,8 @@ import * as THREE from 'three/webgpu';
 import { assetUrl } from '../../engine/assets';
 import { addBatched } from '../../engine/batch';
 import { loadModel } from '../../engine/models';
+import type { Tier } from '../../engine/quality';
+import { NO_REFLECTION_LAYER } from '../../engine/volume';
 import { KIT_SCALE, kitUrl } from './kits';
 import { FAR_EDGE_X } from './river';
 import { type Bend, noBend } from './shore-shape';
@@ -72,6 +74,11 @@ const DEAD_TREE_HEIGHT = 7;
 const MARGIN = 100;
 /** Metres between silhouettes along the row. */
 const SPACING = 4.5;
+/**
+ * The far rows are static, fogged silhouettes: merged into one mesh per material per this many metres
+ * of row (a few draws instead of ~100; still culled by section). Tuning knob.
+ */
+export const SKYLINE_CELL = 128;
 const HOUSES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((c) => `building-type-${c}`);
 
 export type SkylineStyle = 'city' | 'houses' | 'trees';
@@ -118,6 +125,18 @@ function farBankItem(style: SkylineStyle, s: Silhouette, i: number): Item {
 }
 
 /**
+ * Skyline meshes never cast shadows (far past the shadow reach, or lost in fog); on Medium and Low
+ * they also stay out of the water's reflection (layer 3: the camera still sees them).
+ */
+export function styleFor(model: THREE.Object3D, tier: Tier): void {
+  model.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    node.castShadow = false;
+    if (tier !== 'high') node.layers.set(NO_REFLECTION_LAYER);
+  });
+}
+
+/**
  * Places the far-bank silhouettes (windows facing the river) and a tree line behind the bank,
  * spanning `startZ` to `endZ` plus a margin so no end of the row is visible. Past the walkable ends
  * the rows follow the river's `bend`, so the view turns out of sight instead of running straight.
@@ -130,6 +149,7 @@ export async function addSkyline(
   endZ = -110,
   endMargin = MARGIN,
   bend: Bend = noBend,
+  tier: Tier = 'high',
 ): Promise<void> {
   const from = startZ + MARGIN;
   const span = startZ - endZ + MARGIN + endMargin;
@@ -145,6 +165,7 @@ export async function addSkyline(
     model.position.set(item.x + bend(item.z), 0, item.z);
     model.rotation.y = item.yaw;
     model.scale.setScalar(item.scale);
+    styleFor(model, tier);
   });
-  addBatched(scene, models);
+  addBatched(scene, models, SKYLINE_CELL);
 }

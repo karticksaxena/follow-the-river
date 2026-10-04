@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { mergeParts } from '../../engine/batch';
 import { loadModel } from '../../engine/models';
 import type { PickupDef, PickupKind } from './areas/types';
 import { KIT_SCALE, kitUrl, propUrl } from './kits';
@@ -173,7 +174,9 @@ interface PickupState {
 async function loadTemplates(): Promise<Map<string, THREE.Object3D>> {
   const templates = new Map<string, THREE.Object3D>();
   await Promise.all(
-    [...new Set(Object.values(MODEL))].map(async (url) => templates.set(url, await loadModel(url))),
+    [...new Set(Object.values(MODEL))].map(async (url) =>
+      templates.set(url, mergeParts(await loadModel(url))),
+    ),
   );
   return templates;
 }

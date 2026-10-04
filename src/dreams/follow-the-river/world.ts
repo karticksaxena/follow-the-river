@@ -4,6 +4,7 @@ import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
 import type { Tier } from '../../engine/quality';
 import { surfaceMaterial, texturesReady } from '../../engine/surfaces';
+import { NO_REFLECTION_LAYER } from '../../engine/volume';
 import type { AreaDef, PropPlacement } from './areas/types';
 import { addBanks, groundEndX } from './banks';
 import { addCampfire } from './campfire';
@@ -53,19 +54,33 @@ function paveRoad(model: THREE.Object3D, memo: Map<THREE.Texture, THREE.Material
   });
 }
 
+/** A prop whose longest side is under this (m) is small: logs, pebbles, boxes. Tuning knob. */
+export const SMALL_PROP = 1.6;
+
+/** Small props stay out of the water's reflection, and cast no key-light shadows on Medium and Low. */
+export function smallProp(model: THREE.Object3D, tier: Tier): void {
+  model.traverse((node) => {
+    if (!(node instanceof THREE.Mesh)) return;
+    node.layers.set(NO_REFLECTION_LAYER);
+    if (tier !== 'high') node.castShadow = false;
+  });
+}
+
 async function loadProp(
   p: PropPlacement,
   paved: Map<THREE.Texture, THREE.Material>,
+  tier: Tier,
 ): Promise<{ model: THREE.Object3D; collider?: Box }> {
   const model = await loadModel(kitUrl(p.kit, p.model));
   if (p.kit === 'roads' && p.model.startsWith('road-')) paveRoad(model, paved);
   model.position.set(p.x, p.y ?? 0, p.z);
   model.rotation.y = p.yaw ?? 0;
   model.scale.setScalar(KIT_SCALE[p.kit] * (p.scale ?? 1));
-  if (!p.collide) return { model };
   box3.setFromObject(model);
   box3.getSize(size);
   box3.getCenter(centre);
+  if (Math.max(size.x, size.y, size.z) < SMALL_PROP) smallProp(model, tier);
+  if (!p.collide) return { model };
   return {
     model,
     collider: boxAt(centre.x, centre.z, size.x * COLLIDER_SHRINK, size.z * COLLIDER_SHRINK),
@@ -109,7 +124,7 @@ function addGround(scene: THREE.Scene, area: AreaDef): void {
 }
 
 /** The river (stopping at a lake's shore, where the lake begins) and its skyline. */
-async function addWaters(scene: THREE.Scene, area: AreaDef): Promise<Railing | null> {
+async function addWaters(scene: THREE.Scene, area: AreaDef, tier: Tier): Promise<Railing | null> {
   const { lake } = area;
   const embankment = area.bank === 'embankment';
   const grass = [area.ground, area.farBank] as const;
@@ -120,7 +135,7 @@ async function addWaters(scene: THREE.Scene, area: AreaDef): Promise<Railing | n
     addRiver(scene, area.startZ, area.endZ, { farBankColor, farSurface: far, embankment, bend });
     const span = [area.startZ, area.endZ] as const;
     const railing = addBanks(scene, area.bank, span, grass, OVERRUN, bend, undefined, ground);
-    await addSkyline(scene, area.skyline, area.startZ, area.endZ, undefined, bend);
+    await addSkyline(scene, area.skyline, area.startZ, area.endZ, undefined, bend, tier);
     return railing;
   }
   addRiver(scene, area.startZ, lake.z, {
@@ -132,7 +147,7 @@ async function addWaters(scene: THREE.Scene, area: AreaDef): Promise<Railing | n
   });
   const railing = addBanks(scene, area.bank, [area.startZ, lake.z], grass, 0, bend, lake.z, ground);
   addLake(scene, lake.z, area.ground, area.farBank, ground);
-  await addSkyline(scene, area.skyline, area.startZ, lake.z, 0, bend);
+  await addSkyline(scene, area.skyline, area.startZ, lake.z, 0, bend, tier);
   return railing;
 }
 
@@ -159,9 +174,9 @@ export async function buildWorld(
   const colliders = stripBlockers(area);
   const paved = new Map<THREE.Texture, THREE.Material>();
   const [props, fire, railing] = await Promise.all([
-    Promise.all(area.props.filter((p) => p.kit !== 'megakit').map((p) => loadProp(p, paved))),
+    Promise.all(area.props.filter((p) => p.kit !== 'megakit').map((p) => loadProp(p, paved, tier))),
     addCampfire(scene, area.waitSpot.x, area.waitSpot.z),
-    addWaters(scene, area),
+    addWaters(scene, area, tier),
     addPlants(scene, area, tier, camera),
     ...area.shacks.map((shack) => addShack(scene, shack)),
   ]);

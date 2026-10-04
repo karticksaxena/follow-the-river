@@ -1,6 +1,52 @@
-import { describe, expect, it } from 'vitest';
+import * as THREE from 'three/webgpu';
+import { describe, expect, it, vi } from 'vitest';
+import { NO_REFLECTION_LAYER } from '../../engine/volume';
+import { CITY } from './areas/city';
+import { FOREST } from './areas/forest';
+import { SUBURBS } from './areas/suburbs';
 import { FAR_EDGE_X } from './river';
-import { buildingFor, skylineLayout } from './skyline';
+import { addSkyline, buildingFor, skylineLayout } from './skyline';
+
+const materials = new Map<string, THREE.Material>();
+
+/** A stand-in for loadModel: every model is a two-part mesh group sharing one material per name. */
+vi.mock('../../engine/models', () => ({
+  loadModel: (url: string): Promise<THREE.Object3D> => {
+    const root = new THREE.Group();
+    for (const part of ['bark', 'needles']) {
+      const key = `${url}:${part}`;
+      let material = materials.get(key);
+      if (!material) materials.set(key, (material = new THREE.MeshStandardMaterial()));
+      root.add(new THREE.Mesh(new THREE.BoxGeometry(), material));
+    }
+    return Promise.resolve(root);
+  },
+}));
+
+describe('skyline draw budget (a ~100-tree row was ~100 draw objects)', () => {
+  const MAX_MESHES = 40;
+  it.each([
+    ['forest night route', FOREST, FOREST.lake?.z ?? -392, 0],
+    ['city', CITY, CITY.endZ, undefined],
+    ['suburbs', SUBURBS, SUBURBS.endZ, undefined],
+  ] as const)(
+    '%s: a few merged meshes, none casting; Medium keeps them out of the reflection',
+    async (_n, area, endZ, margin) => {
+      const scene = new THREE.Scene();
+      await addSkyline(scene, area.skyline, area.startZ, endZ, margin, undefined, 'medium');
+      const meshes = scene.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh);
+      expect(meshes.length).toBeGreaterThan(0);
+      expect(meshes.length).toBeLessThanOrEqual(MAX_MESHES);
+      for (const m of meshes) {
+        expect(m.castShadow).toBe(false);
+        expect(m.layers.mask).toBe(1 << NO_REFLECTION_LAYER);
+      }
+      const high = new THREE.Scene();
+      await addSkyline(high, area.skyline, area.startZ, endZ, margin, undefined, 'high');
+      for (const m of high.children) expect(m.layers.isEnabled(0)).toBe(true);
+    },
+  );
+});
 
 describe('skylineLayout', () => {
   it('is the same every time for the same seed', () => {

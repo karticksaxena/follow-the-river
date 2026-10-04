@@ -25,13 +25,13 @@ function canBatch(root: THREE.Object3D): boolean {
 }
 
 /** Everything that changes how a mesh looks or is shadowed: equal keys can share one material. */
-function groupKey(mesh: Batchable): string {
+function groupKey(mesh: Batchable, cell: number): string {
   const m = mesh.material;
   const map = 'map' in m && m.map instanceof THREE.Texture ? m.map.source.uuid : '';
   const color = 'color' in m && m.color instanceof THREE.Color ? m.color.getHex() : 0;
   const vertexColors = 'vertexColors' in m ? String(m.vertexColors) : '';
-  const cx = Math.floor(mesh.matrixWorld.elements[12] / CELL);
-  const cz = Math.floor(mesh.matrixWorld.elements[14] / CELL);
+  const cx = Math.floor(mesh.matrixWorld.elements[12] / cell);
+  const cz = Math.floor(mesh.matrixWorld.elements[14] / cell);
   return [
     m.type,
     map,
@@ -43,6 +43,7 @@ function groupKey(mesh: Batchable): string {
     m.alphaTest,
     mesh.castShadow,
     mesh.receiveShadow,
+    mesh.layers.mask,
     cx,
     cz,
   ].join('|');
@@ -89,6 +90,7 @@ function mergeGroup(meshes: Batchable[]): THREE.Mesh[] {
     const out = new THREE.Mesh(geometry, material);
     out.castShadow = meshes[0].castShadow;
     out.receiveShadow = meshes[0].receiveShadow;
+    out.layers.mask = meshes[0].layers.mask;
     out.matrixAutoUpdate = false;
     return out;
   });
@@ -96,11 +98,11 @@ function mergeGroup(meshes: Batchable[]): THREE.Mesh[] {
 
 /**
  * Adds static prop roots to `parent`, merging their meshes into one mesh per
- * (look, shadow flags, map cell). Roots are not added themselves; roots holding skinned,
+ * (look, shadow flags, layers, map cell of `cell` m; far static rows pass a big one). Roots are not added themselves; roots holding skinned,
  * instanced or multi-material meshes are added untouched. Cached templates are never modified:
  * merged geometry and materials are new and owned by the scene.
  */
-export function addBatched(parent: THREE.Object3D, roots: THREE.Object3D[]): void {
+export function addBatched(parent: THREE.Object3D, roots: THREE.Object3D[], cell = CELL): void {
   const groups = new Map<string, Batchable[]>();
   for (const root of roots) {
     if (!canBatch(root)) {
@@ -110,11 +112,51 @@ export function addBatched(parent: THREE.Object3D, roots: THREE.Object3D[]): voi
     root.updateMatrixWorld(true);
     root.traverse((node) => {
       if (!isBatchable(node)) return;
-      const key = groupKey(node);
+      const key = groupKey(node, cell);
       const list = groups.get(key);
       if (list) list.push(node);
       else groups.set(key, [node]);
     });
   }
   for (const meshes of groups.values()) parent.add(...mergeGroup(meshes));
+}
+
+/**
+ * One mesh per material for a multi-part template, in the template's own space (its root transform
+ * is kept, so the result still spins and moves as a unit). Clones of the result share the geometry:
+ * a pickup of 3-4 parts becomes 1 draw per material. Roots with skinned or multi-material meshes
+ * come back unchanged.
+ */
+export function mergeParts(root: THREE.Object3D): THREE.Object3D {
+  if (!canBatch(root)) return root;
+  root.updateMatrixWorld(true);
+  const inverse = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const groups = new Map<string, Batchable[]>();
+  root.traverse((node) => {
+    if (!isBatchable(node)) return;
+    const key = groupKey(node, Infinity);
+    const list = groups.get(key);
+    if (list) list.push(node);
+    else groups.set(key, [node]);
+  });
+  const out = new THREE.Group();
+  out.name = root.name;
+  out.position.copy(root.position);
+  out.quaternion.copy(root.quaternion);
+  out.scale.copy(root.scale);
+  for (const meshes of groups.values()) {
+    const local = meshes.map((m) => {
+      const copy = new THREE.Mesh(m.geometry, m.material);
+      copy.castShadow = m.castShadow;
+      copy.receiveShadow = m.receiveShadow;
+      copy.matrixWorld.multiplyMatrices(inverse, m.matrixWorld);
+      return copy;
+    });
+    for (const mesh of mergeGroup(local)) {
+      mesh.geometry.userData.cached = true; // shared by every clone: disposeScene must keep it
+      for (const m of [mesh.material].flat()) m.userData.cached = true;
+      out.add(mesh);
+    }
+  }
+  return out;
 }

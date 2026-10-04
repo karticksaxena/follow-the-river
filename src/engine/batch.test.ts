@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { addBatched } from './batch';
+import { addBatched, mergeParts } from './batch';
 
 function prop(x: number, material: THREE.Material, z = 0): THREE.Object3D {
   const root = new THREE.Group();
@@ -46,5 +46,56 @@ describe('addBatched', () => {
     addBatched(scene, [source, multi]);
     expect(geometry.boundingBox).toBeNull();
     expect(scene.children).toContain(multi);
+  });
+});
+
+describe('addBatched cells and layers', () => {
+  it('a bigger cell merges a long row into one mesh; layers keep looks apart', () => {
+    const mat = new THREE.MeshLambertMaterial();
+    const far = [0, 50, 100, 150, 200].map((z) => prop(0, mat, z));
+    const small = new THREE.Scene();
+    addBatched(small, far);
+    expect(meshes(small).length).toBeGreaterThan(1); // default 48 m cells
+    const big = new THREE.Scene();
+    addBatched(
+      big,
+      [0, 50, 100, 150, 200].map((z) => prop(0, mat, z)),
+      512,
+    );
+    expect(meshes(big)).toHaveLength(1);
+    const layered = new THREE.Scene();
+    const a = prop(0, mat);
+    const b = prop(1, mat);
+    b.traverse((n) => n.layers.set(3));
+    addBatched(layered, [a, b], 512);
+    expect(
+      meshes(layered)
+        .map((m) => m.layers.mask)
+        .toSorted((p, q) => p - q),
+    ).toEqual([1, 8]);
+  });
+});
+
+describe('mergeParts', () => {
+  it('turns a multi-part, multi-material template into one mesh per material, in local space', () => {
+    const [m1, m2] = [new THREE.MeshLambertMaterial(), new THREE.MeshLambertMaterial({ color: 1 })];
+    const root = new THREE.Group();
+    for (const [x, m] of [
+      [0, m1],
+      [1, m1],
+      [2, m2],
+      [3, m2],
+    ] as const) {
+      const part = new THREE.Mesh(new THREE.BoxGeometry(), m);
+      part.position.x = x;
+      root.add(part);
+    }
+    const out = mergeParts(root);
+    const parts = out.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh);
+    expect(parts).toHaveLength(2);
+    const first = parts[0];
+    first.geometry.computeBoundingBox();
+    expect(first.geometry.boundingBox?.max.x).toBeCloseTo(1.5);
+    expect(out.clone(true).children[0]).toHaveProperty('geometry', first.geometry); // clones share it
   });
 });
