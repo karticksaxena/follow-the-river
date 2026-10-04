@@ -15,6 +15,8 @@ import {
 import { FAR_EDGE_X } from './river';
 import { SKYLINE_SPAN } from './skyline';
 
+/** Overcast but readable: a sky or fog (mean sRGB, 0..1) may be grey, never bright. */
+const SKY_CAP = 0.5;
 const brightness = (hex: number): number => ((hex >> 16) + ((hex >> 8) & 255) + (hex & 255)) / 765;
 
 describe('LIGHTING', () => {
@@ -22,8 +24,8 @@ describe('LIGHTING', () => {
     // The sunrise is the one deliberate exception (the end of the farewell and the canoe ride).
     const { sunrise: _sunrise, ...dark } = LIGHTING;
     for (const preset of Object.values(dark)) {
-      expect(brightness(preset.skyHorizon)).toBeLessThan(0.4);
-      expect(brightness(preset.fog.color)).toBeLessThan(0.4);
+      expect(brightness(preset.skyHorizon)).toBeLessThan(SKY_CAP);
+      expect(brightness(preset.fog.color)).toBeLessThan(SKY_CAP);
       expect(preset.key.intensity).toBeLessThanOrEqual(0.6);
     }
   });
@@ -140,7 +142,7 @@ describe('the real sunrise', () => {
 
   it('lights the image more as the day brightens', () => {
     expect(LIGHTING.sunrise.environment).toBe(SUNRISE_CAPS.environment);
-    expect(LIGHTING.day.environment).toBe(0.5);
+    expect(LIGHTING.day.environment).toBe(1.25);
     expect(LIGHTING.sunrise.shadow).toBeGreaterThan(LIGHTING.night.shadow);
   });
 });

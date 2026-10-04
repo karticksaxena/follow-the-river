@@ -19,6 +19,15 @@ import { addRim } from './zombies/look';
 export const ROOM_X = -70;
 const TV_SCALE = 1.4;
 export const TV_LIGHT = { color: 0x5a6fb8, intensity: 2.6, distance: 8, flicker: 0.35 };
+/** The room's own dim lamp light (the dusk hemisphere is dimmed inside): keeps the room readable. Tuning knobs. */
+export const ROOM_FILL = {
+  color: 0xffd2a0,
+  intensity: 5,
+  distance: 14,
+  at: [0, 2.2, 0.6],
+} as const;
+/** The dusk bank and lawn tints (multiplied into the grass and mud textures, which are dark). Tuning knobs. */
+const INTRO_GROUND = { near: 0x8a8068, far: 0x6e7060 } as const;
 const SCREEN_TINT = 0x8a8a8a;
 const PACK_GRIP = 0.12; // m from the wrist to the pack's centre (tuning knob)
 export const INSIDE_DIM = 0.7;
@@ -208,10 +217,10 @@ function lineOfFence(
 }
 
 function buildOutside(scene: THREE.Scene, house: THREE.Object3D, fence: THREE.Object3D): void {
-  const ground = plane(400, 400, 0x1c1a16, 'grass');
+  const ground = plane(400, 400, INTRO_GROUND.near, 'grass');
   ground.position.set(groundEndX('natural') - 200, -0.03, 0);
-  addRiver(scene, 60, -60);
-  addBanks(scene, 'natural', [60, -60], [0x1c1a16, 0x24271f]);
+  addRiver(scene, 60, -60, { farBankColor: INTRO_GROUND.far });
+  addBanks(scene, 'natural', [60, -60], [INTRO_GROUND.near, INTRO_GROUND.far]);
   house.scale.setScalar(KIT_SCALE.suburb);
   house.position.set(HOUSE_X, 0, 0);
   house.rotation.y = Math.PI / 2;
@@ -285,7 +294,9 @@ export async function buildIntroScene(ctx: DreamContext): Promise<IntroScene> {
   tvLight.position.set(0, 1, -1.2);
   const room = new THREE.Group();
   room.position.x = ROOM_X;
-  room.add(roomModel, couch, tv, tvLight);
+  const fill = new THREE.PointLight(ROOM_FILL.color, ROOM_FILL.intensity, ROOM_FILL.distance, 2);
+  fill.position.set(...ROOM_FILL.at);
+  room.add(roomModel, couch, tv, tvLight, fill);
   const mom = createCharacter(momAsset, pack); // the pack: default grip (PACK_GRIP)
   const phone = makePhone();
   mom.attach(phone, 'WristR', { grip: PHONE_GRIP });

@@ -18,7 +18,7 @@ export interface ProfilePoint {
 export const BED_Y = -2.2;
 export const BANK = {
   kerb: 0x6b6a66,
-  wall: 0x2f2e2c,
+  wall: 0x45433f,
   rail: 0x1c1c1e,
   mud: 0x3a3226,
   sand: 0x2c2820,

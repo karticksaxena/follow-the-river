@@ -18,11 +18,11 @@ const ROOF_THICKNESS = 0.25;
 const ROOF_OVERHANG = 0.3;
 /** Roof tilt about z (radians): rises toward -X so rain runs off the door side. */
 const ROOF_SLOPE = 0.05;
-const WALL_COLOR = 0x3a3530;
-const STRIPE_COLOR = '#2a2622';
+const WALL_COLOR = 0x6a625a;
+const STRIPE_COLOR = '#4a443e';
 /** Corrugation stripes are ~10 cm wide: the 64 px texture (8 px per stripe) covers 0.8 m. */
 const TEXTURE_METRES = 0.8;
-const FLOOR_COLOR = 0x1c1a18;
+const FLOOR_COLOR = 0x2c2a26;
 
 /** Door tile index along z (the middle tile; the upper middle for even widths). */
 function doorTile(def: ShackDef): number {
