@@ -11,7 +11,7 @@ export const FLASHLIGHT = {
   distance: 24,
   angle: 0.5,
   penumbra: 0.7,
-  decay: 1.1,
+  decay: 1.5,
   pitch: 0.2,
 } as const;
 

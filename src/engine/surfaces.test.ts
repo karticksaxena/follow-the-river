@@ -28,6 +28,10 @@ describe('surfaces', () => {
     expect(puddleAmount(PUDDLE.lo + 0.01)).toBeLessThan(mid);
   });
 
+  it('puddles are never a mirror: a torch beam on them stays a soft sheen', () => {
+    expect(PUDDLE.roughness).toBeGreaterThanOrEqual(0.15);
+  });
+
   it('Low is the cheapest: colour and normal only, no ARM, no puddles', () => {
     expect(tierMaps('low')).toEqual({ normal: true, arm: false, puddles: false });
     expect(tierMaps('medium')).toEqual({ normal: true, arm: true, puddles: true });

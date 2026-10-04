@@ -54,11 +54,11 @@ describe('aim', () => {
     expect(hit).toBeGreaterThan(3);
     expect(hit).toBeLessThan(12);
   });
-  it('lights the ground 8 m ahead (inside the cone) at least 0.15x as hard as 3 m ahead', () => {
-    expect(ground(8) / ground(3)).toBeGreaterThan(0.15);
+  it('lights the ground 8 m ahead (inside the cone) at least 0.12x as hard as 3 m ahead', () => {
+    expect(ground(8) / ground(3)).toBeGreaterThan(0.12); // decay 1.5 measures 0.127 (was 0.15 at 1.1)
   });
   it('lights the whole pool 3-12 m ahead, and fades out past the reach', () => {
-    for (const d of [3, 6, 9, 12]) expect(ground(d)).toBeGreaterThan(0.3);
+    for (const d of [3, 6, 9, 12]) expect(ground(d)).toBeGreaterThan(0.2); // 12 m measures 0.227 at decay 1.5 (was 0.3 floor at 1.1)
     expect(ground(30)).toBe(0);
   });
   it('is no brighter at 0.5 m on the wall than the old torch (80 cd, decay 2) was', () => {

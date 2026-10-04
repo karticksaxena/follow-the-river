@@ -38,7 +38,7 @@ export type SurfaceName = keyof typeof SURFACES;
 export const repeatPerMetre = (name: SurfaceName): number => 1 / SURFACES[name].metres;
 
 /** Wet-asphalt patches: noise (0..1) between lo and hi fades dry to puddle. Tuning knobs. */
-export const PUDDLE = { lo: 0.54, hi: 0.64, freq: 0.08, roughness: 0.05, darken: 0.6 } as const;
+export const PUDDLE = { lo: 0.54, hi: 0.64, freq: 0.08, roughness: 0.2, darken: 0.6 } as const;
 /** Normal-map strength on up-facing ground; the slopes and walls stay smooth. */
 const NORMAL_STRENGTH = 0.8;
 const DRY_ROUGHNESS = 0.92;
