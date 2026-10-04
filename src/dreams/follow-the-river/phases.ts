@@ -79,6 +79,7 @@ export function beginPhase(f: Flow): void {
   run.dying = 'no';
   run.cutscene = false; // a death or quit mid-cinematic must not leave the run without weapons or controls
   ctx.cinematic(false);
+  ctx.grade(night ? 'night' : 'day');
   sys.hud.prompt(null); // the day's "E: wait for dark" must not hang over the night's pages
   applyLighting(sys.world.lights, night ? LIGHTING.night : LIGHTING.day);
   if (night && sys.area.nightFog) setFogFar(sys.world.lights, sys.area.nightFog);

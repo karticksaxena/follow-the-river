@@ -78,12 +78,14 @@ function show(ctx: DreamContext, flashback: Flashback, previous: THREE.Scene): (
   const savedPosition = new THREE.Vector3().copy(camera.position);
   const savedQuaternion = new THREE.Quaternion().copy(camera.quaternion);
   let live = true;
+  const graded = ctx.grade('flashback');
   const teardown = (): void => {
     if (!live) return;
     live = false;
     stop();
     ctx.overlay.root.classList.remove(CINEMATIC);
     if (stage.scene === flashback.scene) {
+      ctx.grade(graded);
       // Still ours: give the chapter back. After a quit the next screen owns the camera.
       stage.scene = previous;
       camera.position.copy(savedPosition);

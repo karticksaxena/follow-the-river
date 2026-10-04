@@ -1,3 +1,4 @@
+import { GRAPHICS, type Graphics } from './quality';
 import type { SaveStore } from './save';
 
 export type Difficulty = 'story' | 'normal' | 'hard';
@@ -10,15 +11,21 @@ export interface Settings {
   volume: number;
   /** How hard the nights are (the pause menu changes it; new runs ask). */
   difficulty: Difficulty;
+  /** Image quality: a fixed tier, or `auto` (starts at High, steps down when slow). */
+  graphics: Graphics;
 }
 
-/** What a save may hold: settings from before the difficulty existed lack it. */
-export type SavedSettings = Omit<Settings, 'difficulty'> & { difficulty?: unknown };
+/** What a save may hold: older settings lack the difficulty and graphics. */
+export type SavedSettings = Omit<Settings, 'difficulty' | 'graphics'> & {
+  difficulty?: unknown;
+  graphics?: unknown;
+};
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = {
   sensitivity: 1.5,
   volume: 0.8,
   difficulty: 'normal',
+  graphics: 'auto',
 };
 export const SENSITIVITY_RANGE = { min: 0.2, max: 3 } as const;
 
@@ -43,6 +50,7 @@ export function clampSettings(settings: SavedSettings): Settings {
     ),
     volume: clamp(settings.volume, 0, 1, DEFAULT_SETTINGS.volume),
     difficulty: DIFFICULTIES.find((d) => d === settings.difficulty) ?? DEFAULT_SETTINGS.difficulty,
+    graphics: GRAPHICS.find((g) => g === settings.graphics) ?? DEFAULT_SETTINGS.graphics,
   };
 }
 

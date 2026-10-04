@@ -24,7 +24,14 @@ describe('settings', () => {
       sensitivity: 3,
       volume: 0,
       difficulty: 'normal',
+      graphics: 'auto',
     });
+  });
+
+  it('old settings without graphics load as Auto; bad values fall back', () => {
+    expect(clampSettings({ sensitivity: 1, volume: 0.5 }).graphics).toBe('auto');
+    expect(clampSettings({ sensitivity: 1, volume: 0.5, graphics: 'ultra' }).graphics).toBe('auto');
+    expect(clampSettings({ sensitivity: 1, volume: 0.5, graphics: 'low' }).graphics).toBe('low');
   });
 
   it('old settings without a difficulty load as Normal; bad values fall back', () => {

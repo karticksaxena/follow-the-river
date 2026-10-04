@@ -326,6 +326,7 @@ export async function runColdOpen(
     tick(ctx, sc, st, dt, rig);
   });
   ctx.stage.scene = sc.scene;
+  ctx.grade('dusk');
   void play(ctx, sc, st, onDone);
   return {
     dispose() {

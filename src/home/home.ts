@@ -22,6 +22,7 @@ export async function startHome(app: App, play: Play): Promise<HomeHandle> {
   const { stage, overlay, audio } = app;
   const room = await buildBedroom();
   stage.scene = room.scene;
+  stage.grade('night');
   stage.camera.position.copy(room.view.position);
   stage.camera.lookAt(room.view.target);
   const zzz = createZzz(room.scene, room.head);

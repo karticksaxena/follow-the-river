@@ -233,6 +233,7 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
   }
   const water = ctx.audio.loop(sounds.water, VOLUME.water);
   const pad = ctx.audio.loop(sounds.dawn, 0);
+  const graded = ctx.grade('sunrise');
   const r: Ride = {
     ctx,
     sounds,
@@ -258,7 +259,10 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
       sound.disconnect();
     }
     ctx.overlay.root.classList.remove(CINEMATIC);
-    if (stage.scene === cs.scene) stage.scene = previous;
+    if (stage.scene === cs.scene) {
+      stage.scene = previous;
+      ctx.grade(graded);
+    }
     cs.dispose();
     done();
   };

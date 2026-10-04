@@ -52,9 +52,11 @@ async function boot(): Promise<void> {
       app.settings = clampSettings(settings);
       store.save(app.settings);
       audio.setVolume(app.settings.volume);
+      stage.setGraphics(app.settings.graphics);
     },
   };
   audio.setVolume(app.settings.volume);
+  stage.setGraphics(app.settings.graphics);
   // Dev-only handle for browser checks, e.g. `kd.stage.camera.position`.
   if (import.meta.env.DEV) Object.assign(window, { kd: app });
   const goHome = async (): Promise<void> => {

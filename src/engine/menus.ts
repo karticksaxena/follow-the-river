@@ -1,5 +1,6 @@
 import { toggleFullscreen } from './fullscreen';
 import { pagerActionForKeyEvent, startPager, stepPager, type PagerAction } from './pager';
+import { GRAPHICS, type Graphics } from './quality';
 import { DIFFICULTIES, SENSITIVITY_RANGE, type Difficulty, type Settings } from './settings';
 import { button, el, type Overlay } from './ui';
 
@@ -142,17 +143,31 @@ const DIFFICULTY_LABEL: Readonly<Record<Difficulty, string>> = {
   hard: 'Hard',
 };
 
-/** "Difficulty": three buttons, the current one pressed (`on`), and when a change lands. */
-function difficultyRow(current: Difficulty, onPick: (d: Difficulty) => void): HTMLElement {
-  const buttons = DIFFICULTIES.map((d) =>
-    button(DIFFICULTY_LABEL[d], () => {
-      onPick(d);
-      mark(d);
+const GRAPHICS_LABEL: Readonly<Record<Graphics, string>> = {
+  auto: 'Auto',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+};
+
+/** A titled row of buttons, the current one pressed (`on`), with a small note under it. */
+function choiceRow<T extends string>(
+  title: string,
+  values: readonly T[],
+  labels: Readonly<Record<T, string>>,
+  current: T,
+  onPick: (value: T) => void,
+  note: string,
+): HTMLElement {
+  const buttons = values.map((value) =>
+    button(labels[value], () => {
+      onPick(value);
+      mark(value);
     }),
   );
-  function mark(now: Difficulty): void {
+  function mark(now: T): void {
     buttons.forEach((b, i) => {
-      const on = DIFFICULTIES[i] === now;
+      const on = values[i] === now;
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', String(on));
     });
@@ -161,7 +176,7 @@ function difficultyRow(current: Difficulty, onPick: (d: Difficulty) => void): HT
   const row = el('div', 'row');
   row.append(...buttons);
   const wrap = el('div', 'difficulty');
-  wrap.append(el('p', '', 'Difficulty'), row, el('p', 'small', 'Takes effect from the next wave.'));
+  wrap.append(el('p', '', title), row, el('p', 'small', note));
   return wrap;
 }
 
@@ -189,7 +204,22 @@ export function showPauseMenu(overlay: Overlay, options: PauseMenuOptions): void
         (v) => change({ sensitivity: v }),
       ),
       slider('Volume', 0, 1, settings.volume, (v) => change({ volume: v })),
-      difficultyRow(settings.difficulty, (difficulty) => change({ difficulty })),
+      choiceRow(
+        'Difficulty',
+        DIFFICULTIES,
+        DIFFICULTY_LABEL,
+        settings.difficulty,
+        (difficulty) => change({ difficulty }),
+        'Takes effect from the next wave.',
+      ),
+      choiceRow(
+        'Graphics',
+        GRAPHICS,
+        GRAPHICS_LABEL,
+        settings.graphics,
+        (graphics) => change({ graphics }),
+        'Auto starts at High and lowers itself if the game runs slow.',
+      ),
       button('Quit to dreams', options.onQuit, 'btn quiet'),
     );
   });

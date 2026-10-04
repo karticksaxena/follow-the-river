@@ -378,6 +378,7 @@ export async function runIntro(
   ctx.player.setColliders(ROOM_COLLIDERS);
   ctx.player.teleport(AT.spawnRoom.x, AT.spawnRoom.z, YAW_TO_TV);
   ctx.stage.scene = sc.scene;
+  ctx.grade('dusk');
 
   return {
     dispose() {
