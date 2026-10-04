@@ -24,8 +24,7 @@ import {
 import * as THREE from 'three/webgpu';
 import { createGrading, type GradePreset } from './grade';
 import type { Tier } from './quality';
-import { createShafts, type Shafts } from './shafts';
-import { VOLUME, VOLUME_LAYER, volumeSteps, type ShaftSource } from './volume';
+import { VOLUME, VOLUME_LAYER, volumeSteps } from './volume';
 
 /** Horror look. Tuning knobs. */
 export const POST = {
@@ -64,8 +63,6 @@ export interface Post {
    * the graph rebuilds once. `null` takes the pass out again.
    */
   mist(material: THREE.VolumeNodeMaterial | null): void;
-  /** God rays toward the sun: set `source` each frame (level 0 = off); the graph rebuilds once. `null` removes them. */
-  shafts(source: ShaftSource | null): void;
   /** Colour grade, blended over `seconds`; returns the preset it left. */
   grade(preset: GradePreset, seconds?: number): GradePreset;
   dispose(): void;
@@ -85,13 +82,11 @@ interface Graph {
   passes: ReturnType<typeof pass>[];
   color: THREE.Node<'vec4'>;
   viewZ: THREE.Node<'float'>;
-  /** The pre-pass depth (Medium and High): the mist and the god rays read it. */
+  /** The pre-pass depth (Medium and High): the mist reads it. */
   depth?: THREE.TextureNode;
   /** Low has no TRAA, so SMAA runs on the tone-mapped picture. */
   smaa: boolean;
   owned: Disposable[];
-  /** Set by `addLight` when the god rays are in the graph. */
-  shafts?: Shafts;
 }
 
 interface Built {
@@ -168,7 +163,6 @@ export function createPost(
   volumeLayers.disableAll();
   volumeLayers.enable(VOLUME_LAYER);
   let mistMaterial: THREE.VolumeNodeMaterial | null = null;
-  let shaftSource: ShaftSource | null = null;
   const edge = smoothstep(float(0.75), float(0.2), screenUV.sub(0.5).length());
   const dark = float(1).sub(float(POST.vignette).mul(float(1).sub(edge)));
   const grain = uniform(POST.grain);
@@ -194,7 +188,7 @@ export function createPost(
     return film(grading.node(shown), grain);
   };
 
-  /** The mist and the god rays, added to the resolved HDR colour (they have nothing on Low). */
+  /** The mist, added to the resolved HDR colour (Low has none). */
   const addLight = (g: Graph, steps: number, owned: Disposable[]): void => {
     if (!g.depth) return;
     let extra: THREE.Node<'vec3'> | null = null;
@@ -209,10 +203,6 @@ export function createPost(
       g.passes.push(volume);
       owned.push(volume, blurred);
       extra = blurred.rgb.mul(VOLUME.strength).min(VOLUME.cap);
-    }
-    if (shaftSource) {
-      g.shafts = createShafts(g.depth);
-      extra = extra ? extra.add(g.shafts.node) : g.shafts.node;
     }
     if (extra) g.color = g.color.add(vec4(extra, 0));
   };
@@ -254,7 +244,6 @@ export function createPost(
   return {
     render(scene) {
       for (const p of current().graph.passes) p.scene = scene;
-      if (shaftSource) current().graph.shafts?.update(shaftSource, camera);
       pipeline.render();
       if (warming > 0 && --warming === 0) {
         cinematic = false;
@@ -280,14 +269,6 @@ export function createPost(
     mist(material) {
       if (material === mistMaterial) return;
       mistMaterial = material;
-      rebuild();
-    },
-    shafts(source) {
-      if ((source === null) === (shaftSource === null)) {
-        shaftSource = source;
-        return;
-      }
-      shaftSource = source;
       rebuild();
     },
     focus(on, distance) {

@@ -107,7 +107,7 @@ export const LIGHTING: Readonly<Record<LightingName, LightPreset>> = {
     environment: SUNRISE_CAPS.environment,
     shadow: 1,
     clouds: 0,
-    sky: { turbidity: 4, rayleigh: 1.9, mie: 0.003, mieG: 0.8 },
+    sky: { turbidity: 3, rayleigh: 1.9, mie: 0.0012, mieG: 0.7 },
   },
 };
 

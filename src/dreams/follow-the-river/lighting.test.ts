@@ -123,6 +123,11 @@ describe('the real sunrise', () => {
     expect(s.sky).toBeDefined();
   });
 
+  it('keeps the sun glow small (a bigger Mie blew the left third of the sky white)', () => {
+    expect(LIGHTING.sunrise.sky?.mie).toBeLessThanOrEqual(0.002);
+    expect(LIGHTING.sunrise.sky?.mieG).toBeLessThanOrEqual(0.75);
+  });
+
   it('keeps the night and the predawn dark', () => {
     for (const preset of [LIGHTING.night, LIGHTING.predawn]) {
       const top = new THREE.Color(preset.skyTop);

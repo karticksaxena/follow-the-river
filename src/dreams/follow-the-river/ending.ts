@@ -1,6 +1,5 @@
 import type * as THREE from 'three/webgpu';
 import { precompileSky } from '../../engine/sky';
-import { shaftEnvelope, type ShaftSource } from '../../engine/volume';
 import type { AreaDef } from './areas/types';
 import { playCanoeRide } from './canoe-ride';
 import { createDawn, DAWN } from './dawn';
@@ -165,8 +164,6 @@ interface State {
   /** The fish pack you lay on the water at the end (loaded with Mom). */
   pack: THREE.Object3D | null;
   pad: { stop(): unknown; setVolume(v: number): unknown; disconnect(): unknown } | null;
-  /** The sun the god rays aim at; level 0 until the dawn. */
-  shaft: ShaftSource;
 }
 
 const until = (st: State, pred: Wait['pred']): Promise<void> =>
@@ -194,7 +191,6 @@ async function setUp(h: EndingHost, st: State): Promise<void> {
   if (mom) ctx.player.teleport(cam.x, cam.z, facing(cam.x, cam.z, mom.x, mom.z) + Math.PI);
   await ctx.stage.renderer.compileAsync(h.sys.world.scene, ctx.stage.camera);
   if (st.cancelled) return;
-  ctx.stage.shafts(st.shaft); // the god rays compile now, behind the fade (level 0 costs nothing)
   await ctx.overlay.fade(false);
   if (st.cancelled) return;
   h.run.frozen = false;
@@ -305,22 +301,8 @@ async function dawn(h: EndingHost, st: State): Promise<void> {
     const k = Math.min(1, t / DAWN.seconds);
     pad.setVolume(DAWN.volume * k);
     sky.step(k, t);
-    aimShaft(st.shaft, lights.key, k);
     return k >= 1;
   });
-}
-
-/** Points the god rays at the key light (the sun, pinned over the dam) and sets their level for `k` through the dawn. */
-function aimShaft(shaft: ShaftSource, key: THREE.DirectionalLight, k: number): void {
-  const { x, y, z } = key.position;
-  const len = Math.hypot(x, y, z) || 1;
-  shaft.direction.x = x / len;
-  shaft.direction.y = y / len;
-  shaft.direction.z = z / len;
-  shaft.color.r = key.color.r;
-  shaft.color.g = key.color.g;
-  shaft.color.b = key.color.b;
-  shaft.level = shaftEnvelope(k);
 }
 
 /** Mom walks to the player, stops `SHORE.meet` m short and faces them. */
@@ -416,13 +398,11 @@ const freshState = (scene: EndingScene | null, pack: THREE.Object3D | null): Sta
   scene,
   pack,
   pad: null,
-  shaft: { direction: { x: 0, y: 1, z: 0 }, color: { r: 1, g: 1, b: 1 }, level: 0 },
 });
 
 export function createEnding(h: EndingHost): Ending {
   let st = freshState(null, null);
   const stand = (): void => {
-    h.sys.ctx.stage.shafts(null);
     st.cancelled = true; // the running `play` sees this after its next await and stops
     st.wait = null;
     stopPad(st);
