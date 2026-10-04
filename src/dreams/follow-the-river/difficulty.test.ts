@@ -30,7 +30,7 @@ describe('night difficulty', () => {
     for (const c of [0, 4, -1, NaN]) expect(nightDifficulty(c)).toBe(NIGHT_DIFFICULTY[1]);
   });
   it('tunes speed per chapter, keeping sight and giveUp', () => {
-    expect(nightTuning(3)).toEqual({ ...NIGHT_TUNING, speed: 3.7 });
+    expect(nightTuning(3)).toEqual({ ...NIGHT_TUNING, speed: NIGHT_DIFFICULTY[3].speed });
     expect(nightTuning(3)).toBe(nightTuning(3));
   });
   it('halves the spawn interval only while noise is active', () => {

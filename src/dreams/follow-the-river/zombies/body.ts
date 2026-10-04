@@ -12,6 +12,8 @@ const FADE = 0.25;
 const RADIUS = 0.35;
 const TURN_RATE = 6;
 const DRAG_SPEED = 2;
+/** Share of its speed a zombie keeps while winding up a blow. */
+const LUNGE = 0.55;
 const SINK_SPEED = 1.2;
 const PARK_Y = -50;
 
@@ -144,11 +146,15 @@ export function move(
 ): void {
   const intent = b.thought.intent;
   let face = b.yaw;
-  if (intent === 'walk' || intent === 'run') {
+  // A winding-up zombie lunges on at LUNGE of its speed: standing still, it could never land a
+  // blow on a running player.
+  const lunging = intent === 'strike' && b.mind.state === 'attack';
+  if (intent === 'walk' || intent === 'run' || lunging) {
+    const speed = b.tuning.speed * (lunging ? LUNGE : 1);
     steer(b.x, b.z, player.x, player.z, s.neighbours, s.count, s.dir);
     const next = resolveCircle(
-      b.x + s.dir.x * b.tuning.speed * dt,
-      b.z + s.dir.z * b.tuning.speed * dt,
+      b.x + s.dir.x * speed * dt,
+      b.z + s.dir.z * speed * dt,
       RADIUS,
       grid.near(b.x, b.z, 1),
       s.pos,

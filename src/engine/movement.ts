@@ -1,6 +1,6 @@
 /** Walking and sprinting speeds in metres per second. Tuning knobs. */
 export const WALK_SPEED = 3.2;
-export const SPRINT_SPEED = 5.5;
+export const SPRINT_SPEED = 4.8;
 
 export interface MoveIntent {
   /** -1 (back) to 1 (forward). */
