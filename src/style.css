@@ -221,6 +221,15 @@ h1.title {
     opacity: 0.45;
   }
 }
+.hud-wave {
+  position: absolute;
+  left: 50%;
+  top: 4%;
+  transform: translateX(-50%);
+  color: #c9a9a9;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 6px #000;
+}
 .hud-prompt {
   position: absolute;
   left: 50%;

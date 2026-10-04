@@ -19,6 +19,7 @@ import {
   restartPhase,
   type Phase,
   type RunSave,
+  type StoredRun,
 } from './state';
 
 /** Every phase that has a chapter; the saved `end` has none. */
@@ -44,7 +45,7 @@ function devOverride(): RunSave | null {
 
 export function createDream(): DreamModule {
   let ctx: DreamContext | null = null;
-  let store: SaveStore<RunSave> | null = null;
+  let store: SaveStore<StoredRun> | null = null;
   let chapter: Chapter | null = null;
   let intro: Intro | null = null;
   /** The cold open (how it started) plays once per new run, before the intro. */

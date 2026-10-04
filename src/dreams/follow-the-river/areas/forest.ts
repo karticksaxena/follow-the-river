@@ -222,6 +222,12 @@ export const FOREST: AreaDef = {
   landX: LAND_X,
   startZ: START_Z,
   endZ: END_Z,
+  // The lake's ending wave is the night's third.
+  waves: [
+    { z: -150, gateZ: -190, count: 10, crate: { x: -1 } },
+    { z: -232, gateZ: -272, count: 12, crate: { x: -1 } },
+  ],
+  gate: { kit: 'nature', model: 'log_large', yaw: 0 },
   daySpawn: { x: 0, z: 6, yaw: 0 },
   waitSpot: { x: 0.5, z: -113, yaw: Math.PI },
   barricadeZ: BARRICADE_Z,

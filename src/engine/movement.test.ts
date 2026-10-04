@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BOB,
   fall,
   GRAVITY,
   JUMP_SPEED,
   moveDelta,
   moveIntent,
   SPRINT_SPEED,
+  stepBob,
   WALK_SPEED,
 } from './movement';
 
@@ -63,5 +65,26 @@ describe('fall', () => {
     const air = { height: 0, speed: 0 };
     fall(air, 1 / 60);
     expect(air).toEqual({ height: 0, speed: 0 });
+  });
+});
+
+function bobPeak(gait: 'walk' | 'sprint'): number {
+  const b = { phase: 0, amp: 0, y: 0, roll: 0 };
+  let most = 0;
+  for (let i = 0; i < 120; i++) {
+    stepBob(b, gait, 1 / 60);
+    most = Math.max(most, Math.abs(b.y));
+  }
+  return most;
+}
+
+describe('stepBob', () => {
+  it('bobs more and faster when sprinting, and settles when you stop', () => {
+    expect(bobPeak('sprint')).toBeGreaterThan(bobPeak('walk'));
+    expect(bobPeak('walk')).toBeLessThanOrEqual(BOB.walk.amp + 1e-9);
+    const b = { phase: 1, amp: BOB.sprint.amp, y: 0, roll: 0 };
+    for (let i = 0; i < 120; i++) stepBob(b, 'stand', 1 / 60);
+    expect(Math.abs(b.y)).toBeLessThan(0.001);
+    expect(Math.abs(b.roll)).toBeLessThan(0.001);
   });
 });

@@ -61,3 +61,33 @@ export function fall(air: Air, dt: number): void {
   air.height = 0;
   air.speed = 0;
 }
+
+/**
+ * Head bob while moving: two dips per stride, a little roll side to side; sprinting is bigger and
+ * faster. Amplitudes in metres and radians, rates in strides per second. Tuning knobs.
+ */
+export const BOB = {
+  walk: { amp: 0.035, rate: 0.9 },
+  sprint: { amp: 0.075, rate: 1.35 },
+  roll: 0.014,
+  /** How fast the bob fades in and out (per second). */
+  ease: 8,
+} as const;
+
+export interface Bob {
+  /** Stride phase (rad), and the current amplitude (m) easing toward the gait's. */
+  phase: number;
+  amp: number;
+  /** Outputs: height offset (m) and roll (rad). */
+  y: number;
+  roll: number;
+}
+
+/** One frame of head bob, in place: `gait` is how you move (0 = standing). */
+export function stepBob(b: Bob, gait: 'stand' | 'walk' | 'sprint', dt: number): void {
+  const target = gait === 'stand' ? 0 : BOB[gait].amp;
+  b.amp += (target - b.amp) * Math.min(1, BOB.ease * dt);
+  if (gait !== 'stand') b.phase += 2 * Math.PI * BOB[gait].rate * dt;
+  b.y = b.amp * Math.sin(2 * b.phase);
+  b.roll = BOB.roll * (b.amp / BOB.sprint.amp) * Math.sin(b.phase);
+}

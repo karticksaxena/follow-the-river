@@ -23,7 +23,8 @@ describe('supply balance', () => {
     (area) => {
       const count = (kind: string): number => area.pickups.filter((p) => p.kind === kind).length;
       expect(count('fishPack')).toBeGreaterThanOrEqual(2);
-      const refill = count('battery') * (PICKUP_GAIN.battery?.amount ?? 0);
+      // Each battery is a spare: a full charge when R puts it in.
+      const refill = count('battery') * (PICKUP_GAIN.battery?.amount ?? 0) * 100;
       expect(refill).toBeGreaterThanOrEqual(DAY_TORCH_SECONDS * BATTERY.drainPerSecond);
     },
   );

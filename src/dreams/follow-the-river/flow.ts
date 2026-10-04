@@ -45,6 +45,9 @@ export function phaseTitle(phase: Phase): string {
 }
 
 /** Where the player stands when `phase` (re)starts in `area`. */
-export function spawnFor(phase: Phase, area: AreaDef): Spot {
-  return isNight(phase) ? area.nightStart : area.daySpawn;
+/** Where a phase starts: the day spawn, the night start, or just past the last barricade down. */
+export function spawnFor(phase: Phase, area: AreaDef, cleared = 0): Spot {
+  if (!isNight(phase)) return area.daySpawn;
+  const past = area.waves[cleared - 1];
+  return past ? { ...area.nightStart, z: past.gateZ - 3 } : area.nightStart;
 }

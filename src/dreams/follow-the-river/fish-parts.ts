@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import type { StrikeStyle } from './orca-grab';
 import { WATER_Y } from './river';
 
 const THROW_RANGE = 1.5;
@@ -140,6 +141,25 @@ export const NIGHT_STRIKE = {
 
 export function strikesFor(fed: number): number {
   return FISH.baseStrikes + fed * FISH.strikesPerPack;
+}
+
+/** How much hungrier each fish pack makes it (per pack, and the limits). Tuning knobs. */
+export const FED = {
+  cooldown: { per: -0.12, limit: 0.5 },
+  reach: { per: 0.5, limit: 7 },
+  pace: { per: -0.06, limit: 0.7 },
+  sweep: { per: 0.4, limit: 2 },
+} as const;
+
+/** The night's strike style after `fed` packs: sooner, further, quicker, sweeping. */
+export function styleFor(fed: number): StrikeStyle {
+  const n = Math.max(0, fed);
+  return {
+    cooldown: Math.max(FED.cooldown.limit, FISH.cooldown + FED.cooldown.per * n),
+    reach: Math.min(FED.reach.limit, FISH.reach + FED.reach.per * n),
+    pace: Math.max(FED.pace.limit, 1 + FED.pace.per * n),
+    sweep: Math.min(FED.sweep.limit, FED.sweep.per * n),
+  };
 }
 
 /** The zombie to take: alive, within `reach` of the edge, nearest to the player. */

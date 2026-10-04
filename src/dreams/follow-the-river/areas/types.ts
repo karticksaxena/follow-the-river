@@ -1,4 +1,5 @@
 import type { Kit } from '../kits';
+import type { GunKind } from '../state';
 
 export interface Spot {
   x: number;
@@ -24,10 +25,12 @@ export interface ShackDef {
   width: number;
   depth: number;
 }
-export type PickupKind = 'battery' | 'arrows' | 'fishPack' | 'tape' | 'ammo' | 'gun';
+export type PickupKind = 'battery' | 'arrows' | 'fishPack' | 'tape' | 'ammo' | 'gun' | 'crate';
 export interface PickupDef {
   id: string;
   kind: PickupKind;
+  /** A crate's new gun (crates hold ammo for every gun you own, arrows, a battery, a fish pack). */
+  gun?: GunKind;
   x: number;
   z: number;
   tape?: number;
@@ -43,6 +46,25 @@ export type ScareDef =
   | { kind: 'watcher'; x: number; z: number; trigger: number }
   | { kind: 'ambush'; shack: string; trigger: number }
   | { kind: 'alarm'; x: number; z: number; trigger: number };
+/** One wave of a night: where it starts, the barricade that holds you, how many come, the crate. */
+export interface WaveDef {
+  /** Walking past this z (downstream) starts the wave; the crate sits just beyond it. */
+  z: number;
+  /** The barricade across the bank (z) that stays up until the wave is dead. */
+  gateZ: number;
+  count: number;
+  /** The crate's x on the bank, and the gun inside, if any. */
+  crate: { x: number; gun?: GunKind };
+}
+
+/** What the wave barricades are built from (kit pieces laid across the bank). */
+export interface GateStyle {
+  kit: Kit;
+  model: string;
+  yaw: number;
+  scale?: number;
+}
+
 export interface AreaDef {
   id: 'city' | 'suburbs' | 'forest';
   /** Which chapter (day and night) plays here. */
@@ -60,6 +82,9 @@ export interface AreaDef {
   startZ: number;
   endZ: number;
   daySpawn: Spot;
+  /** The night's waves, in order downstream (Night 3's last wave is the ending's). */
+  waves: readonly WaveDef[];
+  gate: GateStyle;
   waitSpot: Spot;
   barricadeZ: number;
   nightStart: Spot;

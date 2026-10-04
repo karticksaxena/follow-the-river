@@ -177,6 +177,12 @@ export const CITY: AreaDef = {
   landX: LAND_X,
   startZ: START_Z,
   endZ: END_Z,
+  waves: [
+    { z: -148, gateZ: -180, count: 6, crate: { x: -1, gun: 'pistol' } },
+    { z: -212, gateZ: -244, count: 8, crate: { x: -1, gun: 'shotgun' } },
+    { z: -276, gateZ: -308, count: 10, crate: { x: -1 } },
+  ],
+  gate: { kit: 'roads', model: 'construction-fence', yaw: Math.PI / 2 },
   daySpawn: { x: 0, z: 6, yaw: 0 },
   waitSpot: { x: 0.5, z: -113, yaw: Math.PI },
   barricadeZ: BARRICADE_Z,

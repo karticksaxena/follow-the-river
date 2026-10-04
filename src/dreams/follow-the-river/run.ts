@@ -5,13 +5,14 @@ import type { AreaDef, PickupDef } from './areas/types';
 import type { Bow } from './bow';
 import type { Fish } from './fish';
 import type { Flashlight } from './flashlight';
-import type { Gun } from './gun';
+import type { Armory } from './gun';
 import type { HintId } from './hints';
 import type { Hud } from './hud';
 import type { PickupMeshes } from './pickups';
 import type { Scares } from './scares';
 import type { Sounds } from './sounds';
 import type { Phase, RunState } from './state';
+import type { Gates, WaveState } from './waves';
 import type { World } from './world';
 import type { Horde } from './zombies/horde';
 
@@ -25,12 +26,14 @@ export interface Systems {
   horde: Horde;
   flashlight: Flashlight;
   bow: Bow;
-  gun: Gun;
+  armory: Armory;
   fish: Fish;
   pickups: PickupMeshes;
   hud: Hud;
   ambience: Ambience;
   scares: Scares;
+  /** The night's barricades, one per wave. */
+  gates: Gates;
 }
 
 export type Dying = 'no' | 'anim' | 'wait';
@@ -43,6 +46,10 @@ export interface Run {
   live: RunState;
   /** Ids in `live.taken`, as a set for the per-frame pickup search. */
   taken: Set<string>;
+  /** What can be picked up this phase: the area's by day, the wave crates by night. */
+  pickups: readonly PickupDef[];
+  /** The night's waves (unused by day). */
+  waves: WaveState;
   health: number;
   /** Shack darkness 0..1 and the value last applied to the lights. */
   dim: number;
@@ -65,4 +72,6 @@ export interface Events {
   arrive(): void;
   /** Night 3: the player reached the foot of the dam. */
   ending(): void;
+  /** A wave is dead: save the checkpoint (`cleared` waves behind you). */
+  checkpoint(cleared: number): void;
 }

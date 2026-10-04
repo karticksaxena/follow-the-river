@@ -1,14 +1,24 @@
 import type * as THREE from 'three/webgpu';
 import type { SaveStore } from '../../engine/save';
 import type { PickupDef } from './areas/types';
-import { strikesFor } from './fish';
+import { strikesFor, styleFor } from './fish';
 import { MAX_HEALTH, phaseTitle, spawnFor, waitQuestion } from './flow';
 import { HINTS, type HintId } from './hints';
 import { applyLighting, LIGHTING, setFogFar } from './lighting';
 import type { Run, Systems } from './run';
 import { shackAt } from './scares';
-import { chapterOf, completePhase, isNight, restartPhase, type RunSave } from './state';
+import {
+  chapterOf,
+  clearWave,
+  completePhase,
+  isNight,
+  restartPhase,
+  topUp,
+  type RunSave,
+  type StoredRun,
+} from './state';
 import { playTape } from './tapes';
+import { newWaveState, waveCrates } from './waves';
 import { DAY_TUNING } from './zombies/brain';
 
 /** Lantern brightness at night (tuning knob); it is 0 by day. */
@@ -20,7 +30,7 @@ export interface Flow {
   lantern: THREE.PointLight;
   run: Run;
   save: RunSave;
-  store: SaveStore<RunSave>;
+  store: SaveStore<StoredRun>;
   onDone: (save: RunSave) => void;
   /** Called at every phase start (resets the per-phase gameplay state). */
   onReset: () => void;
@@ -75,11 +85,15 @@ export function beginPhase(f: Flow): void {
   fish.reset();
   sys.world.railing?.reset();
   sys.scares.reset();
-  if (night) fish.arm(strikesFor(run.live.fed));
-  pickups.place(night ? [] : area.pickups, run.taken);
+  if (night) fish.arm(strikesFor(run.live.fed), styleFor(run.live.fed));
+  const cleared = night ? save.wave : 0;
+  run.waves = newWaveState(cleared);
+  sys.gates.set(cleared);
+  run.pickups = night ? waveCrates(area) : area.pickups;
+  pickups.place(run.pickups, run.taken);
   if (!night) for (const l of area.lurkers) horde.spawn(l.x, l.z, l.yaw, DAY_TUNING, l.lying);
   sys.flashlight.on = night;
-  const at = spawnFor(save.phase, area);
+  const at = spawnFor(save.phase, area, cleared);
   ctx.player.teleport(at.x, at.z, at.yaw);
   sys.world.lights.sky.position.set(at.x, 0, at.z); // the dome follows the player; paused frames skip that
   f.onReset();
@@ -135,9 +149,19 @@ export function arrive(f: Flow): void {
   f.onDone(f.save);
 }
 
-/** After the death pages: start the same phase again. */
+/** After the death pages: start again at the checkpoint (the wave you died in), never empty-handed. */
 export function restart(f: Flow): void {
   if (f.disposed) return;
   beginPhase(f);
+  const { live } = f.run;
+  live.supplies = topUp(live.supplies, live.guns);
   announce(f, false);
+}
+
+/** A wave is dead: the barricade is falling, so save here (a death restarts at this point). */
+export function checkpoint(f: Flow, cleared: number): void {
+  if (f.run.frozen || f.run.dying !== 'no') return;
+  f.save = clearWave(f.save, f.run.live, cleared);
+  f.store.save(f.save);
+  showHint(f, 'clear');
 }

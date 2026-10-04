@@ -1,17 +1,17 @@
 import * as THREE from 'three/webgpu';
 import { createControls, type Controls } from './controls';
-import { nightDifficulty, nightTuning, spawnInterval, type NightDifficulty } from './difficulty';
+import { nightTuning } from './difficulty';
 import { nightEnd } from './ending';
-import { BEAM, drainBattery } from './flashlight';
+import { BEAM, chargeBattery } from './flashlight';
 import { nearSpot, takeDamage } from './flow';
 import type { HudState } from './hud';
 import { applyDim, LIGHTING } from './lighting';
 import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
-import { addSupply, chapterOf, isNight } from './state';
+import { addSupply, AMMO_OF, chapterOf, isNight } from './state';
+import { stepWaves, waveLeft, waveSpawn } from './waves';
 import type { Tuning } from './zombies/brain';
 import type { PlayerSense } from './zombies/horde';
-import { nextSpawn, type Pace, type Strip } from './zombies/spawner';
 
 /** Shack darkness eases at this rate (per second); lights are touched only past `DIM_EPSILON`. */
 const DIM_RATE = 1.5;
@@ -22,8 +22,10 @@ const HURT_HEALTH = 34;
 const WAIT_HINT_RANGE = 12;
 /** After the "you are hurt" page closes, zombie hits can't land for this long (s). */
 const HURT_GRACE = 1;
+/** Wave zombies come out of the bank between the land wall and this far from the water (m). */
 const NIGHT_STRIP_MARGIN = 0.5;
-const NIGHT_SAFE_BUFFER = 15;
+/** A wave's zombies are told where you are, this far around you (m): they hunt, they don't wander. */
+const WAVE_ALERT = 60;
 
 export interface Play {
   update(dt: number): void;
@@ -37,16 +39,13 @@ interface State {
   run: Run;
   events: Events;
   sense: PlayerSense;
-  /** The chapter's night difficulty and zombie tuning, looked up once. */
+  /** The chapter and its night's zombie tuning, looked up once. */
   chapter: number;
-  night: NightDifficulty;
   tuning: Tuning;
   controls: Controls;
   look: THREE.Vector3;
-  spawnTimer: { timer: number };
-  strip: Strip;
-  /** The night's pace, refreshed each frame (a gunshot's noise halves the interval). */
-  pace: Pace;
+  /** Seconds the torch has been off (it recharges after a moment). */
+  offFor: number;
   hudState: HudState;
   wasPaused: boolean;
   /** A non-lethal hit this frame: if the game pauses next (hint page), grace starts on resume. */
@@ -74,34 +73,29 @@ function createState(sys: Systems, run: Run, events: Events): State {
   const { area, hud, grid } = sys;
   const sense = newSense();
   const chapter = chapterOf(run.phase);
-  const night = nightDifficulty(chapter);
   const state: State = {
     sys,
     run,
     events,
     sense,
     chapter,
-    night,
     tuning: nightTuning(chapter),
     controls: createControls(sys, run, events, sense),
     look: new THREE.Vector3(),
-    spawnTimer: { timer: night.interval },
-    strip: {
-      minX: area.landX,
-      maxX: EDGE_X - NIGHT_STRIP_MARGIN,
-      minZ: area.safeZ + NIGHT_SAFE_BUFFER,
-      maxZ: area.barricadeZ,
-    },
+    offFor: 0,
     hudState: {
       battery: 0,
+      cells: 0,
       arrows: 0,
       fishPacks: 0,
       ammo: 0,
       health: 0,
-      showAmmo: false,
+      guns: 0,
       weapon: 'bow',
+      wave: 0,
+      waves: area.waves.length,
+      left: 0,
     },
-    pace: { ...night },
     wasPaused: true,
     hitPause: false,
     grace: 0,
@@ -146,10 +140,13 @@ function tickWorld(p: State, dt: number): void {
   const { sys, run, sense } = p;
   const night = isNight(run.phase);
   const supplies = run.live.supplies;
-  supplies.battery = drainBattery(supplies.battery, sys.flashlight.on, dt);
+  p.offFor = sys.flashlight.on ? 0 : p.offFor + dt;
+  supplies.battery = chargeBattery(supplies.battery, sys.flashlight.on, p.offFor, dt);
+  if (supplies.battery <= 0) sys.flashlight.on = false; // dead: off, so it starts recharging
   sys.flashlight.apply(supplies.battery, run.time);
   sys.horde.update(dt, sense, p.onHit);
-  sys.gun.update(dt);
+  sys.armory.update(dt);
+  sys.gates.update(dt);
   const recovered = sys.bow.update(dt, sys.horde, sys.grid, sense);
   if (recovered > 0) run.live.supplies = addSupply(run.live.supplies, 'arrows', recovered);
   sys.fish.update(dt, sense, night ? sys.horde : null, night);
@@ -157,22 +154,32 @@ function tickWorld(p: State, dt: number): void {
   sys.pickups.update(dt);
 }
 
-function spawnNight(p: State, dt: number): void {
-  const { sys, sense } = p;
-  p.pace.interval = spawnInterval(p.night.interval, sys.gun.noiseLeft);
-  const at = nextSpawn(
-    p.spawnTimer,
-    dt,
-    sys.horde.aliveCount(),
-    sense,
-    p.strip,
-    sys.area.safeZ,
-    p.blocked,
-    Math.random,
-    p.pace,
-  );
-  if (!at) return;
-  sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), p.tuning);
+/** The night's waves: start when you pass one, bring it in groups, open the barricade when it's dead. */
+function tickWaves(p: State, dt: number): void {
+  const { sys, run, sense } = p;
+  const { area, horde } = sys;
+  const event = stepWaves(run.waves, area.waves, sense.z, horde.aliveCount(), dt);
+  if (!event) return;
+  if (event.kind === 'start') p.events.hint('wave');
+  else if (event.kind === 'clear') {
+    sys.gates.open(event.wave);
+    p.events.checkpoint(event.wave + 1);
+  } else spawnWave(p, event.count);
+}
+
+function spawnWave(p: State, count: number): void {
+  const { sys, sense, run } = p;
+  const gateZ = sys.area.waves[run.waves.cleared]?.gateZ ?? sys.area.safeZ;
+  const maxX = EDGE_X - NIGHT_STRIP_MARGIN;
+  for (let i = 0; i < count; i++) {
+    for (let tries = 0; tries < 6; tries++) {
+      const at = waveSpawn(sense, gateZ, sys.area.landX + 1, maxX, Math.random);
+      if (p.blocked(at.x, at.z)) continue;
+      sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), p.tuning);
+      break;
+    }
+  }
+  sys.horde.alert(sense.x, sense.z, WAVE_ALERT);
 }
 
 /** Shack darkness: eases toward 1 inside, 0 outside; lights are touched only when it moved. */
@@ -203,13 +210,18 @@ function tickView(p: State, dt: number): void {
     run.health <= HURT_HEALTH,
     p.chapter,
   );
+  const weapon = p.controls.weapon();
   hudState.battery = s.battery;
+  hudState.cells = s.cells;
   hudState.arrows = s.arrows;
   hudState.fishPacks = s.fishPacks;
-  hudState.ammo = s.ammo;
-  hudState.showAmmo = run.live.hasGun;
-  hudState.weapon = p.controls.weapon();
+  hudState.ammo = weapon === 'bow' ? 0 : s[AMMO_OF[weapon]];
+  hudState.guns = run.live.guns.length;
+  hudState.weapon = weapon;
   hudState.health = run.health;
+  const fighting = isNight(run.phase) && run.waves.fighting;
+  hudState.wave = fighting ? run.waves.cleared + 1 : 0;
+  hudState.left = waveLeft(run.waves, sys.horde.aliveCount());
   sys.hud.set(hudState);
   sys.hud.prompt(p.controls.prompt());
 }
@@ -245,7 +257,7 @@ function tick(p: State, dt: number): void {
   p.controls.update(dt);
   tickWorld(p, dt);
   sys.scares.update(dt, sense, isNight(run.phase) && run.ending !== 'calm');
-  if (isNight(run.phase) && run.ending === 'no') spawnNight(p, dt);
+  if (isNight(run.phase) && run.ending === 'no') tickWaves(p, dt);
   tickDim(p, dt);
   tickHints(p);
   tickView(p, dt);
@@ -265,12 +277,12 @@ export function createPlay(sys: Systems, run: Run, events: Events): Play {
   const p = createState(sys, run, events);
   return {
     reset() {
-      p.spawnTimer.timer = p.night.interval;
+      p.offFor = 0;
       p.toldAboutWait = false;
       p.wasInShack = false;
       p.hitPause = false;
       p.grace = 0;
-      p.sys.gun.reset();
+      p.sys.armory.reset();
       p.controls.reset();
       p.controls.drain(); // a stale click (e.g. on "Continue") must not fire an arrow
     },

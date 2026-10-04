@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SPRINT_SPEED } from '../../engine/movement';
-import {
-  HORDE_CAPACITY,
-  NIGHT_DIFFICULTY,
-  nightDifficulty,
-  nightTuning,
-  spawnInterval,
-} from './difficulty';
+import { HORDE_CAPACITY, NIGHT_DIFFICULTY, nightDifficulty, nightTuning } from './difficulty';
 import { NIGHT_TUNING } from './zombies/brain';
 
 describe('night difficulty', () => {
@@ -16,7 +10,6 @@ describe('night difficulty', () => {
       [2, 3],
     ] as const) {
       expect(NIGHT_DIFFICULTY[b].cap).toBeGreaterThan(NIGHT_DIFFICULTY[a].cap);
-      expect(NIGHT_DIFFICULTY[b].interval).toBeLessThan(NIGHT_DIFFICULTY[a].interval);
       expect(NIGHT_DIFFICULTY[b].speed).toBeGreaterThan(NIGHT_DIFFICULTY[a].speed);
     }
   });
@@ -32,9 +25,5 @@ describe('night difficulty', () => {
   it('tunes speed per chapter, keeping sight and giveUp', () => {
     expect(nightTuning(3)).toEqual({ ...NIGHT_TUNING, speed: NIGHT_DIFFICULTY[3].speed });
     expect(nightTuning(3)).toBe(nightTuning(3));
-  });
-  it('halves the spawn interval only while noise is active', () => {
-    expect(spawnInterval(2, 1)).toBe(1);
-    expect(spawnInterval(2, 0)).toBe(2);
   });
 });

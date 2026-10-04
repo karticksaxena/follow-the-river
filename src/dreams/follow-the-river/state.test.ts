@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   addSupply,
+  AFTER_DEATH,
   chapterOf,
+  clearWave,
   completePhase,
   freshRun,
   isNight,
@@ -12,6 +14,7 @@ import {
   spend,
   START_SUPPLIES,
   SUPPLY_LIMITS,
+  topUp,
 } from './state';
 
 describe('phases', () => {
@@ -54,33 +57,43 @@ describe('saves', () => {
     expect(isRunSave(freshRun())).toBe(true);
   });
 
-  it('accepts a Plan 2 save without hasGun and normalizes it to false', () => {
+  it('reads a Plans 2–5 save (version 1): hasGun becomes the pistol, new supplies start empty', () => {
     const old = {
       version: 1,
       phase: 'night1',
-      supplies: { battery: 80, arrows: 3, ammo: 0, fishPacks: 0 },
+      supplies: { battery: 80, arrows: 3, ammo: 5, fishPacks: 0 },
       fed: 1,
       taken: ['a'],
       tapes: [1],
       hints: ['bow'],
+      hasGun: true,
     };
     expect(isRunSave(old)).toBe(true);
     if (!isRunSave(old)) return;
     const fixed = normalizeSave(old);
-    expect(fixed).toEqual({ ...old, hasGun: false });
-    expect(fixed).not.toBe(old);
-    expect(normalizeSave({ ...fixed, hasGun: true }).hasGun).toBe(true);
+    expect(fixed.version).toBe(2);
+    expect(fixed.guns).toEqual(['pistol']);
+    expect(fixed.wave).toBe(0);
+    expect(fixed.supplies).toEqual({
+      ...START_SUPPLIES,
+      battery: 80,
+      arrows: 3,
+      ammo: 5,
+      fishPacks: 0,
+    });
+    expect(normalizeSave({ ...old, hasGun: undefined }).guns).toEqual([]);
   });
 
-  it('rejects a non-boolean hasGun', () => {
+  it('rejects a non-boolean hasGun and unknown guns', () => {
     expect(isRunSave({ ...freshRun(), hasGun: 'yes' })).toBe(false);
+    expect(isRunSave({ ...freshRun(), guns: ['bazooka'] })).toBe(false);
   });
 
   it.each([
     null,
     42,
     {},
-    { ...freshRun(), version: 2 },
+    { ...freshRun(), version: 3 },
     { ...freshRun(), phase: 'day9' },
     { ...freshRun(), supplies: { battery: 'full' } },
     { ...freshRun(), supplies: { ...START_SUPPLIES, arrows: -1 } },
@@ -122,11 +135,28 @@ describe('checkpoints', () => {
     expect([night.taken, night.tapes]).toEqual([['tape-1'], [1]]);
   });
 
-  it('carries the gun through restarts and completed phases', () => {
-    const day = { ...freshRun(), phase: 'day2' as const, hasGun: true };
-    expect(restartPhase(day).hasGun).toBe(true);
-    expect(completePhase(day, restartPhase(day)).hasGun).toBe(true);
-    const found = completePhase(freshRun(), { ...restartPhase(freshRun()), hasGun: true });
-    expect(found.hasGun).toBe(true);
+  it('carries guns through restarts and completed phases', () => {
+    const day = { ...freshRun(), phase: 'day2' as const, guns: ['pistol' as const] };
+    expect(restartPhase(day).guns).toEqual(['pistol']);
+    expect(completePhase(day, restartPhase(day)).guns).toEqual(['pistol']);
+  });
+
+  it('a cleared wave is a checkpoint in the same night; finishing the night starts the next at 0', () => {
+    const night = { ...freshRun(), phase: 'night1' as const, fed: 2 };
+    const live = { ...restartPhase(night), taken: ['city-crate-1'] };
+    const mid = clearWave(night, live, 1);
+    expect([mid.phase, mid.wave, mid.fed, mid.taken]).toEqual(['night1', 1, 2, ['city-crate-1']]);
+    expect(completePhase(mid, restartPhase(mid)).wave).toBe(0);
+  });
+
+  it('a death never leaves you empty-handed: supplies are raised, ammo only for guns you own', () => {
+    const empty = { ...START_SUPPLIES, battery: 5, arrows: 0, fishPacks: 0, cells: 0 };
+    const up = topUp(empty, ['shotgun']);
+    expect(up.battery).toBe(AFTER_DEATH.battery);
+    expect(up.arrows).toBe(AFTER_DEATH.arrows);
+    expect(up.cells).toBe(AFTER_DEATH.cells);
+    expect(up.fishPacks).toBe(AFTER_DEATH.fishPacks);
+    expect([up.shells, up.ammo, up.rounds]).toEqual([AFTER_DEATH.shells, 0, 0]);
+    expect(topUp({ ...up, arrows: 15 }, []).arrows).toBe(15);
   });
 });

@@ -11,13 +11,14 @@ import { HORDE_CAPACITY } from './difficulty';
 import { MOM_LANTERN } from './ending-scene';
 import { createFish, type Fish } from './fish';
 import { createFlashlight } from './flashlight';
-import { createGun, type Gun } from './gun';
+import { createArmory, type Armory } from './gun';
 import { createHud } from './hud';
 import { propUrl } from './kits';
 import { createPickupMeshes, type PickupMeshes } from './pickups';
 import type { Systems } from './run';
 import { createScares } from './scares';
 import { loadSounds, type Sounds } from './sounds';
+import { createGates } from './waves';
 import { buildWorld, type World } from './world';
 import { DAY_TUNING } from './zombies/brain';
 import { createHorde, type Horde } from './zombies/horde';
@@ -33,7 +34,7 @@ export interface Assembled {
 interface Bodies {
   horde: Horde;
   bow: Bow;
-  gun: Gun;
+  armory: Armory;
   fish: Fish;
   pickups: PickupMeshes;
   boathouse: THREE.Object3D;
@@ -50,7 +51,7 @@ function loadBodies(
   return Promise.all([
     createHorde(scene, ctx.audio, grid, sounds.groans, HORDE_CAPACITY),
     createBow(ctx.stage.camera, scene, ctx.audio, sounds),
-    createGun(ctx.stage.camera, scene, ctx.audio, sounds),
+    createArmory(ctx.stage.camera, ctx.audio, sounds.shots),
     createFish(scene, ctx.audio, sounds, {
       ground: (x) => groundAt(area.bank, x),
       onBreach: (z) => world.railing?.break(z),
@@ -58,10 +59,10 @@ function loadBodies(
     createPickupMeshes(scene),
     // The night's safe-spot building (the city's boathouse, the forest-edge camp…); Night 3 has none.
     area.safeProp ? loadModel(propUrl(area.safeProp.prop)) : Promise.resolve(new THREE.Group()),
-  ]).then(([horde, bow, gun, fish, pickups, boathouse]) => ({
+  ]).then(([horde, bow, armory, fish, pickups, boathouse]) => ({
     horde,
     bow,
-    gun,
+    armory,
     fish,
     pickups,
     boathouse,
@@ -74,7 +75,7 @@ function free(scene: THREE.Scene, camera: THREE.Camera, parts?: Partial<Systems>
   disposeScene(scene);
   parts?.horde?.dispose();
   parts?.bow?.dispose();
-  parts?.gun?.dispose();
+  parts?.armory?.dispose();
   parts?.fish?.dispose();
   parts?.pickups?.dispose();
   parts?.flashlight?.dispose();
@@ -101,9 +102,12 @@ export async function assemble(
     disposeScene(scene);
     return null;
   }
+  // The wave barricades: their colliders join the world's before any grid is built.
+  const gates = await createGates(scene, area);
+  world.colliders.push(...gates.boxes);
   const grid = createBoxGrid(world.colliders);
   const bodies = await loadBodies(ctx, area, world, grid, sounds);
-  const { horde, bow, gun, fish, pickups, boathouse } = bodies;
+  const { horde, bow, armory, fish, pickups, boathouse } = bodies;
   if (isCancelled()) {
     free(scene, camera, bodies);
     return null;
@@ -151,13 +155,14 @@ export async function assemble(
     sounds,
     horde,
     bow,
-    gun,
+    armory,
     fish,
     pickups,
     flashlight,
     hud,
     ambience,
     scares,
+    gates,
   };
   return { sys, lantern };
 }

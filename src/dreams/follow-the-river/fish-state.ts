@@ -2,6 +2,7 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as THREE from 'three/webgpu';
 import type { AudioBus } from '../../engine/audio';
 import type { SkinnedAsset } from '../../engine/models';
+import { HORDE_CAPACITY } from './difficulty';
 import {
   cruiseYFor,
   findClip,
@@ -14,9 +15,8 @@ import {
 } from './fish-parts';
 import type { Grab, GrabHooks, GrabPose, StrikeStyle } from './orca-grab';
 import type { Sounds } from './sounds';
-import { SPAWNER } from './zombies/spawner';
 
-const CAPACITY = Math.max(32, SPAWNER.cap);
+const CAPACITY = Math.max(32, HORDE_CAPACITY);
 
 /** Where the ending has the orca: cruising/striking as usual, the last lunge, sinking, or gone. */
 export type Finale = 'no' | 'lunge' | 'sink' | 'gone';

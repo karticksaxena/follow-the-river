@@ -7,7 +7,12 @@ export type HintId =
   | 'night'
   | 'hurt'
   | 'tape'
-  | 'gun'
+  | 'battery'
+  | 'pistol'
+  | 'shotgun'
+  | 'rifle'
+  | 'wave'
+  | 'clear'
   | 'night2'
   | 'night3';
 
@@ -20,12 +25,14 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   ],
   shack: [
     'It is pitch black in here.',
-    'Press F for your flashlight. It eats battery — watch the meter in the corner.',
+    'Press F for your flashlight. It drains while it is on — watch the meter in the corner.',
+    'Switched off, it slowly charges back up.',
   ],
+  battery: ['A spare battery. When the torch runs low, press R to put it in.'],
   bow: ['Click to shoot your bow. It is silent.', 'Walk over your arrows to pick them back up.'],
   fish: [
     "Stand at the water's edge and press E to throw a fish pack in.",
-    'Every pack you feed it by day makes it hunt harder for you at night.',
+    'Every pack you feed it makes it hunt harder for you at night.',
   ],
   wait: [
     'When you are ready, rest by the campfire and wait for dark.',
@@ -33,16 +40,21 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   ],
   night: [
     'Night. They are fast now.',
-    'Click shoots the bow. F is your flashlight.',
-    'Run downstream to the boathouse. Shine your flashlight in their faces to stop them for a moment.',
-    'Stay close to the water. Something in the river is hunting them too.',
+    'Click shoots. F is your flashlight: off, it charges back up; R puts in a spare battery.',
+    'Shine the light in their faces to stop them for a moment.',
+    'Downstream, a barricade holds you at each wave of them. Kill them all and it falls.',
+    'Stay close to the water. E at the edge feeds the orca: every fish pack makes it hunt harder.',
   ],
+  wave: ['They are coming. Find the crate: there is something in it for you.'],
+  clear: ['The way is clear.'],
   hurt: ['You are hurt. Three hits and you are dead.'],
   tape: ["A video tape. Mom's handwriting on the label."],
   night2: ['Corn hides them. Listen.'],
   night3: ['The lake. Mom is waiting at the lake.'],
-  gun: [
-    'A police gun. Press 2 for the gun, 1 for the bow.',
-    'The gun stops anything — but every shot is loud, and they will come.',
+  pistol: [
+    'A police pistol. Press 2 for it, 1 for the bow.',
+    'It stops anything — but every shot is loud, and they will come.',
   ],
+  shotgun: ['A shotgun. Press 3. Close up, one blast can drop a group.'],
+  rifle: ['A rifle. Press 4 and hold the trigger. Mind the rounds.'],
 };

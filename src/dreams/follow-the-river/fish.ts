@@ -25,7 +25,7 @@ import { newGrab, stepGrab, type GrabHooks, type StrikeStyle } from './orca-grab
 import { EDGE_X, WATER_Y } from './river';
 import type { Sounds } from './sounds';
 import type { Horde } from './zombies/horde';
-export { canThrow, cruiseHeading, FISH, pickStrike, strikesFor } from './fish-parts';
+export { canThrow, cruiseHeading, FISH, pickStrike, strikesFor, styleFor } from './fish-parts';
 export type { Finale } from './fish-state';
 
 // Tuning knobs (metres, seconds); heights are relative to the river's WATER_Y.

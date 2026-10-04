@@ -1,6 +1,7 @@
 import { assetUrl } from '../../engine/assets';
 import type { AudioBus } from '../../engine/audio';
 import { stingSamples } from '../../engine/scare';
+import type { GunKind } from './state';
 
 export interface Sounds {
   groans: AudioBuffer[];
@@ -11,8 +12,10 @@ export interface Sounds {
   alarm: AudioBuffer;
   /** 8 s loop: many distant groans mixed (the "group" sound). */
   horde: AudioBuffer;
-  /** String slap and arrow whoosh (0.45 s). */
+  /** The bow's release (a CC0 recording, or the generated string slap and whoosh). */
   bowShot: AudioBuffer;
+  /** Each gun's shot (CC0 recordings; the generated shot if one is missing). */
+  shots: Record<GunKind, AudioBuffer>;
   thud: AudioBuffer;
   splash: AudioBuffer;
   /** The orca's breath at the surface (0.6 s). */
@@ -39,6 +42,12 @@ const FILES = {
   night: [1, 2, 3].map((n) => sound(`ambience/night-${n}`)),
   weird: [1, 2, 3].map((n) => sound(`stings/weird-${n}`)),
   alarm: sound('stings/alarm'),
+  weapons: {
+    pistol: sound('weapons/pistol'),
+    shotgun: sound('weapons/shotgun'),
+    rifle: sound('weapons/rifle'),
+    bow: sound('weapons/bow'),
+  },
 } as const;
 
 /** Length and loudness of the horde layer. Tuning knobs. */
@@ -275,6 +284,17 @@ export async function loadSounds(audio: AudioBus): Promise<Sounds> {
   if (!water || !wind || !alarm) throw new Error('Missing ambience sounds');
   const context = audio.listener.context;
   const rate = context.sampleRate;
+  // Weapon recordings are optional: a missing one falls back to a generated sound.
+  const gunshot = toBuffer(context, gunshotSamples(rate, Math.random));
+  const or = (url: string, fallback: AudioBuffer): Promise<AudioBuffer> =>
+    audio.load(url).catch(() => fallback);
+  const { weapons } = FILES;
+  const [pistol, shotgun, rifle, bowShot] = await Promise.all([
+    or(weapons.pistol, gunshot),
+    or(weapons.shotgun, gunshot),
+    or(weapons.rifle, gunshot),
+    or(weapons.bow, toBuffer(context, bowShotSamples(rate, Math.random))),
+  ]);
   const horde = mixHorde(
     rate,
     groans.map((g) => g.getChannelData(0)),
@@ -290,14 +310,15 @@ export async function loadSounds(audio: AudioBus): Promise<Sounds> {
     weird,
     alarm,
     horde: toBuffer(context, horde),
-    bowShot: toBuffer(context, bowShotSamples(rate, Math.random)),
+    bowShot,
+    shots: { pistol, shotgun, rifle },
     thud: toBuffer(context, thudSamples(rate)),
     splash: toBuffer(context, splashSamples(rate, 0.8, Math.random)),
     blow: toBuffer(context, blowSamples(rate, 0.6, Math.random)),
     sting: toBuffer(context, stingSamples(rate)),
     heartbeat: toBuffer(context, heartbeatSamples(rate)),
     click: toBuffer(context, clickSamples(rate, Math.random)),
-    gunshot: toBuffer(context, gunshotSamples(rate, Math.random)),
+    gunshot,
     dryFire: toBuffer(context, dryFireSamples(rate, Math.random)),
     orcaCry: toBuffer(context, orcaCrySamples(rate, 2.5, Math.random)),
     dawn: toBuffer(context, dawnSamples(rate, 12)),

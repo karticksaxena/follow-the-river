@@ -4,7 +4,7 @@ import { resolveCircle, type Box } from './collide';
 import { createBoxGrid } from './grid';
 import type { KeyState } from './input';
 import type { LockEvent } from './lock';
-import { fall, JUMP_SPEED, moveDelta, moveIntent } from './movement';
+import { fall, JUMP_SPEED, moveDelta, moveIntent, stepBob } from './movement';
 
 export const EYE_HEIGHT = 1.6;
 export const PLAYER_RADIUS = 0.3;
@@ -42,6 +42,7 @@ export function createPlayer(
   let grid = createBoxGrid([]);
   const scratch = { x: 0, z: 0 };
   const air = { height: 0, speed: 0 };
+  const bob = { phase: 0, amp: 0, y: 0, roll: 0 };
   // Space must be let go before the next jump: no bunny-hopping, and the Space that closed a page
   // (still held as play resumes) doesn't jump.
   let spaceHeld = true;
@@ -49,7 +50,7 @@ export function createPlayer(
     const x = camera.position.x + dx;
     const z = camera.position.z + dz;
     const next = resolveCircle(x, z, PLAYER_RADIUS, grid.near(x, z, PLAYER_RADIUS + 0.5), scratch);
-    camera.position.set(next.x, EYE_HEIGHT + air.height, next.z);
+    camera.position.set(next.x, EYE_HEIGHT + air.height + bob.y, next.z);
   };
   const jump = (dt: number): void => {
     const down = keys.isDown('Space');
@@ -73,6 +74,9 @@ export function createPlayer(
     teleport(x, z, yaw) {
       air.height = 0;
       air.speed = 0;
+      bob.amp = 0;
+      bob.y = 0;
+      bob.roll = 0;
       camera.position.set(x, EYE_HEIGHT, z);
       camera.rotation.set(0, yaw, 0, 'YXZ');
     },
@@ -90,12 +94,11 @@ export function createPlayer(
       camera.getWorldDirection(forward);
       forward.y = 0;
       forward.normalize();
-      const step = moveDelta(
-        moveIntent((code) => keys.isDown(code)),
-        forward.x,
-        forward.z,
-        dt,
-      );
+      const intent = moveIntent((code) => keys.isDown(code));
+      const step = moveDelta(intent, forward.x, forward.z, dt);
+      const moving = (intent.forward !== 0 || intent.right !== 0) && air.height === 0;
+      stepBob(bob, moving ? (intent.sprint ? 'sprint' : 'walk') : 'stand', dt);
+      camera.rotation.z = bob.roll;
       moveBy(step.dx, step.dz);
     },
     dispose() {

@@ -10,6 +10,7 @@ import {
   announce,
   arrive,
   beginPhase,
+  checkpoint,
   readTape,
   restart,
   showHint,
@@ -18,8 +19,9 @@ import {
 } from './phases';
 import { createPlay } from './play';
 import type { Events, Run, Systems } from './run';
-import { completePhase, restartPhase, type RunSave } from './state';
+import { completePhase, restartPhase, type RunSave, type StoredRun } from './state';
 import { stopVoice } from './voice';
+import { newWaveState } from './waves';
 
 export interface Chapter {
   /** The title card, then the phase's first-time hints (all player-paced). */
@@ -40,6 +42,8 @@ function newRun(save: RunSave): Run {
     phase: save.phase,
     live: restartPhase(save),
     taken: new Set(),
+    pickups: [],
+    waves: newWaveState(save.wave),
     health: MAX_HEALTH,
     dim: 0,
     appliedDim: 0,
@@ -63,7 +67,7 @@ function teardown(sys: Systems, stop: () => void): void {
   sys.scares.dispose();
   stopVoice(); // a tape line may still be playing
   sys.bow.dispose();
-  sys.gun.dispose();
+  sys.armory.dispose();
   sys.fish.dispose();
   sys.pickups.dispose();
   sys.hud.dispose();
@@ -81,7 +85,7 @@ export async function startChapter(
   ctx: DreamContext,
   area: AreaDef,
   initial: RunSave,
-  store: SaveStore<RunSave>,
+  store: SaveStore<StoredRun>,
   onDone: (save: RunSave) => void,
   isCancelled: () => boolean = () => false,
 ): Promise<Chapter> {
@@ -119,6 +123,7 @@ export async function startChapter(
     die: () => death.start(),
     arrive: () => arrive(f),
     ending: () => ending.start(),
+    checkpoint: (cleared) => checkpoint(f, cleared),
   };
   if (import.meta.env.DEV) Object.assign(window, { kdRiver: sys });
   const play = createPlay(sys, run, events);

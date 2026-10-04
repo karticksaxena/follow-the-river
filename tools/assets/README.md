@@ -58,3 +58,19 @@ macOS `afconvert` to AAC in `.m4a` (plays in Chrome, Safari and Firefox):
 afconvert -f m4af -d aac -b 64000 -c 1 zombie-1.wav public/assets/sounds/zombie/groan-01.m4a   # mono groans
 afconvert -f m4af -d aac -b 96000 water_flowing.ogg public/assets/sounds/ambience/water.m4a     # stereo loops
 ```
+
+### Weapon sounds
+
+Source: "The Free Firearm Sound Library" (Ben Jaszczak et al., CC0), https://opengameart.org/content/the-free-firearm-sound-library
+→ download `Prepared SFX Library.7z`, extract with `bsdtar -xf`. Each file is a long 96 kHz 24-bit stereo take; `tools/assets/cut_shot.py`
+(stdlib only) takes mono, trims to the first shot, cuts to a fixed length, fades out, normalises to -1 dBFS, resamples to 48 kHz.
+
+```bash
+L="Prepared SFX Library"
+python3 tools/assets/cut_shot.py "$L/1911/A_34P.wav"      pistol.wav  1.0    # .45 1911, mid distance
+python3 tools/assets/cut_shot.py "$L/Model 12/K_22P.wav"  shotgun.wav 1.4    # Winchester Model 12, 12 gauge, near
+python3 tools/assets/cut_shot.py "$L/AR-15/D_32P.wav"     rifle.wav   0.45   # one AR-15 shot, near
+afconvert -f m4af -d aac -b 96000 -c 1 pistol.wav public/assets/sounds/weapons/pistol.m4a   # same for shotgun, rifle
+```
+
+No CC0 bow, shotgun-pump or dry-fire clip was found (OpenGameArt bow sounds are CC-BY / CC-BY-SA), so those stay procedural.

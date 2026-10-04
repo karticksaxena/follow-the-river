@@ -1,17 +1,43 @@
 import { el } from '../../engine/ui';
 import { MAX_HEALTH } from './flow';
+import { SLOTS, type Weapon } from './weapons';
 import { ATTACK } from './zombies/brain';
 
 export interface HudState {
   battery: number;
+  /** Spare batteries. */
+  cells: number;
   arrows: number;
   fishPacks: number;
+  /** Rounds for the gun in hand (hidden with the bow). */
   ammo: number;
   health: number;
-  showAmmo: boolean;
-  /** The weapon in hand (the indicator shows with the ammo once you own the gun). */
-  weapon: 'bow' | 'gun';
+  /** Guns owned (how many: they are found in order, pistol → shotgun → rifle). */
+  guns: number;
+  weapon: Weapon;
+  /** The wave being fought (1-based; 0 = none), of how many, and zombies left in it. */
+  wave: number;
+  waves: number;
+  left: number;
 }
+
+const NAMES: Readonly<Record<Weapon, string>> = {
+  bow: 'Bow',
+  pistol: 'Pistol',
+  shotgun: 'Shotgun',
+  rifle: 'Rifle',
+};
+
+/** "Wave 2/3 · 5 left", or '' between waves. */
+export function waveText(wave: number, waves: number, left: number): string {
+  return wave > 0 ? `Wave ${wave}/${waves} · ${left} left` : '';
+}
+
+/** The torch: its cells and the spares, e.g. "🔦 ▮▮▮▯▯ +2". */
+export function torchText(battery: number, cells: number): string {
+  return `🔦 ${batteryCells(battery)}${cells > 0 ? ` +${cells}` : ''}`;
+}
+
 export interface Hud {
   set(state: HudState): void;
   prompt(text: string | null): void;
@@ -43,8 +69,9 @@ interface HudEls {
   readonly arrows: HTMLElement;
   readonly fish: HTMLElement;
   readonly ammo: HTMLElement;
-  readonly weapons: Readonly<Record<'bow' | 'gun', HTMLElement>>;
+  readonly weapons: Readonly<Record<Weapon, HTMLElement>>;
   readonly weaponRow: HTMLElement;
+  readonly waveEl: HTMLElement;
   readonly promptEl: HTMLElement;
   // Last written values, so the DOM is only touched when something changes.
   // `fresh` makes the first set() write everything; after that fields are copied in place.
@@ -61,26 +88,32 @@ function buildHud(root: HTMLElement): HudEls {
   const health = el('div', 'hud-health');
   const [battery, arrows, fish, ammo] = [el('div'), el('div'), el('div'), el('div')];
   const promptEl = el('div', 'hud-prompt');
-  const weapons = { bow: el('span'), gun: el('span') };
-  weapons.bow.textContent = '1 Bow';
-  weapons.gun.textContent = '2 Gun';
+  const weapons = { bow: el('span'), pistol: el('span'), shotgun: el('span'), rifle: el('span') };
   const weaponRow = el('div');
-  weaponRow.append(weapons.bow, ' · ', weapons.gun);
-  // Hidden until the first set() says the gun is owned (a chapter can be built during the intro).
+  SLOTS.forEach((w, i) => {
+    weapons[w].textContent = `${i > 0 ? ' · ' : ''}${i + 1} ${NAMES[w]}`;
+    weaponRow.append(weapons[w]);
+  });
+  // Hidden until the first set() says a gun is owned (a chapter can be built during the intro).
   ammo.hidden = true;
   weaponRow.hidden = true;
+  const waveEl = el('div', 'hud-wave');
   stats.append(health, battery, arrows, fish, ammo, weaponRow);
-  hud.append(hurtEl, dot, stats, promptEl);
+  hud.append(hurtEl, dot, waveEl, stats, promptEl);
   root.append(hud);
   hurtEl.addEventListener('animationend', () => hurtEl.classList.remove('flash'));
   const last: HudState = {
     battery: 0,
+    cells: 0,
     arrows: 0,
     fishPacks: 0,
     ammo: 0,
     health: 0,
-    showAmmo: false,
+    guns: 0,
     weapon: 'bow',
+    wave: 0,
+    waves: 0,
+    left: 0,
   };
   return {
     hud,
@@ -92,6 +125,7 @@ function buildHud(root: HTMLElement): HudEls {
     ammo,
     weapons,
     weaponRow,
+    waveEl,
     promptEl,
     last,
     fresh: true,
@@ -99,19 +133,30 @@ function buildHud(root: HTMLElement): HudEls {
   };
 }
 
-function writeStats(h: HudEls, s: HudState): void {
+function writeWeapons(h: HudEls, s: HudState): void {
   const { last, fresh } = h;
-  if (fresh || last.battery !== s.battery) h.battery.textContent = `🔦 ${batteryCells(s.battery)}`;
-  if (fresh || last.arrows !== s.arrows) h.arrows.textContent = `➶ ${s.arrows}`;
-  if (fresh || last.fishPacks !== s.fishPacks) h.fish.textContent = `🐟 ${s.fishPacks}`;
-  if (fresh || last.ammo !== s.ammo) h.ammo.textContent = `● ${s.ammo}`;
-  if (fresh || last.showAmmo !== s.showAmmo) {
-    h.ammo.hidden = !s.showAmmo;
-    h.weaponRow.hidden = !s.showAmmo;
+  if (fresh || last.guns !== s.guns) {
+    h.weaponRow.hidden = s.guns === 0;
+    SLOTS.forEach((w, i) => (h.weapons[w].hidden = i > s.guns));
   }
   if (fresh || last.weapon !== s.weapon) {
-    h.weapons.bow.style.opacity = s.weapon === 'bow' ? '1' : '0.4';
-    h.weapons.gun.style.opacity = s.weapon === 'gun' ? '1' : '0.4';
+    for (const w of SLOTS) h.weapons[w].style.opacity = w === s.weapon ? '1' : '0.4';
+    h.ammo.hidden = s.weapon === 'bow';
+  }
+  if (fresh || last.ammo !== s.ammo) h.ammo.textContent = `● ${s.ammo}`;
+}
+
+function writeStats(h: HudEls, s: HudState): void {
+  const { last, fresh } = h;
+  const cells = Math.ceil(s.battery / 20);
+  if (fresh || Math.ceil(last.battery / 20) !== cells || last.cells !== s.cells) {
+    h.battery.textContent = torchText(s.battery, s.cells);
+  }
+  if (fresh || last.arrows !== s.arrows) h.arrows.textContent = `➶ ${s.arrows}`;
+  if (fresh || last.fishPacks !== s.fishPacks) h.fish.textContent = `🐟 ${s.fishPacks}`;
+  writeWeapons(h, s);
+  if (fresh || last.wave !== s.wave || last.left !== s.left) {
+    h.waveEl.textContent = waveText(s.wave, s.waves, s.left);
   }
   if (fresh || last.health !== s.health) {
     h.health.textContent = hearts(s.health);
@@ -123,14 +168,7 @@ function writeStats(h: HudEls, s: HudState): void {
 function setHud(h: HudEls, s: HudState): void {
   writeStats(h, s);
   h.fresh = false;
-  const { last } = h;
-  last.battery = s.battery;
-  last.arrows = s.arrows;
-  last.fishPacks = s.fishPacks;
-  last.ammo = s.ammo;
-  last.health = s.health;
-  last.showAmmo = s.showAmmo;
-  last.weapon = s.weapon;
+  Object.assign(h.last, s);
 }
 
 function flashHurt(h: HudEls): void {

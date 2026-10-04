@@ -3,14 +3,25 @@ import * as THREE from 'three/webgpu';
 /** Brightness (candela), reach (m) and cone half-angle (rad). Tuning knobs. */
 export const FLASHLIGHT = { intensity: 80, distance: 22, angle: 0.45, penumbra: 0.5 } as const;
 
-/** Battery is 0..100. Drain in percent per second; below `low` the beam stutters. */
-export const BATTERY = { drainPerSecond: 0.9, low: 20 } as const;
+/**
+ * The torch's charge is 0..100. It drains while on; once it has been off for `rechargeDelay` s it
+ * creeps back up (like Alan Wake's torch). Below `low` the beam stutters. Tuning knobs.
+ */
+export const BATTERY = {
+  drainPerSecond: 1.2,
+  low: 20,
+  rechargePerSecond: 3,
+  rechargeDelay: 1.5,
+} as const;
 
 /** Stun cone: reach (m) and half-angle (rad), narrower than the light itself. */
 export const BEAM = { range: 14, halfAngle: 0.3 } as const;
 
-export function drainBattery(battery: number, on: boolean, dt: number): number {
-  return on ? Math.max(0, battery - BATTERY.drainPerSecond * dt) : battery;
+/** The charge after `dt`: draining while on, recharging once it has been off `offFor` seconds. */
+export function chargeBattery(battery: number, on: boolean, offFor: number, dt: number): number {
+  if (on) return Math.max(0, battery - BATTERY.drainPerSecond * dt);
+  if (offFor < BATTERY.rechargeDelay) return battery;
+  return Math.min(100, battery + BATTERY.rechargePerSecond * dt);
 }
 
 /** 0..1: full above BATTERY.low, stuttering below it, 0 when empty. Deterministic in `time`. */

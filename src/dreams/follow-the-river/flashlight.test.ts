@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { BATTERY, beamLevel, createFlashlight, drainBattery } from './flashlight';
+import { BATTERY, beamLevel, chargeBattery, createFlashlight } from './flashlight';
 
 describe('shadow', () => {
   it('skips the shadow pass while dark and forces one render on the way back on', () => {
@@ -20,9 +20,16 @@ describe('shadow', () => {
 
 describe('battery', () => {
   it('drains only while on and never below zero', () => {
-    expect(drainBattery(50, false, 10)).toBe(50);
-    expect(drainBattery(50, true, 10)).toBeCloseTo(50 - 10 * BATTERY.drainPerSecond);
-    expect(drainBattery(1, true, 100)).toBe(0);
+    expect(chargeBattery(50, true, 0, 10)).toBeCloseTo(50 - 10 * BATTERY.drainPerSecond);
+    expect(chargeBattery(1, true, 0, 100)).toBe(0);
+  });
+
+  it('recharges once it has been off a moment, up to full', () => {
+    expect(chargeBattery(50, false, BATTERY.rechargeDelay / 2, 1)).toBe(50);
+    expect(chargeBattery(50, false, BATTERY.rechargeDelay, 1)).toBeCloseTo(
+      50 + BATTERY.rechargePerSecond,
+    );
+    expect(chargeBattery(99, false, 10, 10)).toBe(100);
   });
 
   it('shines fully above the low mark and not at all when empty', () => {
