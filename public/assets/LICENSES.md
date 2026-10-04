@@ -20,3 +20,4 @@ Every file in `public/assets/` must be listed here. CC0 only.
 | `sounds/zombie/groan-01…24.m4a` | artisticdude — "Zombies Sound Pack", https://opengameart.org/content/zombies-sound-pack (converted to AAC) | CC0 1.0 |
 | `sounds/ambience/*.m4a`, `sounds/stings/*.m4a` | "30 CC0 SFX loops", https://opengameart.org/content/30-cc0-sfx-loops (water_flowing, ambient_01–03, noise_01, weird_01–03, alarm_01; converted to AAC) | CC0 1.0 |
 | Fonts: IM Fell English (titles), Special Elite (body) — bundled via @fontsource packages | Google Fonts via Fontsource | OFL 1.1 (IM Fell English), Apache 2.0 (Special Elite) |
+| `props/{lab,tank,cage}.glb` | Made for this project by `tools/blender/flashback_props.py` | CC0 1.0 (original work) |

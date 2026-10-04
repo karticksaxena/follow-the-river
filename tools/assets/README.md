@@ -12,6 +12,8 @@ steps that made them, so they can be rebuilt or changed.
   --python tools/blender/dream1_props.py -- public/assets/props
 /Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
   --python tools/blender/orca.py -- public/assets/characters/orca.glb
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
+  --python tools/blender/flashback_props.py -- public/assets/props   # lab, tank, cage (delete the preview PNGs after)
 ```
 
 ## Zombies
