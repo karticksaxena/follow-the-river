@@ -9,7 +9,7 @@
 
 **Goal:** fix every one of Kartik's play-test complaints (sections 2 and 3) and ship the graphics and animation upgrades he chose, so the game can launch with no visible issue.
 
-**Architecture:** Two tracks. **Track A** (Tasks A1–A17) is launch acceptance: every numbered complaint plus his answers (Dras rename and naming tape, difficulty, Kartik's model, the farewell cinematic, the canoe ending). **Track B** (Tasks B1–B4) is the rest of the look-and-feel upgrade (the physical sky everywhere with moon and sun shadows, Quaternius nature models with wind, splash and mist particles, first-person arms on the weapons). The render pipeline (full resolution, AgX, GTAO, SMAA) is Task A13 (see the rulings). If time runs out, A done and B partial is shippable; the reverse is not. Each task ends with a player's-eye Chrome check (section 0), not only unit tests.
+**Architecture:** Two tracks. **Track A** (Tasks A1–A17) is launch acceptance: every numbered complaint plus his answers (Dras rename and naming tape, difficulty, Kartik's model, the farewell cinematic, the canoe ending). **Track B** (Tasks B1–B4) is the rest of the look-and-feel upgrade (the physical sky everywhere with moon and sun shadows, Quaternius nature models with wind, splash and mist particles, first-person arms on the weapons). The render pipeline (full resolution, AgX, GTAO, SMAA) is Task A13 (see the rulings). Kartik (2026-10-04): "let's work on the graphics as well" — Track B is required for launch, not optional (B4, arms on the weapons, stays optional). A is still done first because B builds on A13/A14. Each task ends with a player's-eye Chrome check (section 0), not only unit tests.
 
 **Tech Stack:** Vite, TypeScript strict, three.js r186.1 `WebGPURenderer` + TSL (`three/webgpu`, `three/tsl`, `three/addons/...`), Vitest, oxlint, Prettier, Blender 4.x headless for assets, macOS `afconvert` and Python stdlib for sounds.
 
@@ -94,6 +94,8 @@ window.__gpuFrames = async (n) => { const dev = kd.stage.renderer.backend.device
 | Kartik's look (asked 2026-10-04) | **Medium-brown skin**, dark hair, dark t-shirt, jeans. |
 
 ## 2. Kartik's feedback, item by item
+
+**31 (2026-10-04, on reviewing this plan):** "The paleness should start dimming from Day 1, not directly go from black to white." Sickness starts at Day 1 and dulls her gradually (gloss fades, black to charcoal, white yellows), then lesions and wasting; never pale, never a jump (Task A8). He approved the rest: "Other than that all seems fine." Execution: subagent-driven development, and the graphics track is required.
 
 **Intro**
 1. The overhand **Throw looks like a baseball pitch**. Revert to the old gesture: `mom.play('Interact', true)` in `intro.ts` `throwAction` and `THROW_DELAY` back to 0.7. The Throw clip can stay in the GLB, unused.
@@ -845,12 +847,17 @@ describe('Dras model', () => {
 ```ts
 export const SICK = {
   /** Sickness never drops below this in a phase (the story), whatever was eaten. */
-  floor: { intro: 0, day1: 0, night1: 0, day2: 0.1, night2: 0.15, day3: 0.35, night3: 0.4, end: 1 } as Record<Phase, number>,
+  floor: { intro: 0, day1: 0.05, night1: 0.08, day2: 0.18, night2: 0.24, day3: 0.38, night3: 0.45, end: 1 } as Record<Phase, number>,
   /** Each zombie she eats. */
   perKill: 0.015,
   /** Until the very end she is never more than this sick. */
   cap: 0.9,
   lesion: 0x5e5b57,
+  /** Her black dulls toward this charcoal and her white toward this yellowed grey at k = 1 (never white, never grey-out). */
+  dullBlack: 0x262626,
+  dullWhite: 0xb9b3a4,
+  /** Her wet gloss fades: roughness from makeWet's 0.3 up to this at k = 1. */
+  dullRoughness: 0.75,
   speck: 0x060606,
   /** Metres the peanut-head dent sinks at its worst, and how much thinner (share of width). */
   dent: 0.12,
@@ -863,17 +870,19 @@ export function sicknessAt(phase: Phase, eaten: number): number;
 export interface Sickness { readonly k: number; set(k: number): void }
 export function makeSick(body: THREE.Object3D): Sickness; // swaps her materials for node materials driven by one uniform
 export function mistColor(k: number, out: THREE.Color): THREE.Color; // pale until redFrom, then red
+export function dulled(base: THREE.Color, k: number, out: THREE.Color): THREE.Color; // the CPU mirror of the shader's dulling (tested; the shader uses the same SICK values)
 export function blowAt(t: number, k: number, out: Blow): boolean; // weaker and lower the sicker
 ```
 `RunState.eaten: number` (save: optional on disk, `normalizeSave` fills 0); `Fish.onEat: (() => void) | null`.
 
 - [ ] **Step 1: failing tests** (`orca-sick.test.ts`, replacing the tint tests):
 ```ts
-it('starts healthy and grows with every zombie eaten, above the story floor', () => {
-  expect(sicknessAt('day1', 0)).toBe(0);
+it('starts dimming gently on Day 1 and grows with every zombie eaten, above the story floor', () => {
+  expect(sicknessAt('intro', 0)).toBe(0);
+  expect(sicknessAt('day1', 0)).toBe(0.05);
   expect(sicknessAt('night1', 10)).toBeCloseTo(0.15);
-  expect(sicknessAt('night2', 0)).toBe(0.15);
-  expect(sicknessAt('night3', 30)).toBeCloseTo(0.45);
+  expect(sicknessAt('night2', 0)).toBe(0.24);
+  expect(sicknessAt('night3', 40)).toBeCloseTo(0.6);
   expect(sicknessAt('night3', 500)).toBe(0.9);
   expect(sicknessAt('end', 0)).toBe(1);
 });
@@ -889,6 +898,16 @@ it('a sick blow is smaller and fainter', () => {
   blowAt(0.5, 0.9, b);
   expect(b.size).toBeLessThan(a.size);
   expect(b.opacity).toBeLessThan(a.opacity);
+});
+it('dulls gradually, never jumps: black only ever darkens to charcoal, white only yellows a little', () => {
+  const base = new THREE.Color(0x030303);
+  let prev = dulled(base, 0, new THREE.Color()).getHex();
+  for (let k = 0.05; k <= 1.0001; k += 0.05) {
+    const c = dulled(base, k, new THREE.Color());
+    expect(c.r).toBeLessThanOrEqual(new THREE.Color(SICK.dullBlack).r + 1e-6); // never pale
+    expect(Math.abs(c.getHex() - prev)).toBeLessThan(0x080808); // small steps
+    prev = c.getHex();
+  }
 });
 it('keeps every material its own base colour (black stays black)', () => {
   const body = new THREE.Group();
@@ -909,12 +928,16 @@ import { color, float, mix, mx_noise_float, normalLocal, positionLocal, smoothst
 
 function lesions(base: THREE.Color, k: THREE.UniformNode<number>) {
   const p = positionLocal;
+  // Gradual dulling from Day 1 (Kartik: "start dimming from day 1, not black to white"): black lifts only to
+  // charcoal, white yellows a little; the lesions below add on top as she gets sicker.
+  const dullTo = base.getHSL({ h: 0, s: 0, l: 0 }).l < 0.3 ? SICK.dullBlack : SICK.dullWhite;
+  const skin = mix(color(base), color(dullTo), smoothstep(0, 1, k).mul(0.85));
   const patch = mx_noise_float(p.mul(0.9)).mul(0.5).add(0.5);
   const blotch = smoothstep(0.42, 0.58, patch).mul(smoothstep(0.1, 0.45, k));
   const ring = float(1).sub(mx_noise_float(p.mul(3.1)).abs().mul(14)).clamp(0, 1).mul(smoothstep(0.3, 0.7, k));
   const speck = step(0.8, mx_noise_float(p.mul(28)).mul(0.5).add(0.5)).mul(smoothstep(0.35, 0.8, k));
   const grey = color(SICK.lesion);
-  const c1 = mix(color(base), grey, blotch.mul(0.6));
+  const c1 = mix(skin, grey, blotch.mul(0.6));
   const c2 = mix(c1, grey, ring.mul(0.5));
   return mix(c2, color(SICK.speck), speck);
 }
@@ -928,10 +951,10 @@ function wasting(k: THREE.UniformNode<number>) {
   return positionLocal.mul(vec3(thin, 1, 1)).sub(normalLocal.mul(dent));
 }
 ```
-`makeSick(body)`: one `uniform(0)` per call; every mesh's material becomes a `MeshStandardNodeMaterial` with the source's `name`, `color`, `roughness` (keep `makeWet`'s 0.3), `metalness`; the three skin materials get `colorNode = lesions(src.color, k)`; every body material (eye and mouth too) gets `positionNode = wasting(k)` so the dent never tears a seam. `fish-state.ts createState` calls it instead of `material.clone()` (each fish its own uniform: the calf and the young Dras stay healthy because they never call `set`). Positions after skinning: `NodeMaterial.setupPosition` runs `skinning()` before `positionNode` (verified in `node_modules/three/src/materials/nodes/NodeMaterial.js:766-806`), so `positionLocal` is the posed position.
+`makeSick(body)`: one `uniform(0)` per call; every mesh's material becomes a `MeshStandardNodeMaterial` with the source's `name`, `color`, `roughness` (keep `makeWet`'s 0.3), `metalness`; the three skin materials get `colorNode = lesions(src.color, k)` and `roughnessNode = mix(0.3, SICK.dullRoughness, k)` (the wet gloss fades); every body material (eye and mouth too) gets `positionNode = wasting(k)` so the dent never tears a seam. `fish-state.ts createState` calls it instead of `material.clone()` (each fish its own uniform: the calf and the young Dras stay healthy because they never call `set`). Positions after skinning: `NodeMaterial.setupPosition` runs `skinning()` before `positionNode` (verified in `node_modules/three/src/materials/nodes/NodeMaterial.js:766-806`), so `positionLocal` is the posed position.
 - [ ] **Step 3: wiring.** `phases.ts`: `fish.setSickness(sicknessAt(save.phase, run.live.eaten))`. `fish.ts`: when a grab's victim drowns, `f.onEat?.()`; `assemble`/`chapter` sets `fish.onEat = () => { run.live.eaten++; fish.setSickness(sicknessAt(run.phase, run.live.eaten)); }`. The fight (`ending.ts`) uses the same path; the strand sets 1. Blow: `blowOut` plays the blow sound at `1 - 0.5 * k` volume and `playbackRate 1 - 0.25 * k` (wheezier); surfacing: `nextSurfacing(rand, k)` = interval × `(1 - 0.45 * k)`, and at k > 0.5 she stays up 1.6× longer (`SURFACE_TIME` × `1 + 0.6 * smoothstep`).
 - [ ] **Step 4:** tests PASS; `pnpm run check`.
-- [ ] **Step 5: Chrome check (the colour Kartik complained about):** for k in 0, 0.15, 0.45, 0.9, 1 call `kdRiver.fish.setSickness(k)` on Night 1 with Dras surfaced beside you (force a surfacing), screenshot side views: black body black, white patches white at every k; blotches, rings and specks appear only from about 0.15 and grow; the dent behind the blowhole shows from about 0.5; at 1 the breath is red. Also `?webgl`. Put the five screenshots side by side in the ledger notes.
+- [ ] **Step 5: Chrome check (the colour Kartik complained about):** play the phases in order (`?phase=day1`, `night1`, `day2`, `night2`, `day3`, `night3`, and the farewell) and screenshot her side-on at the surface in each: a gentle, steady decline (gloss fading, black to charcoal, then lesions and the dent), never a jump, never pale or white. Then for k in 0, 0.05, 0.15, 0.45, 0.9, 1 call `kdRiver.fish.setSickness(k)` on Night 1 with Dras surfaced beside you (force a surfacing), screenshot side views: black body black, white patches white at every k; blotches, rings and specks appear only from about 0.15 and grow; the dent behind the blowhole shows from about 0.5; at 1 the breath is red. Also `?webgl`. Put the five screenshots side by side in the ledger notes.
 - [ ] **Step 6: commit** `fix: Dras keeps her black and white; sickness shows as lesions and wasting that grow with every zombie she eats`.
 
 ### Task A9: Kills in her jaws, thrown into the water, the last stand beside you, and a visible swim in
