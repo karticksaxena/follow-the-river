@@ -15,6 +15,7 @@ import { CAMERA_FAR } from './sky';
 import { setSurfaceTier } from './surfaces';
 import { clampDelta } from './time';
 import { runUpdaters, type Updater } from './updaters';
+import { NO_REFLECTION_LAYER } from './volume';
 
 export type Backend = 'webgpu' | 'webgl2';
 export type { Updater } from './updaters';
@@ -63,6 +64,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   renderer.shadowMap.type = THREE.PCFShadowMap;
   container.append(renderer.domElement);
   const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.05, CAMERA_FAR);
+  camera.layers.enable(NO_REFLECTION_LAYER);
   const quality = newQuality();
   let auto = true;
   let setting: Graphics = 'auto';

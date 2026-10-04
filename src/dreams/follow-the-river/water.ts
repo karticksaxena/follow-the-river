@@ -20,6 +20,7 @@ import {
 } from 'three/tsl';
 import * as THREE from 'three/webgpu';
 import type { Tier } from '../../engine/quality';
+import { NO_REFLECTION_LAYER } from '../../engine/volume';
 
 /** Downstream speed in m/s and the water's colours. Tuning knobs. */
 export const RIVER_FLOW = {
@@ -186,6 +187,14 @@ function fresnelNode(cosTheta: THREE.Node<'float'>, still: boolean): THREE.Node<
  */
 export function createRiverMaterial(look: WaterLook = RIVER_FLOW): THREE.MeshStandardNodeMaterial {
   const reflection = reflector({ resolutionScale: REFLECTION.resolutionScale, bounces: false });
+  // The virtual camera is a clone of the player's: it must not see the unreflected layer.
+  const base = reflection.reflector;
+  const virtualCamera = base.getVirtualCamera.bind(base);
+  base.getVirtualCamera = (camera) => {
+    const virtual = virtualCamera(camera);
+    virtual.layers.disable(NO_REFLECTION_LAYER);
+    return virtual;
+  };
   const material = new THREE.MeshStandardNodeMaterial({ metalness: 0.15 });
   material.userData.reflection = reflection;
   buildNodes(material, look, reflection);

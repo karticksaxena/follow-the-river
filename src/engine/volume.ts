@@ -3,6 +3,12 @@ import type { Tier } from './quality';
 /** The layer the mist box and the lights that scatter into it live on (they stay on layer 0 too). */
 export const VOLUME_LAYER = 10;
 
+/**
+ * Objects only on this layer (not layer 0) are drawn by the main camera but skipped by the water's
+ * planar reflection: the stage camera enables it, the reflector's virtual camera disables it.
+ */
+export const NO_REFLECTION_LAYER = 3;
+
 /** Volumetric pass tuning knobs. */
 export const VOLUME = {
   /** Raymarch steps per tier (Low has no pass). */

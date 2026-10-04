@@ -3,6 +3,7 @@ import { seeded } from './skyline';
 import {
   COMMON_TREES,
   DEAD_TREES,
+  farModel,
   GRASS,
   grassTufts,
   NEAR_RANGE,
@@ -52,6 +53,9 @@ function bank(g: CanoeGround, zNear: number, zFar: number, from: number, to: num
   };
 }
 
+/** Three common-tree models only: fewer meshes (draw calls). */
+const CANOE_COMMON = COMMON_TREES.slice(0, 3);
+
 const oneOf = (list: readonly string[], random: () => number): string =>
   list[Math.floor(random() * list.length)];
 
@@ -59,7 +63,7 @@ function treeModel(random: () => number): { model: string; scale: number } {
   const r = random();
   if (r < PINE_SHARE) return { model: oneOf(PINES, random), scale: 0.9 + random() * 0.6 };
   if (r < 1 - DEAD_SHARE)
-    return { model: oneOf(COMMON_TREES, random), scale: 0.9 + random() * 0.5 };
+    return { model: oneOf(CANOE_COMMON, random), scale: 0.9 + random() * 0.5 };
   return { model: oneOf(DEAD_TREES, random), scale: 0.7 + random() * 0.4 };
 }
 
@@ -67,7 +71,7 @@ const tree =
   (far: boolean) =>
   (r: () => number): Omit<Plant, 'x' | 'z' | 'y'> & { sink: number } => {
     const { model, scale } = treeModel(r);
-    return { model, yaw: r() * TAU, scale, far, sink: SINK.tree };
+    return { model: far ? farModel(model) : model, yaw: r() * TAU, scale, far, sink: SINK.tree };
   };
 
 /** Pure, deterministic: every tree, fern, rock and pebble of the river, and the grass (tier). */

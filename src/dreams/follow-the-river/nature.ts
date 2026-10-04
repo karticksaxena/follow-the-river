@@ -2,13 +2,18 @@ import * as THREE from 'three/webgpu';
 import { assetUrl } from '../../engine/assets';
 import { loadModel } from '../../engine/models';
 import type { Tier } from '../../engine/quality';
+import { NO_REFLECTION_LAYER } from '../../engine/volume';
 import { GRASS, isTree, type Plant } from './vegetation';
 import { SCALE_ATTRIBUTE, WIND, windNode, type Fade, type WindLook } from './wind';
 
 type Category = 'trees' | 'trees-far' | 'plants' | 'grass' | 'rocks';
 
-/** One InstancedMesh never spans more than this many metres (as in engine/batch.ts): frustum culling still works. */
-const CELL = 48;
+/**
+ * Everything but grass is ONE InstancedMesh per (model, primitive, near/far) for the whole area: the
+ * draw-call count is what costs (every pass redraws every mesh). Grass has far more instances, so
+ * it is split into cells this many metres long (z) for frustum culling.
+ */
+const GRASS_CELL = 160;
 /** Leaf and grass cut-outs: a harder edge than the file's 0.2 keeps the cards from looking fuzzy. */
 const ALPHA_TEST = 0.5;
 /** MegaKit's PBR is shiny; the dream is matte. */
@@ -172,7 +177,8 @@ function groupPlants(plants: readonly Plant[]): Group[] {
   const groups = new Map<string, Group>();
   for (const p of plants) {
     const category = categoryOf(p);
-    const key = `${category}|${p.model}|${Math.floor(p.x / CELL)}|${Math.floor(p.z / CELL)}`;
+    const cell = category === 'grass' ? Math.floor(p.z / GRASS_CELL) : 0;
+    const key = `${category}|${p.model}|${cell}`;
     const group = groups.get(key);
     if (group) group.plants.push(p);
     else groups.set(key, { category, model: p.model, plants: [p] });
@@ -195,11 +201,15 @@ function instances(part: Part, g: Group, tier: Tier): THREE.InstancedMesh {
     g.plants.length,
   );
   mesh.instanceMatrix.array.set(matrices);
-  // Near trees and rocks cast (no shadows at all on Low); grass and ferns neither cast nor receive.
+  const tree = g.category === 'trees' || g.category === 'trees-far';
   const solid = g.category === 'trees' || g.category === 'rocks';
-  mesh.castShadow = solid && tier !== 'low';
+  // Near trees and rocks cast shadows on High only; grass and ferns neither cast nor receive.
+  mesh.castShadow = solid && tier === 'high';
   mesh.receiveShadow = solid || g.category === 'trees-far';
+  // Only trees on High show in the water; everything else is off the reflection's layer.
+  if (!(tree && tier === 'high')) mesh.layers.set(NO_REFLECTION_LAYER);
   mesh.matrixAutoUpdate = false;
+  mesh.computeBoundingSphere(); // whole-mesh culling from the instances
   return mesh;
 }
 

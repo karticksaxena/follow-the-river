@@ -83,6 +83,21 @@ export const GRASS: Readonly<
   low: { perM2: 0.18, fade: { from: 8, to: 16 }, scale: [0.35, 0.65] },
 };
 
+/**
+ * Far trees use a smaller set of models (every model is its own mesh, and a mesh is a draw call in
+ * every pass); at 35+ m, in fog, nobody counts the species.
+ */
+const FAR_MODEL: Readonly<Record<string, string>> = {
+  Pine_4: 'Pine_1',
+  Pine_5: 'Pine_2',
+  CommonTree_4: 'CommonTree_1',
+  CommonTree_5: 'CommonTree_2',
+  DeadTree_3: 'DeadTree_1',
+};
+
+/** Pure: the model a far tree is drawn with. */
+export const farModel = (model: string): string => FAR_MODEL[model] ?? model;
+
 /** Pure: true for the tree models (they have `-far` variants). */
 export const isTree = (model: string): boolean =>
   /^(Pine|CommonTree|TwistedTree|DeadTree)_/.test(model);
@@ -147,7 +162,7 @@ export function plantsOf(area: AreaDef): Plant[] {
   return area.props
     .filter((p: PropPlacement) => p.kit === 'megakit')
     .map((p) => ({
-      model: p.model,
+      model: isTree(p.model) && isFar(zone, p.x, p.z) ? farModel(p.model) : p.model,
       x: p.x,
       y: p.y ?? 0,
       z: p.z,
