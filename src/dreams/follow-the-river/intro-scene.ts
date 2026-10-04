@@ -210,6 +210,20 @@ export interface IntroScene {
   sounds: Sounds;
 }
 
+/** The window at dusk: dark blue, faintly lit. It was a pale glowing panel that read as a second screen. */
+const WINDOW_DUSK = { color: 0x1c2232, emissive: 0x0a0d16 } as const;
+
+function dimWindow(room: THREE.Object3D): void {
+  room.traverse((n) => {
+    if (!(n instanceof THREE.Mesh)) return;
+    const m: unknown = n.material;
+    const lit = m instanceof THREE.MeshStandardMaterial || m instanceof THREE.MeshLambertMaterial;
+    if (!lit || m.name !== 'windowGlass') return;
+    m.color.setHex(WINDOW_DUSK.color);
+    m.emissive.setHex(WINDOW_DUSK.emissive);
+  });
+}
+
 /** The living room (a group at ROOM_X), Mom and the riverbank, all added to one dusk scene. */
 export async function buildIntroScene(ctx: DreamContext): Promise<IntroScene> {
   const [roomModel, couch, tv, pack, house, fence, momAsset, sounds] = await Promise.all([
@@ -229,6 +243,7 @@ export async function buildIntroScene(ctx: DreamContext): Promise<IntroScene> {
   const fish = await createFish(scene, ctx.audio, sounds);
   const news = createNewsScreen();
   swapScreen(tv, news.texture);
+  dimWindow(roomModel);
   tv.scale.setScalar(TV_SCALE);
   tv.position.set(0, 0, AT.tv.z);
   couch.position.set(0, 0, 1.2);

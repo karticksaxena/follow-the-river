@@ -1,3 +1,4 @@
+import * as THREE from 'three/webgpu';
 import type { DreamContext } from '../types';
 import { buildCanoeScene, pathSlope, pathX, WATER_LEVEL, type CanoeScene } from './canoe-scene';
 import { CINEMATIC } from './flashback';
@@ -21,7 +22,8 @@ export const RIDE = {
 
 export const SEAT = {
   eye: [0, 1.0, 0.9],
-  mom: [0, -0.5, -0.9],
+  // Her Sit/Row pelvis is 0.575 m above her feet: this puts it on the canoe's thwart.
+  mom: [0, -0.22, -0.9],
   paddle: [0, 0.68, -0.72],
 } as const;
 /** Calf: side of the canoe (m), pace-keeping drift and how deep it starts. */
@@ -111,6 +113,10 @@ interface Ride {
   started: boolean;
   closing: boolean;
   blown: boolean;
+  /** Mom is paddling (Row); she sits still (Sit) once she stops for the calf. */
+  rowing: boolean;
+  /** Mom's hands: the paddle's shaft is held between them (null if the rig has none). */
+  hands: { left: THREE.Object3D; right: THREE.Object3D } | null;
   lastYaw: number;
   pose: Pose;
   calf: CalfPose;
@@ -125,16 +131,40 @@ function placeAll(r: Ride): void {
   cs.canoe.position.set(p.x, p.y, p.z);
   cs.canoe.rotation.set(0, p.yaw, p.roll);
   const amp = rowAmount(t);
-  const phase = t * Math.PI * 2 * 0.42;
-  cs.paddle.position.set(...SEAT.paddle);
-  cs.paddle.rotation.set(0, Math.cos(phase) * 0.25 * amp, Math.sin(phase) * 0.5 * amp);
-  cs.mom.group.position.set(...SEAT.mom);
-  cs.mom.group.rotation.set(
-    0.08 * amp * (1 + Math.sin(phase * 2)) * 0.5,
-    0,
-    Math.sin(phase) * 0.05 * amp,
-  );
+  cs.mom.group.position.set(...SEAT.mom); // her Row clip does the paddling and the twist
+  holdPaddle(r);
+  if (r.rowing && amp < 0.5) {
+    r.rowing = false;
+    cs.mom.play('Sit'); // she stops rowing: she has seen it too
+  }
   placeCalf(r);
+}
+
+const handL = new THREE.Vector3();
+const handR = new THREE.Vector3();
+const along = new THREE.Vector3();
+const SHAFT = new THREE.Vector3(1, 0, 0); // the paddle model lies along x
+
+/** The paddle's shaft runs from her left hand to her right, so it follows the rowing exactly. */
+function holdPaddle(r: Ride): void {
+  const { cs, hands } = r;
+  if (!hands) {
+    cs.paddle.position.set(...SEAT.paddle);
+    return;
+  }
+  cs.canoe.updateMatrixWorld(true);
+  cs.canoe.worldToLocal(hands.left.getWorldPosition(handL));
+  cs.canoe.worldToLocal(hands.right.getWorldPosition(handR));
+  cs.paddle.position.addVectors(handL, handR).multiplyScalar(0.5);
+  along.subVectors(handR, handL).normalize();
+  if (along.lengthSq() > 0) cs.paddle.quaternion.setFromUnitVectors(SHAFT, along);
+}
+
+/** Her wrist bones (GLTFLoader strips the '.' from Wrist.L / Wrist.R). */
+function findHands(mom: THREE.Object3D): Ride['hands'] {
+  const left = mom.getObjectByName('WristL');
+  const right = mom.getObjectByName('WristR');
+  return left && right ? { left, right } : null;
 }
 
 function placeCalf(r: Ride): void {
@@ -211,6 +241,8 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
     started: false,
     closing: false,
     blown: false,
+    rowing: true,
+    hands: findHands(cs.mom.group),
     lastYaw: 0,
     pose: { x: 0, y: 0, z: 0, yaw: 0, roll: 0 },
     calf: { x: 0, z: 0, y: 0, pitch: 0, visible: false, surfaced: 0 },

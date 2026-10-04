@@ -77,11 +77,14 @@ export async function strand(s: Script, at: Shore): Promise<void> {
   ctx.audio.once(sounds.orcaCry, FAREWELL.cryVolume);
 }
 
-/** Mom goes to its head and kneels by it (as near as she can: she has no kneel). */
+/** Mom goes to its head and kneels by it. */
 export async function goToIt(s: Script, at: Shore): Promise<void> {
+  const { actor, mom } = s.scene;
   const head = { x: at.noseX - 1.3, z: at.noseZ + 0.6 };
-  await s.scene.actor.walkTo([head]);
-  if (!s.cancelled) s.scene.actor.faceTo(at.noseX, at.noseZ - 1);
+  actor.stop(); // no more tense glances and gestures: she only has eyes for it now
+  mom.rest = 'Kneel'; // she kneels where the walk ends
+  await actor.walkTo([head]);
+  if (!s.cancelled) actor.faceTo(at.noseX, at.noseZ - 1);
 }
 
 /** The song from the lab, and its answer: a soft cry and one last red breath. */
@@ -126,10 +129,9 @@ export async function hand(s: Script, at: Shore): Promise<void> {
     'YXZ',
   );
   const { actor, mom } = s.scene;
+  // She comes to kneel beside you (her rest is still Kneel, so she kneels where the walk ends).
   void actor.walkTo([stopShort(mom.group.position, cam.position, 0.9)]).then(() => {
-    if (s.cancelled) return;
-    actor.faceTo(at.noseX, at.noseZ - 3.5);
-    mom.play('Interact', true);
+    if (!s.cancelled) actor.faceTo(at.noseX, at.noseZ - 3.5);
   });
   await s.read(FAREWELL_PAGES.hand);
 }

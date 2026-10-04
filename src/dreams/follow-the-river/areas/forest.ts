@@ -69,7 +69,8 @@ function lakeShore(): PropPlacement[] {
   const out = [
     ...pines(PINE_SEED + 7, LAKE_Z - 2, LAKE_Z - 110, 5, -78, -64),
     ...pines(PINE_SEED + 8, LAKE_Z - 2, LAKE_Z - 110, 7, LAKE.east + 4, LAKE.east + 20),
-    { ...at('canoe', MOM.x + 2.5, MOM.z - 1.2, 0.35, 0.6), y: shoreY(MOM.z - 1.2 - LAKE_Z) },
+    // West of Mom: the orca's last leap lands east of her (ending-farewell.ts FAREWELL.nose).
+    { ...at('canoe', MOM.x - 3, MOM.z - 1.2, 0.35, 0.6), y: shoreY(MOM.z - 1.2 - LAKE_Z) },
   ];
   for (let x = -34; x < FAR_EDGE_X + 29; x += 9) {
     if (x > EDGE_X - 4 && x < FAR_EDGE_X + 1) continue; // the river mouth stays open

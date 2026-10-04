@@ -74,3 +74,18 @@ afconvert -f m4af -d aac -b 96000 -c 1 pistol.wav public/assets/sounds/weapons/p
 ```
 
 No CC0 bow, shotgun-pump or dry-fire clip was found (OpenGameArt bow sounds are CC-BY / CC-BY-SA), so those stay procedural.
+
+## Mom's extra clips
+
+`tools/blender/mom_clips.py` adds `Sit`, `Kneel`, `Throw` and `Row` to `public/assets/characters/mom.glb` (named `CharacterArmature|<name>` like her
+Quaternius clips; every existing clip, mesh and material is kept). `Sit`, `Kneel` (a seamless hold cut from `Fixing_Kneeling`) and `Throw` are retargeted
+from Quaternius' CC0 Universal Animation Libraries 1 (`AL_Standard.fbx`) and 2 (`UAL2_Standard.glb`); `Row` is authored (Sit + torso twist + both hands on a
+swinging paddle shaft). Hips never travel. Re-running is safe (the four clips are replaced). Inputs are the downloaded packs from the zombie step:
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python tools/blender/mom_clips.py -- \
+  "<UAL1>/Unreal Engine/AL_Standard.fbx" "<UAL2>/Unreal-Godot/UAL2_Standard.glb" public/assets/characters/mom.glb
+```
+
+The script rewrites `mom.glb` in place, so keep a copy of the original if you want to diff it. Sources: https://opengameart.org/content/universal-animation-library and
+https://opengameart.org/content/universal-animation-library-2

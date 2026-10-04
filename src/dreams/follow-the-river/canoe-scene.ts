@@ -384,8 +384,8 @@ export async function buildCanoeScene(length: number): Promise<CanoeScene> {
     addForest(scene, zNear, zFar),
   ]);
   const mom = createMom(momAsset, new THREE.Group());
-  // Arms held out in front (her gun-holding idle, without the gun): they grip the paddle's shaft.
-  mom.play('Idle_Gun');
+  mom.rest = 'Row';
+  mom.play('Row'); // paddling (tools/blender/mom_clips.py); the ride switches her to Sit at the end
   const paddle = makePaddle();
   canoe.add(mom.group, paddle);
   const calf = makeCalf(orca);

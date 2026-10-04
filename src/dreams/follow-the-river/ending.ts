@@ -125,7 +125,7 @@ export function nightEnd(
 export interface Ending {
   /** Begins the ending (once); gameplay keeps running for the wave. */
   start(): void;
-  /** Per frame, while gameplay ticks. Does nothing while paused or cancelled. */
+  /** Per frame: Mom always animates; the steps only advance while unpaused (and not cancelled). */
   update(dt: number): void;
   /** The player died mid-wave: stand everything down so the night can restart. */
   cancel(): void;
@@ -308,6 +308,7 @@ async function comeToPlayer(h: EndingHost, st: State): Promise<void> {
   if (!actor || !st.scene) return;
   const cam = h.sys.ctx.stage.camera.position;
   const at = stopShort(st.scene.mom.group.position, cam, SHORE.meet);
+  st.scene.mom.rest = 'Idle_Neutral'; // up off her knees, and she stands with you
   await actor.walkTo([at]);
   if (!st.cancelled) actor.faceTo(cam.x, cam.z);
 }
@@ -411,8 +412,9 @@ export function createEnding(h: EndingHost): Ending {
       void play(h, st);
     },
     update(dt) {
-      if (!st.started || st.cancelled || h.sys.ctx.isPaused()) return;
-      st.scene?.update(dt);
+      if (!st.started || st.cancelled) return;
+      st.scene?.update(dt); // Mom keeps moving behind the pages: she kneels as Mom speaks
+      if (h.sys.ctx.isPaused()) return;
       if (st.wait?.pred(dt)) {
         const { resolve } = st.wait;
         st.wait = null;

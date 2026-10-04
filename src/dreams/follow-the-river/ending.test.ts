@@ -109,6 +109,16 @@ describe('the farewell', () => {
     expect(edge.z + FAREWELL.edge.radius).toBeGreaterThan(reach);
   });
 
+  it("lands clear of Mom's canoe on the shore (its body runs 7 m back into the lake)", () => {
+    const meet = FOREST.meetAt;
+    const lake = FOREST.lake;
+    if (!meet || !lake) throw new Error('the forest has Mom and a lake');
+    const at = shoreFor(meet, lake.z);
+    const canoes = FOREST.props.filter((p) => p.model === 'canoe' && p.z < lake.z + 10);
+    expect(canoes.length).toBe(1);
+    for (const c of canoes) expect(Math.abs(c.x - at.noseX)).toBeGreaterThan(3);
+  });
+
   it('lands its nose up the shore beside Mom, with the water line behind it', () => {
     const at = shoreFor({ x: -3, z: -387.5 }, -392);
     expect(at.noseZ).toBeGreaterThan(at.lakeZ);

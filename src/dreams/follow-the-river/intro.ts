@@ -64,7 +64,7 @@ export interface Intro {
   dispose(): void;
 }
 
-const THROW_DELAY = 0.7; // Mom's wind-up before the pack leaves her hand
+const THROW_DELAY = 0.8; // the overhand Throw clip: the pack leaves her hand as her arm comes over
 const TAKE_WAIT = 3.5; // pack flight + splash + the orca rising and sinking, watched unpaused
 const FILM_HOLD = 1.5; // Mom raises her phone before the last page
 const TURN_WAIT = 0.4; // Mom turns to face you before she speaks (~90% of the turn at TURN_RATE)
@@ -215,7 +215,7 @@ async function throwAction(sc: IntroScene, st: State, actor: MomActor, io: Io): 
   st.look = LOOK_TIME;
   await actor.walkTo([AT.momRiver]); // the last steps
   if (st.disposed) return;
-  mom.play('Interact', true);
+  mom.play('Throw', true); // overhand (tools/blender/mom_clips.py)
   await io.wait(THROW_DELAY);
   if (st.disposed) return;
   mom.pack.visible = false;

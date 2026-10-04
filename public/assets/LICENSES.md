@@ -13,6 +13,7 @@ Every file in `public/assets/` must be listed here. CC0 only.
 | `characters/orca.glb` | Made for this project by `tools/blender/orca.py` | CC0 1.0 (original work) |
 | `characters/zombie-m.glb`, `characters/zombie-f.glb` | Built by `tools/blender/zombify.py` from Quaternius — Ultimate Modular Men / Ultimate Modular Women (https://quaternius.com, via https://poly.pizza/bundle/Ultimate-Modular-Men-Pack-ZiH8muWqwQ and https://poly.pizza/bundle/Ultimate-Modular-Women-Pack-aCBDXDdTNN) with clips retargeted from Quaternius — Universal Animation Library 1 and 2 (https://opengameart.org/content/universal-animation-library, https://opengameart.org/content/universal-animation-library-2); textures painted by the script | CC0 1.0 |
 | `characters/mom.glb` | Quaternius — Ultimate Modular Women, "Formal" (poly.pizza id nIItLV9nxS) | CC0 1.0 |
+| `characters/mom.glb` clips Sit, Kneel, Throw | Retargeted by `tools/blender/mom_clips.py` from Quaternius — Universal Animation Library (https://opengameart.org/content/universal-animation-library) and Universal Animation Library 2 (https://opengameart.org/content/universal-animation-library-2); the Row clip is original work built on Sit | CC0 1.0 |
 | `kits/city/*` | Kenney — City Kit (Commercial), https://kenney.nl/assets/city-kit-commercial | CC0 1.0 |
 | `kits/roads/*` | Kenney — City Kit (Roads), https://kenney.nl/assets/city-kit-roads | CC0 1.0 |
 | `kits/cars/*` | Kenney — Car Kit, https://kenney.nl/assets/car-kit | CC0 1.0 |
