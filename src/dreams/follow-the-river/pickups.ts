@@ -123,15 +123,19 @@ export function collect(state: RunState, pickup: PickupDef, k: number): RunState
 }
 
 /** True when taking this pickup would add nothing because that supply is at its limit (guns and crates always count). */
-export function isFull(pickup: PickupDef, supplies: Supplies): boolean {
+export function isFull(pickup: PickupDef, supplies: Supplies, guns: readonly GunKind[]): boolean {
+  if (pickup.kind === 'ammo') {
+    const owned = guns.length > 0 ? guns : (['pistol'] as const);
+    return owned.every((g) => supplies[AMMO_OF[g]] >= SUPPLY_LIMITS[AMMO_OF[g]]);
+  }
   const gain = PICKUP_GAIN[pickup.kind];
   return pickup.kind !== 'gun' && gain !== null && supplies[gain.kind] >= SUPPLY_LIMITS[gain.kind];
 }
 
-export function promptFor(pickup: PickupDef, supplies: Supplies): string {
+export function promptFor(pickup: PickupDef, supplies: Supplies, guns: readonly GunKind[]): string {
   if (pickup.kind === 'crate' && pickup.gun) return `E: take ${GUN_NAME[pickup.gun]}`;
   const text = PROMPT[pickup.kind];
-  return isFull(pickup, supplies) ? text.full : text.take;
+  return isFull(pickup, supplies, guns) ? text.full : text.take;
 }
 
 export interface PickupMeshes {

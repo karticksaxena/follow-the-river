@@ -149,8 +149,7 @@ function tickWorld(p: State, dt: number): void {
   sys.horde.update(dt, sense, p.onHit);
   sys.armory.update(dt);
   sys.gates.update(dt);
-  const keep = DIFFICULTY[sys.ctx.difficulty()].keepKillArrows;
-  const recovered = sys.bow.update(dt, sys.horde, sys.grid, sense, keep);
+  const recovered = sys.bow.update(dt, sys.horde, sys.grid, sense);
   if (recovered > 0) run.live.supplies = addSupply(run.live.supplies, 'arrows', recovered);
   sys.fish.update(dt, sense, night ? sys.horde : null, night);
   sys.world.railing?.update(dt);

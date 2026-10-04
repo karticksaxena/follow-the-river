@@ -6,6 +6,7 @@ import { inCone, type Vec3 } from '../../../engine/ray';
 import { characterUrl } from '../kits';
 import { createBody, move, park, play, type Body, type Scratch } from './body';
 import {
+  flinch,
   hitKills,
   isAlive,
   kill as killMind,
@@ -239,9 +240,6 @@ function rayHitHorde(
   return best;
 }
 
-/** Short stagger after a body hit that did not drop it. */
-const FLINCH_SECONDS = 0.35;
-
 function hurtBody(b: Body, head: boolean): boolean {
   if (!b.active || !isAlive(b.mind)) return false;
   b.wounds++;
@@ -250,11 +248,7 @@ function hurtBody(b: Body, head: boolean): boolean {
     return true;
   }
   b.heard = true;
-  // A stunned (or still rising) zombie keeps its own timer: the flinch must not cut a stun short.
-  if (b.mind.state !== 'stunned' && b.mind.state !== 'rising') {
-    b.mind.state = 'recover';
-    b.mind.timer = FLINCH_SECONDS;
-  }
+  flinch(b.mind);
   return false;
 }
 

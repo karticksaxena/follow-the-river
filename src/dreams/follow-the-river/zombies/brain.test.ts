@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ATTACK,
   DAY_TUNING,
+  flinch,
+  FLINCH_SECONDS,
   hitKills,
   HUNT_SECONDS,
   isAlive,
@@ -169,5 +171,41 @@ describe('wounds and stuns', () => {
     }
     expect(m.state).toBe('stunned');
     expect(m.timer).toBeCloseTo(0.9, 1);
+  });
+  it('a hit that does not kill wakes a lying zombie through rising', () => {
+    const m = newMind(true);
+    flinch(m);
+    expect([m.state, m.timer]).toEqual(['rising', RISE_SECONDS]);
+  });
+  it('a flinch never shortens a stun or a rise, and never lengthens a recover', () => {
+    const stunned = newMind();
+    stunned.state = 'stunned';
+    stunned.timer = 0.8;
+    flinch(stunned);
+    expect([stunned.state, stunned.timer]).toEqual(['stunned', 0.8]);
+    const recovering = newMind();
+    recovering.state = 'recover';
+    recovering.timer = 0.9;
+    flinch(recovering);
+    expect(recovering.timer).toBe(0.9);
+    const standing = newMind();
+    standing.state = 'chase';
+    flinch(standing);
+    expect([standing.state, standing.timer]).toEqual(['recover', FLINCH_SECONDS]);
+  });
+  it('light built up in the chase stuns during the attack windup', () => {
+    const m = newMind();
+    m.state = 'chase';
+    const t = { ...DAY_TUNING, stun: { exposure: 0.6, seconds: 0.9 } };
+    const o: Thought = { intent: 'stand', hit: false };
+    const attacking = (): boolean => m.state === 'attack';
+    for (let i = 0; i < 20; i++) think(m, { distance: 5, lit: true, heard: false }, t, 0.02, o);
+    expect(m.state).toBe('chase'); // 0.4 s of light so far
+    think(m, { distance: 1, lit: true, heard: false }, t, 0.02, o);
+    expect(attacking()).toBe(true);
+    for (let i = 0; i < 12 && attacking(); i++) {
+      think(m, { distance: 1, lit: true, heard: false }, t, 0.02, o);
+    }
+    expect(m.state).toBe('stunned');
   });
 });

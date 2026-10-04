@@ -36,8 +36,8 @@ export interface DifficultyTuning {
   damage: number;
   /** Body hits that drop a zombie (a head hit always kills). */
   bodyHits: number;
-  /** An arrow that killed can be picked up again (otherwise it breaks). */
-  keepKillArrows: boolean;
+  /** An arrow that hit a zombie can be pulled out and picked up again (otherwise it stays in the body). */
+  keepHitArrows: boolean;
   /** Crates, pickups and what a death gives back, times the base. */
   supplies: number;
   /** Share of Mom's bag in the last stand. */
@@ -53,7 +53,7 @@ export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyTuning>> = {
     stun: { exposure: 0.4, seconds: 1.6 },
     damage: 25,
     bodyHits: 1,
-    keepKillArrows: true,
+    keepHitArrows: true,
     supplies: 1.6,
     bag: 1,
   },
@@ -64,7 +64,7 @@ export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyTuning>> = {
     stun: { exposure: 0.6, seconds: 0.9 },
     damage: 34,
     bodyHits: 2,
-    keepKillArrows: false,
+    keepHitArrows: false,
     supplies: 1,
     bag: 0.5,
   },
@@ -75,7 +75,7 @@ export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyTuning>> = {
     stun: { exposure: 0.8, seconds: 0.6 },
     damage: 50,
     bodyHits: 2,
-    keepKillArrows: false,
+    keepHitArrows: false,
     supplies: 0.6,
     bag: 0.34,
   },

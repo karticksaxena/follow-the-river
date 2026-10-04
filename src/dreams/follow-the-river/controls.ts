@@ -117,7 +117,7 @@ function trigger(c: Ctl): void {
 }
 
 function take(c: Ctl, found: PickupDef): void {
-  if (isFull(found, c.run.live.supplies)) return;
+  if (isFull(found, c.run.live.supplies, c.run.live.guns)) return;
   const gun = gunIn(found);
   const fresh = gun !== null && !c.run.live.guns.includes(gun);
   c.run.live = collect(c.run.live, found, DIFFICULTY[c.sys.ctx.difficulty()].supplies);
@@ -211,7 +211,8 @@ function promptOf(c: Ctl): string | null {
   const dry = gun !== null && c.run.live.supplies[AMMO_OF[gun.kind]] <= 0 && canFire(c.sw);
   if (dry && c.sys.ctx.keys.isDown('Mouse0')) return 'No ammo';
   if (c.target === 'interact') return c.run.interact?.prompt ?? null;
-  if (c.target === 'pickup' && c.pickup) return promptFor(c.pickup, c.run.live.supplies);
+  if (c.target === 'pickup' && c.pickup)
+    return promptFor(c.pickup, c.run.live.supplies, c.run.live.guns);
   if (c.target === 'fish') return isNight(c.run.phase) ? 'E: feed Dras' : 'E: throw a fish pack';
   return c.target === 'wait' ? 'E: wait for dark' : null;
 }

@@ -56,6 +56,21 @@ export function hitKills(wounds: number, head: boolean, bodyHits: number): boole
   return head || wounds + 1 >= bodyHits;
 }
 
+/** Short stagger after a body hit that did not drop it. */
+export const FLINCH_SECONDS = 0.35;
+
+/** A hit that did not kill: a lying zombie gets up (GetUp), a stunned or rising one keeps its timer, the rest stagger (never longer than they already do). */
+export function flinch(mind: Mind): void {
+  if (mind.state === 'lying') {
+    mind.state = 'rising';
+    mind.timer = RISE_SECONDS;
+    mind.exposure = 0;
+  } else if (mind.state !== 'stunned' && mind.state !== 'rising') {
+    mind.timer = mind.state === 'recover' ? Math.max(mind.timer, FLINCH_SECONDS) : FLINCH_SECONDS;
+    mind.state = 'recover';
+  }
+}
+
 export interface Mind {
   state: ZombieState;
   timer: number;

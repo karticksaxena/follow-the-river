@@ -48,13 +48,7 @@ export interface Bow {
   /** Looses an arrow from `eye` along unit `look`. Caller has already spent the arrow. */
   fire(eye: Vec3, look: Vec3): void;
   /** Flies arrows, kills what they hit, sticks misses into walls/ground; returns arrows recovered this frame. */
-  update(
-    dt: number,
-    horde: Horde,
-    grid: BoxGrid,
-    player: { x: number; z: number },
-    keepKillArrows: boolean,
-  ): number;
+  update(dt: number, horde: Horde, grid: BoxGrid, player: { x: number; z: number }): number;
   reset(): void;
   dispose(): void;
 }
@@ -91,6 +85,12 @@ function obstacle(grid: BoxGrid, x0: number, y0: number, z0: number, a: Arrow): 
   return t;
 }
 
+/** An arrow that hit a zombie: it stays in the body (gone) unless the difficulty lets you pull it out. */
+export function settleOnHit(a: Arrow, keepHit: boolean, x: number, z: number): void {
+  if (keepHit) stick(a, x, 0, z);
+  else a.state = 'idle';
+}
+
 function stick(a: Arrow, x: number, y: number, z: number): void {
   a.x = x;
   a.y = Math.max(y, GROUND);
@@ -101,6 +101,8 @@ function stick(a: Arrow, x: number, y: number, z: number): void {
 interface BowState {
   readonly audio: AudioBus;
   readonly sounds: Sounds;
+  /** Can an arrow that hit a zombie be picked up again? (the difficulty; read on every hit) */
+  readonly keepHit: () => boolean;
   readonly view: THREE.Group;
   readonly nocked: THREE.Object3D;
   readonly arrows: Arrow[];
@@ -117,7 +119,6 @@ function resolveHit(
   z0: number,
   horde: Horde,
   grid: BoxGrid,
-  keepKillArrows: boolean,
 ): void {
   const a = s.arrows[i];
   const t = obstacle(grid, x0, y0, z0, a);
@@ -131,11 +132,9 @@ function resolveHit(
   dir.z = aim.z;
   const zombie = length > 0 ? horde.rayHit(origin, dir, length) : null;
   if (zombie) {
-    const died = horde.hurt(zombie.id, zombie.head);
+    horde.hurt(zombie.id, zombie.head);
     s.audio.once(s.sounds.thud, VOLUME.thud);
-    if (died && !keepKillArrows)
-      a.state = 'idle'; // it broke on the kill
-    else stick(a, x0 + dir.x * zombie.distance, 0, z0 + dir.z * zombie.distance);
+    settleOnHit(a, s.keepHit(), x0 + dir.x * zombie.distance, z0 + dir.z * zombie.distance);
   } else if (t < 1) {
     stick(a, x0 + (a.x - x0) * t, y0 + (a.y - y0) * t, z0 + (a.z - z0) * t);
   }
@@ -165,14 +164,13 @@ function updateArrow(
   horde: Horde,
   grid: BoxGrid,
   player: { x: number; z: number },
-  keepKillArrows: boolean,
 ): number {
   const a = s.arrows[i];
   let recovered = 0;
   if (a.state === 'flying') {
     const { x, y, z } = a;
     stepArrow(a, dt);
-    if (a.state === 'flying') resolveHit(s, i, x, y, z, horde, grid, keepKillArrows);
+    if (a.state === 'flying') resolveHit(s, i, x, y, z, horde, grid);
     if (a.state === 'flying') orient(s.meshes[i], a);
   } else if (a.state === 'stuck' && Math.hypot(a.x - player.x, a.z - player.z) < RECOVER_RADIUS) {
     a.state = 'idle';
@@ -189,15 +187,13 @@ function updateBow(
   horde: Horde,
   grid: BoxGrid,
   player: { x: number; z: number },
-  keepKillArrows: boolean,
 ): number {
   s.cooldown = Math.max(0, s.cooldown - dt);
   s.kick = Math.max(0, s.kick - dt);
   s.view.position.z = -0.55 + KICK * (s.kick / KICK_TIME);
   s.nocked.visible = s.cooldown <= 0;
   let recovered = 0;
-  for (let i = 0; i < s.arrows.length; i++)
-    recovered += updateArrow(s, i, dt, horde, grid, player, keepKillArrows);
+  for (let i = 0; i < s.arrows.length; i++) recovered += updateArrow(s, i, dt, horde, grid, player);
   return recovered;
 }
 
@@ -215,6 +211,7 @@ function createBowState(
   scene: THREE.Scene,
   audio: AudioBus,
   sounds: Sounds,
+  keepHit: () => boolean,
   bowModel: THREE.Object3D,
   arrowModel: THREE.Object3D,
 ): BowState {
@@ -232,7 +229,7 @@ function createBowState(
     scene.add(mesh);
     return mesh;
   });
-  return { audio, sounds, view, nocked, arrows, meshes, cooldown: 0, kick: 0 };
+  return { audio, sounds, keepHit, view, nocked, arrows, meshes, cooldown: 0, kick: 0 };
 }
 
 export async function createBow(
@@ -240,19 +237,20 @@ export async function createBow(
   scene: THREE.Scene,
   audio: AudioBus,
   sounds: Sounds,
+  keepHit: () => boolean,
 ): Promise<Bow> {
   const [bowModel, arrowModel] = await Promise.all([
     loadModel(propUrl('bow')),
     loadModel(propUrl('arrow')),
   ]);
-  const s = createBowState(camera, scene, audio, sounds, bowModel, arrowModel);
+  const s = createBowState(camera, scene, audio, sounds, keepHit, bowModel, arrowModel);
   return {
     get ready() {
       return s.cooldown <= 0;
     },
     view: s.view,
     fire: (eye, look) => fireArrow(s, eye, look),
-    update: (dt, horde, grid, player, keep) => updateBow(s, dt, horde, grid, player, keep),
+    update: (dt, horde, grid, player) => updateBow(s, dt, horde, grid, player),
     reset: () => resetBow(s),
     dispose() {
       camera.remove(s.view);

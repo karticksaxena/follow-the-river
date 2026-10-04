@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { PickupDef } from './areas/types';
-import { AMMO_BOX, collect, CRATE, nearestPickup, PICKUP_RADIUS, promptFor } from './pickups';
+import {
+  AMMO_BOX,
+  collect,
+  CRATE,
+  isFull,
+  nearestPickup,
+  PICKUP_RADIUS,
+  promptFor,
+} from './pickups';
 import { freshRun, restartPhase, SUPPLY_LIMITS, type GunKind } from './state';
 
 const battery: PickupDef = { id: 'battery-1', kind: 'battery', x: 0, z: 0 };
@@ -26,8 +34,8 @@ describe('pickups', () => {
 
   it('says when you cannot carry more spare batteries', () => {
     const full = { ...freshRun().supplies, cells: SUPPLY_LIMITS.cells };
-    expect(promptFor(battery, full)).toMatch(/full/i);
-    expect(promptFor(battery, { ...full, cells: 1 })).toMatch(/^E: /);
+    expect(promptFor(battery, full, [])).toMatch(/full/i);
+    expect(promptFor(battery, { ...full, cells: 1 }, [])).toMatch(/^E: /);
   });
 
   it('a battery is a spare for R, not charge', () => {
@@ -44,7 +52,7 @@ describe('pickups', () => {
     expect(after.supplies.shells).toBe(CRATE.ammo.shotgun);
     expect(after.supplies.rounds).toBe(0);
     expect(after.supplies.cells).toBe(CRATE.cells);
-    expect(promptFor(crate, after.supplies)).toBe('E: take the shotgun');
+    expect(promptFor(crate, after.supplies, after.guns)).toBe('E: take the shotgun');
   });
 
   it('the Day 2 pistol is not a second pistol when you already have one', () => {
@@ -80,5 +88,19 @@ describe('pickups', () => {
     const two = { ...none, guns: ['pistol', 'shotgun'] as GunKind[] };
     const got = collect(two, box, 1).supplies;
     expect([got.ammo, got.shells]).toEqual([AMMO_BOX.pistol, AMMO_BOX.shotgun]);
+  });
+
+  it('an ammo box is full only when every gun you own is full (the pistol if none)', () => {
+    const box: PickupDef = { id: 'a', kind: 'ammo', x: 0, z: 0 };
+    const live = { ...restartPhase(freshRun()), guns: ['pistol', 'shotgun'] as GunKind[] };
+    const supplies = { ...live.supplies, ammo: SUPPLY_LIMITS.ammo, shells: 1 };
+    expect(isFull(box, supplies, live.guns)).toBe(false);
+    expect(promptFor(box, supplies, live.guns)).toBe('E: pick up ammo');
+    const got = collect({ ...live, supplies }, box, 1).supplies;
+    expect(got.shells).toBe(1 + AMMO_BOX.shotgun);
+    const all = { ...supplies, shells: SUPPLY_LIMITS.shells };
+    expect(isFull(box, all, live.guns)).toBe(true);
+    expect(isFull(box, { ...all, ammo: 0 }, [])).toBe(false);
+    expect(isFull(box, all, [])).toBe(true);
   });
 });

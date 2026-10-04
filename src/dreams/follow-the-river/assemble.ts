@@ -7,7 +7,7 @@ import { createAmbience } from './ambience';
 import type { AreaDef } from './areas/types';
 import { groundAt, waterlineX } from './banks';
 import { createBow, type Bow } from './bow';
-import { HORDE_CAPACITY } from './difficulty';
+import { DIFFICULTY, HORDE_CAPACITY } from './difficulty';
 import { MOM_LANTERN } from './ending-scene';
 import { createFish, type Fish } from './fish';
 import { createFlashlight } from './flashlight';
@@ -50,7 +50,13 @@ function loadBodies(
   const { scene } = world;
   return Promise.all([
     createHorde(scene, ctx.audio, grid, sounds.groans, HORDE_CAPACITY),
-    createBow(ctx.stage.camera, scene, ctx.audio, sounds),
+    createBow(
+      ctx.stage.camera,
+      scene,
+      ctx.audio,
+      sounds,
+      () => DIFFICULTY[ctx.difficulty()].keepHitArrows,
+    ),
     createArmory(ctx.stage.camera, ctx.audio, sounds.shots),
     createFish(scene, ctx.audio, sounds, {
       ground: (x) => groundAt(area.bank, x),
