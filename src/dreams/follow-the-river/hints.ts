@@ -25,7 +25,7 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   ],
   shack: [
     'It is pitch black in here.',
-    'Press F for your flashlight. It drains while it is on — watch the meter in the corner.',
+    'Press F for your flashlight. It drains while it is on - watch the meter in the corner.',
     'Switched off, it slowly charges back up.',
   ],
   battery: ['A spare battery. When the torch runs low, press R to put it in.'],
@@ -53,7 +53,7 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   night3: ['The lake. Mom is waiting at the lake.'],
   pistol: [
     'A police pistol. Press 2 for it, 1 for the bow.',
-    'It stops anything — but every shot is loud, and they will come.',
+    'It stops anything - but every shot is loud, and they will come.',
   ],
   shotgun: ['A shotgun. Press 3. Close up, one blast can drop a group.'],
   rifle: ['A rifle. Press 4 and hold the trigger. Mind the rounds.'],

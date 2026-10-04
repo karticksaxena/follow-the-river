@@ -17,6 +17,7 @@ export const ROOM_X = -70;
 const TV_SCALE = 1.4;
 export const TV_LIGHT = { color: 0x5a6fb8, intensity: 2.6, distance: 8, flicker: 0.35 };
 const SCREEN_TINT = 0x8a8a8a;
+const PACK_GRIP = 0.12; // m from the wrist to the pack's centre (tuning knob)
 export const INSIDE_DIM = 0.7;
 const FADE = 0.3;
 const FENCE_SCALE = 4;
@@ -29,7 +30,7 @@ const HALL_Z = 1.2; // through the middle of the doorway (z 0.65..1.75)
 const OUTSIDE_X = -5.5; // out of sight past the door
 
 export const AT = {
-  tv: { x: ROOM_X, z: -2.1 },
+  tv: { x: ROOM_X, z: -1.98 },
   momInside: { x: ROOM_X - 1.8, z: PACE_Z },
   momDoor: { x: ROOM_X - 2.6, z: 0.5 },
   door: { x: ROOM_X - 3.2, z: HALL_Z },
@@ -37,10 +38,12 @@ export const AT = {
   momRiverStart: { x: EDGE_X - 3, z: 1.2 }, // ahead and to the side of the player, in view
   momRiverNear: { x: EDGE_X - 2.4, z: 0 }, // where she waits before the last steps
   momRiverBack: { x: EDGE_X - 2.2, z: 0 }, // the step back before she films
-  spawnRoom: { x: ROOM_X, z: 1.05 },
+  spawnRoom: { x: ROOM_X - 1.8, z: 1.05 }, // beside the couch, not on it,
   spawnRiver: { x: EDGE_X - 4, z: 0 },
 } as const;
 export const REACH = { tv: 2.5, mom: 2.2, door: 1.4 } as const;
+/** Camera yaw at the room spawn: looking at the TV (yaw 0 looks along -Z). */
+export const YAW_TO_TV = Math.atan2(AT.tv.x - AT.spawnRoom.x, AT.spawnRoom.z - AT.tv.z) * -1;
 export const YAW_EAST = -Math.PI / 2; // camera yaw looking toward +X (the river)
 
 /** Mom's indoor routes (world). Every leg stays on open floor; see intro.test.ts. */
@@ -77,7 +80,7 @@ export const ROOM_COLLIDERS: readonly Box[] = [
   box(-4, -3.5, 1.75, 3, ROOM_X),
   DOOR_CAP,
   box(-1, 1, 1.4, 1.65, ROOM_X),
-  box(-0.5, 0.5, -2.5, -1.7, ROOM_X),
+  box(-0.5, 0.5, -2.5, -1.6, ROOM_X),
 ];
 
 /** A small fenced strip by the river; the river side is closed at the water's edge. */
@@ -118,7 +121,9 @@ export function createMom(
   hand.add(pack);
   pack.visible = false;
   group.updateMatrixWorld(true);
-  pack.scale.setScalar(1 / hand.getWorldScale(new THREE.Vector3()).x);
+  const handScale = hand.getWorldScale(new THREE.Vector3()).x; // the rig is scaled x100
+  pack.scale.setScalar(1 / handScale);
+  pack.position.y = PACK_GRIP / handScale; // wrist +Y runs down the fingers: grip the pack's top edge
   const mixer = new THREE.AnimationMixer(body);
   const actions = new Map<string, THREE.AnimationAction>();
   let current: THREE.AnimationAction | null = null;

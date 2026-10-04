@@ -50,6 +50,8 @@ export interface Run {
   pickups: readonly PickupDef[];
   /** The night's waves (unused by day). */
   waves: WaveState;
+  /** A scripted E action (the ending's farewell), offered when within `radius` m of `at`. */
+  interact: Interact | null;
   health: number;
   /** Shack darkness 0..1 and the value last applied to the lights. */
   dim: number;
@@ -60,6 +62,13 @@ export interface Run {
   dying: Dying;
   dyingTime: number;
   ending: EndingState;
+}
+
+export interface Interact {
+  at: { x: number; z: number };
+  radius: number;
+  prompt: string;
+  use: () => void;
 }
 
 /** What gameplay asks the chapter to do. */

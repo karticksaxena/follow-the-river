@@ -42,8 +42,8 @@ describe('chapter flow', () => {
 
   it('warns only about what still applies before waiting for dark', () => {
     expect(waitQuestion(0, false)).toBe('Wait for dark? You cannot come back here.');
-    expect(waitQuestion(1, false)).toContain('1 fish pack — throw it');
-    expect(waitQuestion(2, true)).toContain('2 fish packs — throw them');
+    expect(waitQuestion(1, false)).toContain('1 fish pack - throw it');
+    expect(waitQuestion(2, true)).toContain('2 fish packs - throw them');
     expect(waitQuestion(2, true)).toContain('tape');
   });
 

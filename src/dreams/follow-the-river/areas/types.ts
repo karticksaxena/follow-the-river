@@ -46,13 +46,27 @@ export type ScareDef =
   | { kind: 'watcher'; x: number; z: number; trigger: number }
   | { kind: 'ambush'; shack: string; trigger: number }
   | { kind: 'alarm'; x: number; z: number; trigger: number };
+/**
+ * One ambush of a wave: sprung when the player walks past `z` (between the wave's start and gate).
+ * street: out of a side street on the land side; cover: from behind an obstacle at (`x`, `at`);
+ * lying: "corpses" at (`x`, `at`) that get up when you come close; behind: upstream of you.
+ */
+export interface AmbushDef {
+  z: number;
+  count: number;
+  kind: 'street' | 'cover' | 'lying' | 'behind';
+  /** cover/lying: the spot on the bank (x) and its z (absolute). */
+  x?: number;
+  at?: number;
+}
 /** One wave of a night: where it starts, the barricade that holds you, how many come, the crate. */
 export interface WaveDef {
   /** Walking past this z (downstream) starts the wave; the crate sits just beyond it. */
   z: number;
   /** The barricade across the bank (z) that stays up until the wave is dead. */
   gateZ: number;
-  count: number;
+  /** Ambushes set off along the zone, by trigger z (downstream order); the wave is their total. */
+  ambushes: readonly AmbushDef[];
   /** The crate's x on the bank, and the gun inside, if any. */
   crate: { x: number; gun?: GunKind };
 }

@@ -5,6 +5,7 @@ import { strikesFor, styleFor } from './fish';
 import { MAX_HEALTH, phaseTitle, spawnFor, waitQuestion } from './flow';
 import { HINTS, type HintId } from './hints';
 import { applyLighting, LIGHTING, setFogFar } from './lighting';
+import { SICKNESS } from './orca-sick';
 import type { Run, Systems } from './run';
 import { shackAt } from './scares';
 import {
@@ -88,6 +89,8 @@ export function beginPhase(f: Flow): void {
   if (night) fish.arm(strikesFor(run.live.fed), styleFor(run.live.fed));
   const cleared = night ? save.wave : 0;
   run.waves = newWaveState(cleared);
+  run.interact = null;
+  fish.setSickness(SICKNESS[save.phase]);
   sys.gates.set(cleared);
   run.pickups = night ? waveCrates(area) : area.pickups;
   pickups.place(run.pickups, run.taken);
@@ -101,8 +104,8 @@ export function beginPhase(f: Flow): void {
 
 /** Days 2 and 3 name their place on the title card (Day 1 stays plain). */
 const DAY_CARD: Readonly<Record<string, string>> = {
-  day2: 'Day 2 — The suburbs',
-  day3: 'Day 3 — The forest',
+  day2: 'Day 2 - The suburbs',
+  day3: 'Day 3 - The forest',
 };
 
 /** First-time hints for a phase: the generic one, then the night's own (Night 2, Night 3). */

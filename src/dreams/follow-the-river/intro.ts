@@ -10,6 +10,7 @@ import {
   ROOM_COLLIDERS,
   TV_LIGHT,
   YAW_EAST,
+  YAW_TO_TV,
   type IntroScene,
 } from './intro-scene';
 import { applyDim, LIGHTING } from './lighting';
@@ -37,7 +38,7 @@ export function nextIntroStep(step: IntroStep): IntroStep {
 
 export const INTRO_PAGES: Readonly<Record<ActiveStep, readonly string[]>> = {
   news: [
-    'BREAKING NEWS — An unknown infection is spreading through the city.',
+    'BREAKING NEWS - An unknown infection is spreading through the city.',
     '"…patients become violent within hours. Hospitals are not accepting new cases…"',
     '"…residents are urged to stay indoors and lock their doors…"',
   ],
@@ -53,7 +54,7 @@ export const INTRO_PAGES: Readonly<Record<ActiveStep, readonly string[]>> = {
   ],
   goodbye: [
     'Mom: "It knows me. It will know you."',
-    'Mom: "Listen to me. Whatever happens — run. Always follow the river."',
+    'Mom: "Listen to me. Whatever happens - run. Always follow the river."',
     'Mom: "Feed it, and it will keep you safe at night. Go!"',
     'She lifts her phone and starts filming the water. You hear her whisper: "What have we done…"',
   ],
@@ -375,7 +376,7 @@ export async function runIntro(
   });
 
   ctx.player.setColliders(ROOM_COLLIDERS);
-  ctx.player.teleport(AT.spawnRoom.x, AT.spawnRoom.z, 0);
+  ctx.player.teleport(AT.spawnRoom.x, AT.spawnRoom.z, YAW_TO_TV);
   ctx.stage.scene = sc.scene;
 
   return {

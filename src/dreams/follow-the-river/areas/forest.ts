@@ -224,8 +224,28 @@ export const FOREST: AreaDef = {
   endZ: END_Z,
   // The lake's ending wave is the night's third.
   waves: [
-    { z: -150, gateZ: -190, count: 10, crate: { x: -1 } },
-    { z: -232, gateZ: -272, count: 12, crate: { x: -1 } },
+    {
+      z: -150,
+      gateZ: -190,
+      ambushes: [
+        { z: -150, count: 3, kind: 'street' },
+        { z: -154, count: 3, kind: 'cover', x: -16.5, at: -172 },
+        { z: -166, count: 2, kind: 'lying', x: -5, at: -186 },
+        { z: -170, count: 2, kind: 'behind' },
+      ],
+      crate: { x: -1 },
+    },
+    {
+      z: -232,
+      gateZ: -272,
+      ambushes: [
+        { z: -232, count: 3, kind: 'street' },
+        { z: -236, count: 3, kind: 'cover', x: -16.5, at: -256 },
+        { z: -246, count: 3, kind: 'behind' },
+        { z: -250, count: 3, kind: 'lying', x: -5, at: -268 },
+      ],
+      crate: { x: -1 },
+    },
   ],
   gate: {
     row: { kit: 'nature', model: 'log_large', yaw: 0 },

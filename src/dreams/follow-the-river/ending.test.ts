@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { CITY } from './areas/city';
 import { FOREST } from './areas/forest';
 import { SUBURBS } from './areas/suburbs';
+import { HORDE_CAPACITY } from './difficulty';
 import {
+  armForLastStand,
   DAWN,
   ENDING_PAGES,
   nextEndingStep,
@@ -13,46 +15,59 @@ import {
   waveSpot,
   type EndingStep,
 } from './ending';
+import { FAREWELL_PAGES, shoreFor } from './ending-farewell';
 import { facing, retreatPoint, stopShort } from './ending-scene';
 import { EDGE_X } from './river';
+import { freshRun, restartPhase, SUPPLY_LIMITS, type GunKind } from './state';
 
 describe('ending steps', () => {
-  it('runs Mom → fight → silence → dawn → epilogue → credits → done', () => {
+  it('runs Mom, the last stand, the stranding, the farewell, dawn, the ride home, the credits', () => {
     const steps: EndingStep[] = ['mom'];
     while (steps[steps.length - 1] !== 'done') steps.push(nextEndingStep(steps[steps.length - 1]));
-    expect(steps).toEqual(['mom', 'fight', 'silence', 'dawn', 'epilogue', 'credits', 'done']);
+    expect(steps).toEqual([
+      'mom',
+      'fight',
+      'strand',
+      'song',
+      'hand',
+      'pack',
+      'dawn',
+      'ride',
+      'credits',
+      'done',
+    ]);
     expect(nextEndingStep('done')).toBe('done');
   });
 
-  it('has Mom speak before and after the fight, a short epilogue and the credits', () => {
+  it('has Mom arm you for the fight, say why it died, and the credits', () => {
     for (const pages of Object.values(ENDING_PAGES)) expect(pages.length).toBeGreaterThan(0);
     expect(ENDING_PAGES.mom.join(' ')).toMatch(/You followed the river/);
-    expect(ENDING_PAGES.mom.join(' ')).toMatch(/so sorry/);
-    expect(ENDING_PAGES.silence.join(' ')).toMatch(/held on for us/);
-    expect(ENDING_PAGES.silence.join(' ')).toMatch(/Because of it/);
-    expect(ENDING_PAGES.epilogue.length).toBeGreaterThanOrEqual(3);
-    expect(ENDING_PAGES.epilogue.length).toBeLessThanOrEqual(4);
-    expect(ENDING_PAGES.credits[0]).toBe("Kartik's Dreams — Follow the River");
-    expect(ENDING_PAGES.credits[1]).toBe('A dream by Kartik');
+    expect(ENDING_PAGES.mom.join(' ')).toMatch(/fight with us/);
+    expect(FAREWELL_PAGES.stranded.join(' ')).toMatch(/eating the sickness for us/);
+    expect(ENDING_PAGES.credits[0]).toBe("Kartik's Dreams - Follow the River");
     const credits = ENDING_PAGES.credits.join(' ');
     for (const name of ['Kenney', 'Quaternius', 'OpenGameArt', 'Made with three.js']) {
       expect(credits).toContain(name);
     }
-    expect(REPLAY_PAGES).toEqual([...ENDING_PAGES.epilogue, ...ENDING_PAGES.credits]);
+    expect(REPLAY_PAGES.slice(-ENDING_PAGES.credits.length)).toEqual(ENDING_PAGES.credits);
+  });
+
+  it('never uses an em dash on screen', () => {
+    const all = [...Object.values(ENDING_PAGES).flat(), ...Object.values(FAREWELL_PAGES).flat()];
+    for (const page of all) expect(page).not.toContain('\u2014');
   });
 });
 
-describe('the wave', () => {
-  it('sends 12 zombies in groups and never more', () => {
+describe('the last stand', () => {
+  it('sends a horde in groups, too big for you alone, and never more', () => {
     expect(waveDue(0)).toBe(WAVE.group);
     expect(waveDue(WAVE.gap)).toBe(2 * WAVE.group);
-    expect(waveDue(WAVE.gap * 2)).toBe(WAVE.count);
     expect(waveDue(1000)).toBe(WAVE.count);
     expect(waveDue(-5)).toBe(WAVE.group);
+    expect(WAVE.count).toBeGreaterThan(HORDE_CAPACITY); // more than can be alive at once
   });
 
-  it('lets the orca outlast the wave and the wave fit in its 25 s', () => {
-    expect(WAVE.seconds).toBe(25);
+  it('lets the orca outlast the horde, and every group arrives before the time runs out', () => {
     expect(WAVE.strikes).toBeGreaterThan(WAVE.count);
     expect(Math.ceil(WAVE.count / WAVE.group) * WAVE.gap).toBeLessThan(WAVE.seconds);
   });
@@ -66,8 +81,26 @@ describe('the wave', () => {
     }
   });
 
+  it('Mom fills your guns, arrows and spare batteries, and gives you a pistol if you have none', () => {
+    const run = { live: { ...restartPhase(freshRun()), guns: [] as GunKind[] } };
+    armForLastStand(run);
+    expect(run.live.guns).toEqual(['pistol']);
+    expect(run.live.supplies.ammo).toBe(SUPPLY_LIMITS.ammo);
+    expect(run.live.supplies.arrows).toBe(SUPPLY_LIMITS.arrows);
+    expect(run.live.supplies.cells).toBe(2);
+  });
+
   it('fades to dawn in 8 s', () => {
     expect(DAWN.seconds).toBe(8);
+  });
+});
+
+describe('the farewell', () => {
+  it('lands its nose up the shore beside Mom, with the water line behind it', () => {
+    const at = shoreFor({ x: -3, z: -387.5 }, -392);
+    expect(at.noseZ).toBeGreaterThan(at.lakeZ);
+    expect(at.noseX).toBeGreaterThan(-3);
+    expect(at.noseX).toBeLessThan(EDGE_X);
   });
 });
 

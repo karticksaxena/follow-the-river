@@ -1,97 +1,104 @@
 import * as THREE from 'three/webgpu';
 import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
-import type { AreaDef, GatePiece, PickupDef, WaveDef } from './areas/types';
+import type { AmbushDef, AreaDef, GatePiece, PickupDef, WaveDef } from './areas/types';
 import { KIT_SCALE, kitUrl } from './kits';
 import { EDGE_X } from './river';
 
 /**
- * A night is fought in waves (Kartik, Plan 6): walking past a wave's start brings its zombies in
- * groups, a barricade downstream holds you until the last one is dead, then it falls. Tuning knobs.
+ * A night is fought in waves (Kartik, Plan 6), each a string of ambushes set off along the zone
+ * (Plan 7): walking past an ambush's trigger springs it, a barricade downstream holds you until the
+ * last zombie of the wave is dead, then it falls. Tuning knobs.
  */
 export const WAVE = {
-  /** Zombies per group, and seconds between groups. */
-  group: 3,
-  gap: 2.2,
-  /** Spawn distance from the player (m): far enough to come out of the fog, not pop up. */
+  /** Spawn distance ahead of / behind the player (m): out of the fog, never in your face. */
   near: 16,
   far: 28,
-  /** Share of groups that come from downstream (between you and the barricade). */
-  ahead: 0.6,
+  /** Cover and lying ambushes scatter this wide around their spot (m). */
+  spread: 3,
   /** How long a barricade takes to fall (s). */
   fallSeconds: 0.7,
 } as const;
 
-/** Where a wave is: waiting for you, or fighting with `toSpawn` still to come. */
+/** Where a wave is: waiting for you, or fighting with `toSpawn` zombies of untriggered ambushes. */
 export interface WaveState {
   /** Waves cleared so far; the one in play (or next) is `cleared`. */
   cleared: number;
   fighting: boolean;
+  /** Ambushes of the wave in play already sprung. */
+  fired: number;
+  /** Zombies of the wave in play still waiting in ambushes not yet sprung. */
   toSpawn: number;
-  timer: number;
 }
 
 export type WaveEvent =
   | { kind: 'start'; wave: number }
-  | { kind: 'spawn'; count: number }
+  | { kind: 'spawn'; ambush: AmbushDef }
   | { kind: 'clear'; wave: number }
   | null;
 
 export const newWaveState = (cleared = 0): WaveState => ({
   cleared,
   fighting: false,
+  fired: 0,
   toSpawn: 0,
-  timer: 0,
 });
 
-/** Pure: one frame of the waves. `z` is the player's, `alive` the zombies left on the bank. */
+/** Zombies in a wave, all its ambushes together. */
+export const waveTotal = (def: WaveDef): number => def.ambushes.reduce((n, a) => n + a.count, 0);
+
+/** Pure: one frame of the waves. `z` is the player's, `alive` the zombies (lying too) on the bank. */
 export function stepWaves(
   w: WaveState,
   waves: readonly WaveDef[],
   z: number,
   alive: number,
-  dt: number,
 ): WaveEvent {
   const def = waves[w.cleared];
   if (!def) return null;
   if (!w.fighting) {
     if (z > def.z) return null;
     w.fighting = true;
-    w.toSpawn = def.count;
-    w.timer = 0;
+    w.fired = 0;
+    w.toSpawn = waveTotal(def);
     return { kind: 'start', wave: w.cleared };
   }
-  w.timer -= dt;
-  if (w.toSpawn > 0 && w.timer <= 0) {
-    const count = Math.min(WAVE.group, w.toSpawn);
-    w.toSpawn -= count;
-    w.timer = WAVE.gap;
-    return { kind: 'spawn', count };
+  const next = def.ambushes[w.fired];
+  if (next && z <= next.z) {
+    w.fired++;
+    w.toSpawn -= next.count;
+    return { kind: 'spawn', ambush: next };
   }
-  if (w.toSpawn > 0 || alive > 0) return null;
+  if (next || alive > 0) return null;
   w.fighting = false;
   w.cleared++;
   return { kind: 'clear', wave: w.cleared - 1 };
 }
 
-/** Wave `i`'s zombies left (still to come plus alive), or 0 when it isn't being fought. */
+/** The wave's zombies left (not yet sprung plus alive), or 0 when it isn't being fought. */
 export const waveLeft = (w: WaveState, alive: number): number =>
   w.fighting ? w.toSpawn + alive : 0;
 
-/** Pure: a spawn spot for a wave zombie, on the bank within [minX, maxX], never past the gate. */
-export function waveSpawn(
+/** Pure: where one zombie of an ambush goes, on the bank within [minX, maxX], never past the gate. */
+export function ambushSpot(
+  a: AmbushDef,
   player: { x: number; z: number },
   gateZ: number,
   minX: number,
   maxX: number,
   random: () => number,
 ): { x: number; z: number } {
+  const clampX = (x: number): number => Math.max(minX, Math.min(maxX, x));
   const d = WAVE.near + random() * (WAVE.far - WAVE.near);
-  const x = minX + random() * (maxX - minX);
-  const ahead = player.z - d;
-  const room = ahead > gateZ + 2;
-  const z = random() < WAVE.ahead && room ? ahead : player.z + d;
-  return { x, z };
+  const floor = gateZ + 2;
+  if (a.kind === 'cover' || a.kind === 'lying') {
+    const x = (a.x ?? (minX + maxX) / 2) + (random() - 0.5) * WAVE.spread;
+    const z = (a.at ?? player.z - d) + (random() - 0.5) * WAVE.spread;
+    return { x: clampX(x), z: Math.max(floor, z) };
+  }
+  if (a.kind === 'behind') return { x: clampX(minX + random() * (maxX - minX)), z: player.z + d };
+  // street: out of a side street on the land side, ahead of you
+  return { x: clampX(minX + random() * 3), z: Math.max(floor, player.z - d) };
 }
 
 /** The night's crates: one just past each wave's start (their ids are per area and wave). */

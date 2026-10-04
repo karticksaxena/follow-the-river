@@ -178,9 +178,39 @@ export const CITY: AreaDef = {
   startZ: START_Z,
   endZ: END_Z,
   waves: [
-    { z: -148, gateZ: -180, count: 6, crate: { x: -1, gun: 'pistol' } },
-    { z: -212, gateZ: -244, count: 8, crate: { x: -1, gun: 'shotgun' } },
-    { z: -276, gateZ: -308, count: 10, crate: { x: -1 } },
+    {
+      z: -148,
+      gateZ: -180,
+      ambushes: [
+        { z: -148, count: 2, kind: 'street' },
+        { z: -152, count: 2, kind: 'lying', x: -4, at: -172 },
+        { z: -160, count: 1, kind: 'street' },
+        { z: -166, count: 1, kind: 'behind' },
+      ],
+      crate: { x: -1, gun: 'pistol' },
+    },
+    {
+      z: -212,
+      gateZ: -244,
+      ambushes: [
+        { z: -212, count: 2, kind: 'street' },
+        { z: -217, count: 2, kind: 'lying', x: -6, at: -236 },
+        { z: -226, count: 2, kind: 'street' },
+        { z: -234, count: 2, kind: 'behind' },
+      ],
+      crate: { x: -1, gun: 'shotgun' },
+    },
+    {
+      z: -276,
+      gateZ: -308,
+      ambushes: [
+        { z: -276, count: 3, kind: 'street' },
+        { z: -278, count: 2, kind: 'cover', x: -13, at: -293 },
+        { z: -286, count: 3, kind: 'lying', x: -5, at: -304 },
+        { z: -296, count: 2, kind: 'behind' },
+      ],
+      crate: { x: -1 },
+    },
   ],
   gate: {
     row: { kit: 'roads', model: 'construction-barrier', yaw: 0 },

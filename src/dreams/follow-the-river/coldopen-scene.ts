@@ -20,15 +20,22 @@ export const HORDE_SIZE = 6;
 
 /** The riverside house with the TV on: the intro's suburb house, upriver of the Day 1 start. */
 export const HOUSE = { x: -15, z: 40, yaw: Math.PI / 2 } as const;
-/** Half the house's depth along world x at KIT_SCALE.suburb (building-type-a is 1.02 units deep). */
-const HOUSE_HALF_DEPTH = 0.51 * KIT_SCALE.suburb;
-/** The front window left of the door (seen from the river), and the TV glow just outside it. */
+/**
+ * The front window left of the door (seen from the river): the glass of building-type-a's opening
+ * is a 1.6 x 0.8 m quad recessed ~0.3 m behind the facade (model units x -0.4, y 0.2, z 0.436, at
+ * KIT_SCALE.suburb, yaw pi/2). The TV glow pane sits just in front of that glass, inside the wall.
+ */
+const GLASS = {
+  x: -0.4 * KIT_SCALE.suburb,
+  y: 0.2 * KIT_SCALE.suburb,
+  depth: 0.44 * KIT_SCALE.suburb,
+};
 export const WINDOW = {
-  x: HOUSE.x + HOUSE_HALF_DEPTH + 0.15,
-  y: 1.6,
-  z: HOUSE.z + 2.6,
-  width: 1.7,
-  height: 1,
+  x: HOUSE.x + GLASS.depth,
+  y: GLASS.y,
+  z: HOUSE.z - GLASS.x,
+  width: 1.6,
+  height: 0.8,
 } as const;
 const TV_GLOW_OFFSET = 1;
 

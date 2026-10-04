@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import type { AmbushDef } from './areas/types';
 import { createControls, type Controls } from './controls';
 import { nightTuning } from './difficulty';
 import { nightEnd } from './ending';
@@ -9,7 +10,7 @@ import { applyDim, LIGHTING } from './lighting';
 import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
 import { addSupply, AMMO_OF, chapterOf, isNight } from './state';
-import { stepWaves, waveLeft, waveSpawn } from './waves';
+import { ambushSpot, stepWaves, waveLeft } from './waves';
 import type { Tuning } from './zombies/brain';
 import type { PlayerSense } from './zombies/horde';
 
@@ -24,8 +25,8 @@ const WAIT_HINT_RANGE = 12;
 const HURT_GRACE = 1;
 /** Wave zombies come out of the bank between the land wall and this far from the water (m). */
 const NIGHT_STRIP_MARGIN = 0.5;
-/** A wave's zombies are told where you are, this far around you (m): they hunt, they don't wander. */
-const WAVE_ALERT = 60;
+/** A running ambush is told where you are, this far around its spot (m): they hunt, they don't wander. */
+const AMBUSH_ALERT = 6;
 
 export interface Play {
   update(dt: number): void;
@@ -154,32 +155,35 @@ function tickWorld(p: State, dt: number): void {
   sys.pickups.update(dt);
 }
 
-/** The night's waves: start when you pass one, bring it in groups, open the barricade when it's dead. */
-function tickWaves(p: State, dt: number): void {
+/** The night's waves: start when you pass one, spring its ambushes as you go, open the barricade when it's dead. */
+function tickWaves(p: State): void {
   const { sys, run, sense } = p;
-  const { area, horde } = sys;
-  const event = stepWaves(run.waves, area.waves, sense.z, horde.aliveCount(), dt);
+  const event = stepWaves(run.waves, sys.area.waves, sense.z, sys.horde.aliveCount());
   if (!event) return;
   if (event.kind === 'start') p.events.hint('wave');
   else if (event.kind === 'clear') {
     sys.gates.open(event.wave);
     p.events.checkpoint(event.wave + 1);
-  } else spawnWave(p, event.count);
+  } else spawnAmbush(p, event.ambush);
 }
 
-function spawnWave(p: State, count: number): void {
+/** One ambush's zombies, each on a free spot of the bank; the lying ones keep still until woken. */
+function spawnAmbush(p: State, ambush: AmbushDef): void {
   const { sys, sense, run } = p;
   const gateZ = sys.area.waves[run.waves.cleared]?.gateZ ?? sys.area.safeZ;
   const maxX = EDGE_X - NIGHT_STRIP_MARGIN;
-  for (let i = 0; i < count; i++) {
+  const lying = ambush.kind === 'lying';
+  let spot: { x: number; z: number } | null = null;
+  for (let i = 0; i < ambush.count; i++) {
     for (let tries = 0; tries < 6; tries++) {
-      const at = waveSpawn(sense, gateZ, sys.area.landX + 1, maxX, Math.random);
+      const at = ambushSpot(ambush, sense, gateZ, sys.area.landX + 1, maxX, Math.random);
       if (p.blocked(at.x, at.z)) continue;
-      sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), p.tuning);
+      sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), p.tuning, lying);
+      spot ??= at;
       break;
     }
   }
-  sys.horde.alert(sense.x, sense.z, WAVE_ALERT);
+  if (spot && !lying) sys.horde.alert(spot.x, spot.z, AMBUSH_ALERT);
 }
 
 /** Shack darkness: eases toward 1 inside, 0 outside; lights are touched only when it moved. */
@@ -219,7 +223,7 @@ function tickView(p: State, dt: number): void {
   hudState.guns = gunBits(run.live.guns);
   hudState.weapon = weapon;
   hudState.health = run.health;
-  const fighting = isNight(run.phase) && run.waves.fighting;
+  const fighting = isNight(run.phase) && run.ending === 'no' && run.waves.fighting;
   hudState.wave = fighting ? run.waves.cleared + 1 : 0;
   hudState.left = waveLeft(run.waves, sys.horde.aliveCount());
   sys.hud.set(hudState);
@@ -257,7 +261,7 @@ function tick(p: State, dt: number): void {
   p.controls.update(dt);
   tickWorld(p, dt);
   sys.scares.update(dt, sense, isNight(run.phase) && run.ending !== 'calm');
-  if (isNight(run.phase) && run.ending === 'no') tickWaves(p, dt);
+  if (isNight(run.phase) && run.ending === 'no') tickWaves(p);
   tickDim(p, dt);
   tickHints(p);
   tickView(p, dt);

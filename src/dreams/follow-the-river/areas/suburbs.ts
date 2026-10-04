@@ -199,9 +199,39 @@ export const SUBURBS: AreaDef = {
   startZ: START_Z,
   endZ: END_Z,
   waves: [
-    { z: -148, gateZ: -180, count: 8, crate: { x: -1 } },
-    { z: -212, gateZ: -244, count: 10, crate: { x: -1, gun: 'rifle' } },
-    { z: -276, gateZ: -308, count: 12, crate: { x: -1 } },
+    {
+      z: -148,
+      gateZ: -180,
+      ambushes: [
+        { z: -148, count: 2, kind: 'street' },
+        { z: -152, count: 3, kind: 'cover', x: -10, at: -170 },
+        { z: -160, count: 1, kind: 'behind' },
+        { z: -162, count: 2, kind: 'lying', x: -4, at: -176 },
+      ],
+      crate: { x: -1 },
+    },
+    {
+      z: -212,
+      gateZ: -244,
+      ambushes: [
+        { z: -212, count: 2, kind: 'street' },
+        { z: -214, count: 3, kind: 'cover', x: -10, at: -229 },
+        { z: -224, count: 2, kind: 'behind' },
+        { z: -226, count: 3, kind: 'cover', x: -1.5, at: -241 },
+      ],
+      crate: { x: -1, gun: 'rifle' },
+    },
+    {
+      z: -276,
+      gateZ: -308,
+      ambushes: [
+        { z: -276, count: 2, kind: 'street' },
+        { z: -278, count: 4, kind: 'cover', x: -11, at: -296 },
+        { z: -288, count: 3, kind: 'lying', x: -5, at: -304 },
+        { z: -296, count: 3, kind: 'behind' },
+      ],
+      crate: { x: -1 },
+    },
   ],
   gate: {
     row: { kit: 'nature', model: 'fence_planks', yaw: 0, scale: 0.6 },

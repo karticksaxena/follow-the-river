@@ -29,7 +29,7 @@ const KEYS = ['KeyF', 'KeyE', 'KeyR', 'Mouse0', ...WEAPON_KEYS] as const;
 /** How far (m) a viewmodel sinks while a weapon is swapped. */
 const LOWER = 0.5;
 
-type Target = 'pickup' | 'fish' | 'wait' | null;
+type Target = 'interact' | 'pickup' | 'fish' | 'wait' | null;
 
 export interface Controls {
   /** Handles F, E, R, click and weapon keys for this frame, then works out what E would do next. */
@@ -146,8 +146,10 @@ function throwPack(c: Ctl): void {
 function find(c: Ctl): void {
   const { x, z } = c.sys.ctx.stage.camera.position;
   const night = isNight(c.run.phase);
+  const act = c.run.interact;
   c.pickup = nearestPickup(x, z, c.run.pickups, c.run.taken);
-  if (c.pickup) c.target = 'pickup';
+  if (act && Math.hypot(x - act.at.x, z - act.at.z) <= act.radius) c.target = 'interact';
+  else if (c.pickup) c.target = 'pickup';
   // The wait spot is tested first so the prompt doesn't flip at the campfire, by the water.
   else if (!night && nearSpot(x, z, c.sys.area.waitSpot, WAIT_RADIUS)) c.target = 'wait';
   else if (canThrow(x, EDGE_X, c.run.live.supplies.fishPacks)) c.target = 'fish';
@@ -155,7 +157,8 @@ function find(c: Ctl): void {
 }
 
 function use(c: Ctl): void {
-  if (c.target === 'pickup' && c.pickup) take(c, c.pickup);
+  if (c.target === 'interact') c.run.interact?.use();
+  else if (c.target === 'pickup' && c.pickup) take(c, c.pickup);
   else if (c.target === 'fish') throwPack(c);
   else if (c.target === 'wait') c.events.wait();
 }
@@ -192,6 +195,7 @@ function promptOf(c: Ctl): string | null {
   const gun = gunInHand(c);
   const dry = gun !== null && c.run.live.supplies[AMMO_OF[gun.kind]] <= 0 && canFire(c.sw);
   if (dry && c.sys.ctx.keys.isDown('Mouse0')) return 'No ammo';
+  if (c.target === 'interact') return c.run.interact?.prompt ?? null;
   if (c.target === 'pickup' && c.pickup) return promptFor(c.pickup, c.run.live.supplies);
   if (c.target === 'fish')
     return isNight(c.run.phase) ? 'E: feed the orca' : 'E: throw a fish pack';

@@ -1,6 +1,19 @@
 import type * as THREE from 'three/webgpu';
 import type { AreaDef } from './areas/types';
+import { playCanoeRide } from './canoe-ride';
 import { nightTuning } from './difficulty';
+import {
+  FAREWELL_PAGES,
+  goToIt,
+  hand,
+  lastPack,
+  loadPackOnWater,
+  shoreFor,
+  song,
+  strand,
+  type Script,
+  type Shore,
+} from './ending-farewell';
 import {
   buildEndingScene,
   facing,
@@ -11,19 +24,25 @@ import {
 } from './ending-scene';
 import { atSafeSpot } from './flow';
 import { applyLighting, LIGHTING, mixPreset, type LightPreset } from './lighting';
+import { SICKNESS } from './orca-sick';
 import { EDGE_X } from './river';
 import type { Run, Systems } from './run';
+import { addSupply, AMMO_OF, SUPPLY_LIMITS } from './state';
 import { stopVoice, voiceFor, voiceHooks } from './voice';
 
-export type EndingStep = 'mom' | 'fight' | 'silence' | 'dawn' | 'epilogue' | 'credits' | 'done';
-type PagedStep = 'mom' | 'silence' | 'epilogue' | 'credits';
+export type EndingStep =
+  'mom' | 'fight' | 'strand' | 'song' | 'hand' | 'pack' | 'dawn' | 'ride' | 'credits' | 'done';
+type PagedStep = 'mom' | 'home' | 'credits';
 
 const ORDER: readonly EndingStep[] = [
   'mom',
   'fight',
-  'silence',
+  'strand',
+  'song',
+  'hand',
+  'pack',
   'dawn',
-  'epilogue',
+  'ride',
   'credits',
   'done',
 ];
@@ -34,16 +53,14 @@ export function nextEndingStep(step: EndingStep): EndingStep {
 }
 
 export const ENDING_PAGES: Readonly<Record<PagedStep, readonly string[]>> = {
-  mom: ['Mom: "It\'s you. You followed the river."', 'Mom: "I\'m so sorry. For all of it."'],
-  silence: ['Mom: "It held on for us. It held on for you."', 'Mom: "We made it. Because of it."'],
-  epilogue: [
-    'The sky goes pale over the dam. Nothing moves on the bank.',
-    'Somewhere under the still water, a great black shape is resting at last.',
-    'You are alive. You will not forget what it cost.',
-    'You never saw it again. You are not sure you were ever meant to.',
+  mom: [
+    'Mom: "It\'s you. You followed the river."',
+    'Mom: "I\'m so sorry. For all of it."',
+    'Mom: "They\'re coming, all of them. Take this, and stay by the water. It will fight with us."',
   ],
+  home: ['Mom: "Come on. Let\'s go home."'],
   credits: [
-    "Kartik's Dreams — Follow the River",
+    "Kartik's Dreams - Follow the River",
     'A dream by Kartik',
     'Art and sound: Kenney, Quaternius and OpenGameArt contributors (CC0)',
     'Made with three.js',
@@ -51,16 +68,21 @@ export const ENDING_PAGES: Readonly<Record<PagedStep, readonly string[]>> = {
 };
 
 /** The pages of the ending with no scene behind them ("Watch the ending again"). */
-export const REPLAY_PAGES: readonly string[] = [...ENDING_PAGES.epilogue, ...ENDING_PAGES.credits];
+export const REPLAY_PAGES: readonly string[] = [
+  'The orca lies on the pebbles below the dam, where it held them back.',
+  'Mom rows you down the river into the green. Something small swims beside the canoe.',
+  ...ENDING_PAGES.credits,
+];
 
 /** Tuning knobs (metres, seconds). */
 export const WAVE = {
-  count: 12,
+  /** A horde too big for you alone (Plan 7): you fight it beside the orca. */
+  count: 30,
   /** Zombies per spawn group, and the pause between groups. */
-  group: 4,
-  gap: 3,
-  /** How long the orca keeps striking before its last lunge. */
-  seconds: 25,
+  group: 5,
+  gap: 3.5,
+  /** The fight ends when the horde is dead, or after this long (the orca's last leap takes the rest). */
+  seconds: 75,
   /** Strikes the orca is armed with: far more than the wave has zombies. */
   strikes: 99,
   /**
@@ -76,7 +98,6 @@ export const WAVE = {
   hearing: 60,
 } as const;
 export const DAWN = { seconds: 8, step: 0.25, volume: 0.35 } as const;
-const CRY_VOLUME = 0.8;
 const FLINCH = { lookUp: 12 } as const; // m up the bank Mom watches during the fight
 
 /** How many zombies of the wave should exist `elapsed` seconds in (all of them once the last group is due). */
@@ -138,6 +159,8 @@ interface State {
   cancelled: boolean;
   wait: Wait | null;
   scene: EndingScene | null;
+  /** The fish pack you lay on the water at the end (loaded with Mom). */
+  pack: THREE.Object3D | null;
   pad: { stop(): unknown; setVolume(v: number): unknown; disconnect(): unknown } | null;
 }
 
@@ -158,6 +181,8 @@ async function setUp(h: EndingHost, st: State): Promise<void> {
   const scene = st.scene ?? (await buildEndingScene(h.sys));
   if (st.cancelled) return scene.dispose();
   st.scene = scene;
+  st.pack ??= await loadPackOnWater(h.sys.world.scene);
+  st.pack.visible = false;
   const cam = ctx.stage.camera.position;
   scene.place(cam.x, cam.z, h.lantern);
   const mom = h.sys.area.meetAt;
@@ -184,10 +209,13 @@ function spawnWave(h: EndingHost, spawned: { n: number }, elapsed: number): void
   const { horde, ctx } = h.sys;
   const cam = ctx.stage.camera.position;
   const tuning = nightTuning(h.sys.area.chapter);
-  for (; spawned.n < waveDue(elapsed); spawned.n++) {
+  // The pool is smaller than the horde: when it is full, the rest wait for the dead to make room.
+  while (spawned.n < waveDue(elapsed)) {
     const at = waveSpot(spawned.n, cam.z);
     const yaw = Math.atan2(cam.x - at.x, cam.z - at.z);
-    if (horde.spawn(at.x, at.z, yaw, tuning) >= 0) horde.alert(at.x, at.z, 1);
+    if (horde.spawn(at.x, at.z, yaw, tuning) < 0) return;
+    horde.alert(at.x, at.z, 1);
+    spawned.n++;
   }
 }
 
@@ -202,9 +230,23 @@ function backOff(h: EndingHost, st: State): void {
   });
 }
 
-/** The wave, the orca's strikes, its last lunge and its sinking. Resolves when it is gone. */
+/** Mom's bag: ammo to the brim for every gun you carry, arrows, spare batteries (never empty-handed). */
+export function armForLastStand(run: Pick<Run, 'live'>): void {
+  const { live } = run;
+  if (live.guns.length === 0) live.guns = ['pistol'];
+  let supplies = { ...live.supplies };
+  for (const gun of live.guns) supplies[AMMO_OF[gun]] = SUPPLY_LIMITS[AMMO_OF[gun]];
+  supplies.arrows = SUPPLY_LIMITS.arrows;
+  supplies = addSupply(supplies, 'cells', 2);
+  live.supplies = supplies;
+}
+
+/**
+ * The last stand: you and the orca against a horde too big for you. It ends when the horde is
+ * dead (or after WAVE.seconds); the orca gets sicker with every one it takes.
+ */
 async function fight(h: EndingHost, st: State): Promise<void> {
-  const { fish, horde, ctx, sounds } = h.sys;
+  const { fish, horde, ctx } = h.sys;
   const cam = ctx.stage.camera.position;
   const spawned = { n: 0 };
   let t = 0;
@@ -216,18 +258,13 @@ async function fight(h: EndingHost, st: State): Promise<void> {
     if (fish.strikes < left) {
       left = fish.strikes;
       st.scene?.mom.play('HitRecieve', true); // the orca struck: she flinches
+      fish.setSickness(SICKNESS.night3 + ((1 - SICKNESS.night3) * (WAVE.strikes - left)) / 12);
     }
     spawnWave(h, spawned, t);
     horde.alert(cam.x, cam.z, WAVE.hearing);
-    return t >= WAVE.seconds;
+    const done = spawned.n >= WAVE.count && horde.aliveCount() === 0;
+    return done || t >= WAVE.seconds;
   });
-  if (st.cancelled) return;
-  fish.lastLunge(horde, cam);
-  await until(st, () => fish.finale === 'sink');
-  if (st.cancelled) return;
-  ctx.audio.once(sounds.orcaCry, CRY_VOLUME);
-  horde.forEachAlive((id) => horde.takeByFish(id)); // the water takes the rest
-  await until(st, () => fish.finale === 'gone');
 }
 
 /** Night 3's own night: the area's tighter fog, as `setFogFar` left it. Built once per dawn. */
@@ -275,28 +312,72 @@ async function comeToPlayer(h: EndingHost, st: State): Promise<void> {
   if (!st.cancelled) actor.faceTo(cam.x, cam.z);
 }
 
+/** What the farewell steps need, while Mom is on the shore. */
+function scriptOf(h: EndingHost, st: State): Script | null {
+  if (!st.scene) return null;
+  return {
+    sys: h.sys,
+    run: h.run,
+    scene: st.scene,
+    until: (pred) => until(st, pred),
+    read: (pages) => read(h, pages),
+    get cancelled() {
+      return st.cancelled;
+    },
+  };
+}
+
+/** The last leap: the horde is gone, the run is won, and Mom goes to it. */
+async function stranded(h: EndingHost, st: State, s: Script, at: Shore): Promise<void> {
+  await strand(s, at);
+  if (st.cancelled) return;
+  h.run.ending = 'calm';
+  h.persist(); // the wave is won: from here the run is saved as finished
+  h.sys.horde.reset();
+  await goToIt(s, at);
+  if (!st.cancelled) await read(h, FAREWELL_PAGES.stranded);
+}
+
+/** Dawn comes up, Mom comes to you: time to go home. */
+async function dawnAndHome(h: EndingHost, st: State): Promise<void> {
+  h.sys.flashlight.on = false;
+  await dawn(h, st);
+  if (st.cancelled) return;
+  await comeToPlayer(h, st);
+  if (!st.cancelled) await read(h, ENDING_PAGES.home);
+}
+
+/** One step of the ending (see ORDER). */
+async function runStep(h: EndingHost, st: State, step: EndingStep, at: Shore): Promise<void> {
+  const s = scriptOf(h, st);
+  if (!s) return;
+  if (step === 'mom') {
+    await read(h, ENDING_PAGES.mom);
+    armForLastStand(h.run);
+  } else if (step === 'fight') await fight(h, st);
+  else if (step === 'strand') await stranded(h, st, s, at);
+  else if (step === 'song') await song(s);
+  else if (step === 'hand') await hand(s, at);
+  else if (step === 'pack' && st.pack) await lastPack(s, at, st.pack);
+  else if (step === 'dawn') await dawnAndHome(h, st);
+  else if (step === 'ride') {
+    h.run.frozen = true; // the chapter stops: the ride is its own scene
+    await playCanoeRide(h.sys.ctx, h.sys.sounds);
+  } else if (step === 'credits') await read(h, ENDING_PAGES.credits);
+}
+
 /** The whole ending, step by step; every await is followed by a cancelled check. */
 async function play(h: EndingHost, st: State): Promise<void> {
-  const { ctx, flashlight } = h.sys;
+  const { meetAt, lake } = h.sys.area;
+  if (!meetAt || !lake) return;
+  const at = shoreFor(meetAt, lake.z);
   let step: EndingStep = 'mom';
   await setUp(h, st);
   while (step !== 'done' && !st.cancelled) {
-    if (step === 'mom') await read(h, ENDING_PAGES.mom);
-    else if (step === 'fight') await fight(h, st);
-    else if (step === 'silence') {
-      h.run.ending = 'calm';
-      flashlight.on = false;
-      h.persist(); // the wave is won: from here the run is saved as finished
-      h.sys.horde.reset();
-      await comeToPlayer(h, st);
-      if (st.cancelled) return;
-      await read(h, ENDING_PAGES.silence);
-    } else if (step === 'dawn') await dawn(h, st);
-    else if (step === 'epilogue') await read(h, ENDING_PAGES.epilogue);
-    else await read(h, ENDING_PAGES.credits);
+    await runStep(h, st, step, at);
     step = nextEndingStep(step);
   }
-  if (!st.cancelled) ctx.finish();
+  if (!st.cancelled) h.sys.ctx.finish();
 }
 
 function stopPad(st: State): void {
@@ -306,16 +387,17 @@ function stopPad(st: State): void {
   st.pad = null;
 }
 
-const freshState = (scene: EndingScene | null): State => ({
+const freshState = (scene: EndingScene | null, pack: THREE.Object3D | null): State => ({
   started: false,
   cancelled: false,
   wait: null,
   scene,
+  pack,
   pad: null,
 });
 
 export function createEnding(h: EndingHost): Ending {
-  let st = freshState(null);
+  let st = freshState(null, null);
   const stand = (): void => {
     st.cancelled = true; // the running `play` sees this after its next await and stops
     st.wait = null;
@@ -342,7 +424,9 @@ export function createEnding(h: EndingHost): Ending {
       stand();
       h.run.ending = 'no';
       st.scene?.remove(h.lantern);
-      st = freshState(st.scene); // Mom stays built; reaching the shore again starts over
+      h.run.interact = null;
+      h.sys.fish.reset(); // a death mid-farewell can't leave it on the shore
+      st = freshState(st.scene, st.pack); // Mom stays built; reaching the shore again starts over
     },
     dispose() {
       stand();

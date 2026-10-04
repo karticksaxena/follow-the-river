@@ -4,9 +4,7 @@ import {
   cruiseTargetX,
   cruiseYFor,
   inWaterX,
-  nearestTo,
   nextSurfacing,
-  sinkPose,
   SURFACE_MAX,
   SURFACE_MIN,
   surfaceYFor,
@@ -37,22 +35,6 @@ describe('fish', () => {
     expect(cruiseHeading(1.5, 0)).toBe(0);
     expect(Math.abs(cruiseHeading(1, -2.5))).toBeLessThanOrEqual(0.25);
     expect(cruiseHeading(0, 2.5)).toBeCloseTo(Math.PI);
-  });
-
-  it('takes the zombies nearest the player for the last lunge', () => {
-    // id, x, z — the player stands at (0, 0)
-    const c = new Float32Array([1, -10, 0, 2, 2, -8, 3, 1.5, -2, 4, -3, 0]);
-    const player = { x: 0, z: 0 };
-    expect(nearestTo(c, 4, 3, player)).toEqual([3, 4, 2]);
-    expect(nearestTo(c, 2, 3, player)).toEqual([2, 1]);
-    expect(nearestTo(c, 0, 3, player)).toEqual([]);
-  });
-
-  it('rolls over in the first half of the sink and is fully under at the end', () => {
-    expect(sinkPose(0)).toEqual({ depth: 0, roll: 0 });
-    expect(sinkPose(3).roll).toBeCloseTo(Math.PI);
-    expect(sinkPose(3).depth).toBeCloseTo(0.5);
-    expect(sinkPose(60)).toEqual({ depth: 1, roll: Math.PI });
   });
 
   it('cruises in a lane beside the player bank, all through the weave', () => {

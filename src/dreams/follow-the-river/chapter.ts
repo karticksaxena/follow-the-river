@@ -44,6 +44,7 @@ function newRun(save: RunSave): Run {
     taken: new Set(),
     pickups: [],
     waves: newWaveState(save.wave),
+    interact: null,
     health: MAX_HEALTH,
     dim: 0,
     appliedDim: 0,

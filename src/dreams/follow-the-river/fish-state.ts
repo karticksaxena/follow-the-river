@@ -14,12 +14,14 @@ import {
   topOf,
 } from './fish-parts';
 import type { Grab, GrabHooks, GrabPose, StrikeStyle } from './orca-grab';
+import { makeMist, type Blow } from './orca-sick';
+import type { Strand } from './orca-strand';
 import type { Sounds } from './sounds';
 
 const CAPACITY = Math.max(32, HORDE_CAPACITY);
 
-/** Where the ending has the orca: cruising/striking as usual, the last lunge, sinking, or gone. */
-export type Finale = 'no' | 'lunge' | 'sink' | 'gone';
+/** Where the ending has the orca: cruising/striking as usual, or stranded on the shore. */
+export type Finale = 'no' | 'stranded';
 
 export interface Rise {
   t: number;
@@ -29,8 +31,6 @@ export interface Rise {
   fromZ: number;
   toX: number;
   toZ: number;
-  lunge: boolean;
-  victim: number; // horde id, or -1 when taking a pack
   done: boolean; // the mid-rise effect has fired
   surface: boolean; // a surfacing: blow at the top, slow roll
 }
@@ -68,10 +68,14 @@ export interface FishState {
   packT: number; // <0: no pack in flight
   takePending: boolean;
   finale: Finale;
-  sinkT: number;
-  sinkFromY: number;
-  /** Zombies the last lunge takes when it breaks the surface. */
-  victims: number[];
+  /** Its last leap and its rest on the shore (see orca-strand.ts). */
+  strand: Strand | null;
+  /** 0 well .. 1 dying (see orca-sick.ts). */
+  sickness: number;
+  /** The blow's mist, seconds into it (-1: none), and its reused pose. */
+  readonly mist: THREE.Sprite;
+  mistT: number;
+  readonly blowOut: Blow;
   /** Taking a zombie off the bank (see orca-grab.ts), and its reused pose. */
   grab: Grab | null;
   readonly pose: GrabPose;
@@ -115,7 +119,12 @@ export function createState(
   root.rotation.order = 'YXZ'; // pitch (x) about the body's own axis, after the heading
   root.visible = false; // until the first update places it beside the player
   const body = clone(asset.scene);
-  body.traverse((n) => (n.frustumCulled = false));
+  body.traverse((n) => {
+    n.frustumCulled = false;
+    // Its own materials: the sickness tint must not reach another orca (the calf at the end).
+    if (n instanceof THREE.Mesh && n.material instanceof THREE.Material)
+      n.material = n.material.clone();
+  });
   makeWet(body);
   const finTop = topOf(body);
   const cruiseY = cruiseYFor(finTop);
@@ -125,7 +134,8 @@ export function createState(
   packModel.visible = false;
   scene.add(packModel);
   const splashAt = new THREE.Object3D();
-  scene.add(splashAt);
+  const mist = makeMist();
+  scene.add(splashAt, mist);
   const splash = audio.positional(splashAt, 4);
   splash.setBuffer(sounds.splash);
   splash.setVolume(1);
@@ -164,9 +174,11 @@ export function createState(
     packT: -1,
     takePending: false,
     finale: 'no',
-    sinkT: 0,
-    sinkFromY: cruiseY,
-    victims: [],
+    strand: null,
+    sickness: 0,
+    mist,
+    mistT: -1,
+    blowOut: { rise: 0, size: 0, opacity: 0 },
     grab: null,
     pose: { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 },
     ground: bank.ground,

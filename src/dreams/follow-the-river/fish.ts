@@ -7,12 +7,9 @@ import {
   cruiseTargetX,
   FISH,
   inWaterX,
-  nearestTo,
   nextSurfacing,
   NIGHT_STRIKE,
   pickStrike,
-  SINK_TIME,
-  sinkPose,
   smooth,
   SURFACE_TIME,
   surfaceRoll,
@@ -22,6 +19,16 @@ import {
 import { createState, type Finale, type FishState, type Rise } from './fish-state';
 import { characterUrl, propUrl } from './kits';
 import { newGrab, stepGrab, type GrabHooks, type StrikeStyle } from './orca-grab';
+import { blowAt, mistColor, SICK, tintSick } from './orca-sick';
+import {
+  beached,
+  newStrand,
+  STRAND,
+  strandPose,
+  strandRest,
+  strandRoll,
+  type Strand,
+} from './orca-strand';
 import { EDGE_X, WATER_Y } from './river';
 import type { Sounds } from './sounds';
 import type { Horde } from './zombies/horde';
@@ -29,27 +36,32 @@ export { canThrow, cruiseHeading, FISH, pickStrike, strikesFor, styleFor } from 
 export type { Finale } from './fish-state';
 
 // Tuning knobs (metres, seconds); heights are relative to the river's WATER_Y.
-const STRIKE_PEAK_Y = WATER_Y + 0.55;
 const TAKE_PEAK_Y = WATER_Y - 0.05;
 const WAKE_HIDE_Y = WATER_Y + 0.35; // the orca is airborne above this: no shadow
-const STRIKE_TIME = 1;
 const TAKE_TIME = 2.6;
 const FADE = 0.25;
 const LAG_Z = 6;
 const PACK_DISTANCE = 4;
 const PACK_TIME = 1;
 const PACK_ARC = 1.2;
-// The ending: the last lunge takes this many at once, then the orca rolls over and sinks.
-const FINALE_TAKES = 3;
-const SINK_Y = WATER_Y - 3.85;
 const SURFACE_DRIFT = 1.5; // metres downstream while surfacing
-const SINK_DRIFT = 0.3; // m/s downstream while sinking
+/** Where the blow rises from: ahead of the body's centre and up near its back (m). */
+const BLOWHOLE = { ahead: 1.6, up: 0.9 } as const;
 
 export interface Fish {
   /** The ending's state (read it each frame; it only moves forward). */
   readonly finale: Finale;
-  /** The last lunge: takes up to three zombies at once, then it rolls over and sinks (6 s). */
-  lastLunge(horde: Horde, player: { x: number; z: number }): void;
+  /** True once its last leap has landed it on the shore. */
+  readonly beached: boolean;
+  /**
+   * Its last leap: out of the lake onto the shore, nose at (noseX, noseZ), where it lies breathing.
+   * `ground(z)` is the shore height. Any grab in progress lets go (the zombie drowns).
+   */
+  strand(noseX: number, noseZ: number, ground: (z: number) => number, horde: Horde): void;
+  /** One last breath (a blow), then it is still. */
+  breatheOut(): void;
+  /** How sick it is (0 well .. 1 dying): duller, blotched, slower, a redder blow. */
+  setSickness(k: number): void;
   /** Night: strikes left this phase. */
   readonly strikes: number;
   /** Arms `strikes` for the night, struck in `style` (a normal night's by default). */
@@ -74,6 +86,36 @@ function playBlow(f: FishState): void {
   f.blow.play();
 }
 
+/** It breathes out: the blow's sound and its mist (redder the sicker it is). */
+function blowOut(f: FishState): void {
+  const { x, y, z } = f.root.position;
+  f.splashAt.position.set(x, y, z);
+  playBlow(f);
+  f.mistT = 0;
+  f.mist.visible = true;
+}
+
+/** The mist rises from the blowhole, grows and fades. */
+function stepMist(f: FishState, dt: number): void {
+  if (f.mistT < 0) return;
+  f.mistT += dt;
+  const b = f.blowOut;
+  if (!blowAt(f.mistT, b)) {
+    f.mistT = -1;
+    f.mist.visible = false;
+    return;
+  }
+  const { x, y, z } = f.root.position;
+  const ahead = BLOWHOLE.ahead;
+  f.mist.position.set(
+    x - Math.sin(f.yaw) * ahead,
+    y + BLOWHOLE.up + b.rise,
+    z - Math.cos(f.yaw) * ahead,
+  );
+  f.mist.scale.setScalar(b.size);
+  f.mist.material.opacity = b.opacity;
+}
+
 function startRise(
   f: FishState,
   r: Partial<Rise> & { toX: number; toZ: number; dur: number; peak: number },
@@ -82,29 +124,19 @@ function startRise(
     t: 0,
     fromX: f.root.position.x,
     fromZ: f.root.position.z,
-    lunge: false,
-    victim: -1,
     done: false,
     surface: false,
     ...r,
   };
   f.rise = rise;
-  if (rise.lunge) {
-    f.lunge.reset().play();
-    f.lunge.crossFadeFrom(f.swim, FADE, false);
-  }
 }
 
 function endRise(f: FishState): void {
   f.root.rotation.z = 0;
-  if (f.rise?.lunge) {
-    f.swim.enabled = true;
-    f.swim.crossFadeFrom(f.lunge, FADE, false);
-  }
   f.rise = null;
 }
 
-function stepRise(f: FishState, r: Rise, dt: number, horde: Horde | null): void {
+function stepRise(f: FishState, r: Rise, dt: number): void {
   r.t += dt;
   const s = Math.min(1, r.t / r.dur);
   const move = smooth(Math.min(1, s * 2));
@@ -118,11 +150,8 @@ function stepRise(f: FishState, r: Rise, dt: number, horde: Horde | null): void 
   if (r.surface) f.root.rotation.z = surfaceRoll(s);
   if (!r.done && s >= 0.5) {
     r.done = true;
-    if (r.victim >= 0) horde?.takeByFish(r.victim);
-    for (const id of f.victims) horde?.takeByFish(id);
-    f.victims.length = 0;
     playSplash(f, x, z);
-    if (r.surface) playBlow(f);
+    if (r.surface) blowOut(f);
   }
   if (s >= 1) endRise(f);
 }
@@ -132,7 +161,8 @@ function cruise(f: FishState, dt: number, player: { x: number; z: number }): voi
   const targetZ = player.z - LAG_Z;
   const targetX = cruiseTargetX(EDGE_X, f.time);
   const dz = targetZ - pos.z;
-  const stepZ = Math.sign(dz) * Math.min(Math.abs(dz), FISH.follow * dt);
+  const follow = FISH.follow * (1 - SICK.slow * f.sickness);
+  const stepZ = Math.sign(dz) * Math.min(Math.abs(dz), follow * dt);
   const x = pos.x + (targetX - pos.x) * Math.min(1, 2 * dt);
   const dx = x - pos.x;
   f.yaw = turnToward(f.yaw, cruiseHeading(dx / dt, stepZ / dt), 3 * dt);
@@ -216,7 +246,7 @@ function placeWake(f: FishState): void {
   const { x, z } = f.root.position;
   f.wake.position.set(x + Math.sin(f.yaw) * behind, WATER_Y + 0.02, z + Math.cos(f.yaw) * behind);
   f.wake.rotation.set(-Math.PI / 2, f.yaw, 0, 'YXZ');
-  f.wake.visible = f.root.position.y < WAKE_HIDE_Y && f.finale !== 'gone';
+  f.wake.visible = f.root.position.y < WAKE_HIDE_Y && f.finale === 'no';
 }
 
 function startTake(f: FishState): void {
@@ -241,17 +271,14 @@ function startSurface(f: FishState): void {
   });
 }
 
-function startFinale(f: FishState, horde: Horde, player: { x: number; z: number }): void {
-  f.count = 0;
-  horde.forEachAlive(f.collect);
-  f.victims = nearestTo(f.buffer, f.count, FINALE_TAKES, player);
-  let toX = EDGE_X + 1;
-  let toZ = player.z;
-  for (let i = 0; i < f.count; i++) {
-    if (f.buffer[i * 3] !== f.victims[0]) continue;
-    toX = Math.max(f.buffer[i * 3 + 1], EDGE_X + 1);
-    toZ = f.buffer[i * 3 + 2];
-  }
+/** The last leap (see orca-strand.ts): whatever it was doing, it lets go and swims for the shore. */
+function startStrand(
+  f: FishState,
+  noseX: number,
+  noseZ: number,
+  ground: (z: number) => number,
+  horde: Horde,
+): void {
   if (f.rise) endRise(f);
   if (f.grab) {
     if (f.grab.bitten && f.grab.victim >= 0) horde.drown(f.grab.victim);
@@ -259,19 +286,24 @@ function startFinale(f: FishState, horde: Horde, player: { x: number; z: number 
   }
   f.strikes = 0;
   f.takePending = false;
-  f.finale = 'lunge';
-  startRise(f, { toX, toZ, dur: STRIKE_TIME, peak: STRIKE_PEAK_Y, lunge: true });
+  f.finale = 'stranded';
+  const { x, y, z } = f.root.position;
+  f.strand = newStrand({ x, y, z, yaw: f.yaw, pitch: 0 }, strandRest(noseX, noseZ, ground));
 }
 
-function stepSink(f: FishState, dt: number): void {
-  f.sinkT += dt;
-  const { depth, roll } = sinkPose(f.sinkT);
-  const pos = f.root.position;
-  pos.set(pos.x, f.sinkFromY + (SINK_Y - f.sinkFromY) * depth, pos.z - SINK_DRIFT * dt);
-  f.root.rotation.set(0, f.yaw, roll);
-  if (f.sinkT < SINK_TIME) return;
-  f.finale = 'gone';
-  f.root.visible = false;
+function stepStrand(f: FishState, s: Strand, dt: number): void {
+  const was = beached(s);
+  s.t += dt;
+  strandPose(s, f.pose);
+  const { pose } = f;
+  f.root.position.set(pose.x, pose.y, pose.z);
+  f.yaw = pose.yaw;
+  f.root.rotation.set(pose.pitch, pose.yaw, strandRoll(s));
+  if (!was && s.t >= STRAND.approach) {
+    f.lunge.reset().play();
+    f.lunge.crossFadeFrom(f.swim, FADE, false);
+  }
+  if (!was && beached(s)) playSplash(f, pose.x, pose.z - 3);
 }
 
 function updateFish(
@@ -293,28 +325,25 @@ function updateFish(
     f.surfaceIn = nextSurfacing(Math.random());
   }
   f.cooldown = Math.max(0, f.cooldown - dt);
-  if (f.finale === 'sink') {
-    stepSink(f, dt);
+  stepMist(f, dt);
+  if (f.strand) {
+    stepStrand(f, f.strand, dt);
     placeWake(f);
     return;
   }
   if (f.packT >= 0) stepPack(f, dt);
   if (f.grab) stepOrcaGrab(f, dt, horde);
-  else if (f.rise) stepRise(f, f.rise, dt, horde);
-  else if (f.finale === 'lunge') {
-    f.finale = 'sink'; // the lunge is over: it goes under for good
-    f.sinkT = 0;
-    f.sinkFromY = f.root.position.y;
-  } else {
+  else if (f.rise) stepRise(f, f.rise, dt);
+  else {
     if (f.takePending) startTake(f);
     else if (night && f.strikes > 0 && f.cooldown === 0 && horde) tryStrike(f, player, horde);
     if (!f.rise && !f.grab) {
       f.surfaceIn -= dt;
-      if (f.surfaceIn <= 0 && f.finale === 'no') startSurface(f);
+      if (f.surfaceIn <= 0) startSurface(f);
       else cruise(f, dt, player);
     }
   }
-  if (f.finale !== 'sink') f.root.rotation.y = f.yaw;
+  f.root.rotation.y = f.yaw;
   placeWake(f);
 }
 
@@ -335,17 +364,18 @@ function resetFish(f: FishState): void {
   f.takePending = false;
   f.packModel.visible = false;
   if (f.splash.isPlaying) f.splash.stop();
-  if (f.rise?.lunge || f.grab) {
+  if (f.grab || f.strand) {
     f.lunge.stop();
     f.swim.reset().play();
   }
+  f.swim.timeScale = 1;
   f.rise = null;
   f.grab = null; // horde.reset parks a zombie still in the jaws
-  f.root.rotation.x = 0;
-  f.root.rotation.z = 0;
+  f.strand = null;
   f.finale = 'no';
+  f.mistT = -1;
+  f.mist.visible = false;
   f.surfaceIn = nextSurfacing(Math.random());
-  f.victims.length = 0;
   f.root.rotation.set(0, f.yaw, 0);
 }
 
@@ -356,7 +386,9 @@ function disposeFish(f: FishState): void {
   f.splashAt.remove(f.splash, f.blow);
   f.mixer.stopAllAction();
   f.mixer.uncacheRoot(f.body);
-  f.scene.remove(f.root, f.wake, f.packModel, f.splashAt);
+  f.scene.remove(f.root, f.wake, f.packModel, f.splashAt, f.mist);
+  f.mist.material.map?.dispose();
+  f.mist.material.dispose();
   f.wake.geometry.dispose();
   f.wake.material.map?.dispose();
   f.wake.material.dispose();
@@ -381,7 +413,20 @@ export async function createFish(
     get finale() {
       return f.finale;
     },
-    lastLunge: (horde, player) => startFinale(f, horde, player),
+    get beached() {
+      return f.strand !== null && beached(f.strand);
+    },
+    strand: (noseX, noseZ, ground, horde) => startStrand(f, noseX, noseZ, ground, horde),
+    breatheOut() {
+      blowOut(f);
+      if (f.strand) f.strand.still = true;
+      f.swim.timeScale = 0; // the tail stops
+    },
+    setSickness(k) {
+      f.sickness = Math.min(1, Math.max(0, k));
+      tintSick(f.body, f.sickness);
+      mistColor(f.sickness, f.mist.material.color);
+    },
     get strikes() {
       return f.strikes;
     },

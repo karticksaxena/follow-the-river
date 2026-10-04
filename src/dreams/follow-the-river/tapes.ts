@@ -4,7 +4,7 @@ import { voiceFor, voiceHooks } from './voice';
 
 export const TAPES: Readonly<Record<number, readonly string[]>> = {
   1: [
-    'The label says: "Day 41. K — don\'t watch this."',
+    'The label says: "Day 41. K - don\'t watch this."',
     '[Tape hiss. Mom, close to the microphone.]',
     '"Day forty-one. It ate everything we gave it again. It is growing faster than the model said it could."',
     '"Dr. Rao says the enzyme is stable. It isn\'t. Two of the test mice got out last night. They bit Arun."',
@@ -25,6 +25,7 @@ export const TAPES: Readonly<Record<number, readonly string[]>> = {
     '"It started at the lab by the dam, sweetheart. It got out, and it is spreading."',
     '"I let the creature go into the river, so they couldn\'t destroy it."',
     '"It knows my voice. It will protect you, K."',
+    '"But every one of them it takes, it takes the sickness too. It\'s in its blood now. I don\'t know how long it can last."',
     '"If you\'re watching this, you followed the river."',
     "\"I'll wait for you at the lake below the dam. That's where it started. I'm going to fix what I can.\"",
   ],
