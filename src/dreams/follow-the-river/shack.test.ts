@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import * as THREE from 'three/webgpu';
+import { describe, expect, it, vi } from 'vitest';
 import { resolveCircle } from '../../engine/collide';
-import { DOOR_HEIGHT, SHACK_TILE, shackBounds, shackColliders } from './shack';
+import { addShack, DOOR_HEIGHT, SHACK_TILE, shackBounds, shackColliders } from './shack';
 
 const def = { id: 's1', x: -14, z: -20, width: 3, depth: 2 };
 
@@ -30,5 +31,15 @@ describe('shack', () => {
 
   it('has a doorway tall enough to walk through', () => {
     expect(DOOR_HEIGHT).toBeGreaterThanOrEqual(2);
+  });
+
+  it('uses MeshStandardMaterial for walls, roof and floor so they receive environment light', async () => {
+    vi.stubGlobal('document', { createElement: () => ({ getContext: () => null }) });
+    const scene = new THREE.Scene();
+    await addShack(scene, def);
+    vi.unstubAllGlobals();
+    const meshes = scene.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh);
+    expect(meshes.length).toBeGreaterThanOrEqual(3);
+    for (const m of meshes) expect(m.material).toBeInstanceOf(THREE.MeshStandardMaterial);
   });
 });

@@ -23,6 +23,10 @@ const STRIPE_COLOR = '#4a443e';
 /** Corrugation stripes are ~10 cm wide: the 64 px texture (8 px per stripe) covers 0.8 m. */
 const TEXTURE_METRES = 0.8;
 const FLOOR_COLOR = 0x2c2a26;
+// Standard (not Lambert) so the shacks receive scene.environment light like everything else.
+const SHACK_ROUGHNESS = 0.75;
+const SHACK_METALNESS = 0.15;
+const FLOOR_ROUGHNESS = 0.95;
 
 /** Door tile index along z (the middle tile; the upper middle for even widths). */
 function doorTile(def: ShackDef): number {
@@ -63,10 +67,10 @@ export function shackColliders(def: ShackDef): Box[] {
   ];
 }
 
-let metal: THREE.MeshLambertMaterial | null = null;
+let metal: THREE.MeshStandardMaterial | null = null;
 
 /** One shared dark rusty corrugated-metal material, built on first use. */
-function metalMaterial(): THREE.MeshLambertMaterial {
+function metalMaterial(): THREE.MeshStandardMaterial {
   if (metal) return metal;
   const canvas = document.createElement('canvas');
   canvas.width = 64;
@@ -82,7 +86,11 @@ function metalMaterial(): THREE.MeshLambertMaterial {
   map.wrapS = THREE.RepeatWrapping;
   map.wrapT = THREE.RepeatWrapping;
   map.colorSpace = THREE.SRGBColorSpace;
-  metal = new THREE.MeshLambertMaterial({ map });
+  metal = new THREE.MeshStandardMaterial({
+    map,
+    roughness: SHACK_ROUGHNESS,
+    metalness: SHACK_METALNESS,
+  });
   return metal;
 }
 
@@ -135,7 +143,11 @@ export function addShack(scene: THREE.Scene, def: ShackDef): Promise<void> {
   roofGeometry.translate(def.x, WALL_HEIGHT + ROOF_THICKNESS / 2, def.z);
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(b.maxX - b.minX, b.maxZ - b.minZ),
-    new THREE.MeshLambertMaterial({ color: FLOOR_COLOR }),
+    new THREE.MeshStandardMaterial({
+      color: FLOOR_COLOR,
+      roughness: FLOOR_ROUGHNESS,
+      metalness: 0,
+    }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(def.x, 0.02, def.z);
