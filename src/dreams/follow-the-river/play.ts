@@ -10,7 +10,17 @@ import { applyDim, LIGHTING } from './lighting';
 import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
 import { addSupply, AMMO_OF, chapterOf, isNight } from './state';
-import { ambushSpot, objective, reservedFrom, spawnSpot, stepWaves, type SpawnView } from './waves';
+import {
+  ambushPlace,
+  ambushSpot,
+  isPlaced,
+  objective,
+  placeOk,
+  reservedFrom,
+  spawnSpot,
+  stepWaves,
+  type SpawnView,
+} from './waves';
 import type { Tuning } from './zombies/brain';
 import type { PlayerSense } from './zombies/horde';
 
@@ -28,6 +38,8 @@ const NIGHT_STRIP_MARGIN = 0.5;
 const AMBUSH_ALERT = 6;
 /** A spawn whose every try was blocked is retried after this many seconds. */
 const RETRY_SPAWN = 0.5;
+/** Most lying and cover zombies one wave puts down at its start. */
+const MAX_PENDING = 16;
 
 export interface Play {
   update(dt: number): void;
@@ -48,6 +60,9 @@ interface State {
   waveTuning: Tuning;
   zone: { startZ: number; gateZ: number; minX: number; maxX: number };
   view: SpawnView;
+  /** Lying and cover zombies of the wave in play waiting for their spot to be out of sight. */
+  pending: { x: number; z: number; lying: boolean }[];
+  pendingN: number;
   controls: Controls;
   look: THREE.Vector3;
   /** Seconds the torch has been off (it recharges after a moment). */
@@ -92,6 +107,8 @@ function createState(sys: Systems, run: Run, events: Events): State {
     waveTuning: nightTuning(chapter, sys.ctx.difficulty()),
     zone: { startZ: 0, gateZ: 0, minX: area.landX + 1, maxX: EDGE_X - NIGHT_STRIP_MARGIN },
     view: { lookX: 0, lookZ: -1, fogFar: 55 },
+    pending: Array.from({ length: MAX_PENDING }, () => ({ x: 0, z: 0, lying: false })),
+    pendingN: 0,
     controls: createControls(sys, run, events, sense),
     look: new THREE.Vector3(),
     offFor: 0,
@@ -169,7 +186,41 @@ function tickWorld(p: State, dt: number): void {
   sys.pickups.update(dt);
 }
 
-/** A wave begins: its difficulty and zombie tuning (the night's plus the wave's `faster`) are fixed for it. */
+/** What the player sees now: the look direction and how far the fog lets them see. */
+function refreshView(p: State): void {
+  const { sys, sense, view } = p;
+  const fog = sys.world.lights.scene.fog;
+  view.lookX = sense.look.x;
+  view.lookZ = sense.look.z;
+  view.fogFar = fog instanceof THREE.Fog ? fog.far : (sys.area.nightFog ?? view.fogFar);
+}
+
+/** A free spot of `ambush` on the bank (6 tries), or null. */
+function freeAmbushSpot(p: State, ambush: AmbushDef): { x: number; z: number } | null {
+  const { sense, zone, view } = p;
+  for (let tries = 0; tries < 6; tries++) {
+    const at = isPlaced(ambush)
+      ? ambushSpot(ambush, sense, zone.gateZ, zone.minX, zone.maxX, Math.random)
+      : ambushPlace(ambush, sense, zone, view, Math.random);
+    if (!p.blocked(at.x, at.z)) return at;
+  }
+  return null;
+}
+
+/** Puts down the waiting lying and cover zombies whose spot is out of sight (or far off), the rest stay queued. */
+function flushPending(p: State): void {
+  const { sys, sense, view } = p;
+  for (let i = p.pendingN - 1; i >= 0; i--) {
+    const q = p.pending[i];
+    if (!q || !placeOk(sense, q, view)) continue;
+    sys.horde.spawn(q.x, q.z, Math.atan2(sense.x - q.x, sense.z - q.z), p.waveTuning, q.lying);
+    p.pendingN--;
+    const last = p.pending[p.pendingN];
+    if (last) Object.assign(q, last); // ponytail: swap-remove keeps the queue allocation-free
+  }
+}
+
+/** A wave begins: tuning fixed for it, and its lying and cover zombies are put in place (queued while in sight). */
 function startWave(p: State, wave: number): void {
   const { sys } = p;
   const def = sys.area.waves[wave];
@@ -178,16 +229,28 @@ function startWave(p: State, wave: number): void {
   p.waveTuning = { ...base, speed: base.speed + def.faster };
   p.zone.startZ = def.z;
   p.zone.gateZ = def.gateZ;
+  p.pendingN = 0;
+  for (const a of def.ambushes) {
+    if (!isPlaced(a)) continue;
+    for (let i = 0; i < a.count && p.pendingN < p.pending.length; i++) {
+      const at = freeAmbushSpot(p, a);
+      const q = p.pending[p.pendingN];
+      if (!at || !q) continue;
+      q.x = at.x;
+      q.z = at.z;
+      q.lying = a.kind === 'lying';
+      p.pendingN++;
+    }
+  }
+  refreshView(p);
+  flushPending(p);
   p.events.hint('wave');
 }
 
-/** One zombie that keeps the wave coming, on a free spot out of your face, hunting at once. */
+/** One zombie that keeps the wave coming, on a free spot out of sight, hunting at once. */
 function spawnOne(p: State): void {
   const { sys, sense, zone, view, run } = p;
-  const fog = sys.world.lights.scene.fog;
-  view.lookX = sense.look.x;
-  view.lookZ = sense.look.z;
-  view.fogFar = fog instanceof THREE.Fog ? fog.far : (sys.area.nightFog ?? view.fogFar);
+  refreshView(p);
   for (let tries = 0; tries < 6; tries++) {
     const at = spawnSpot(sense, zone, view, Math.random);
     if (p.blocked(at.x, at.z)) continue;
@@ -199,15 +262,41 @@ function spawnOne(p: State): void {
   run.waves.nextIn = RETRY_SPAWN;
 }
 
+/** An ambush springs: street and behind zombies come out of sight and hunt; the placed ones are alerted. */
+function springAmbush(p: State, ambush: AmbushDef): void {
+  const { sys, sense, run } = p;
+  if (isPlaced(ambush)) {
+    if (ambush.kind === 'cover')
+      sys.horde.alert(ambush.x ?? sense.x, ambush.at ?? sense.z, AMBUSH_ALERT);
+    return;
+  }
+  refreshView(p);
+  let spot: { x: number; z: number } | null = null;
+  for (let i = 0; i < ambush.count; i++) {
+    const at = freeAmbushSpot(p, ambush);
+    if (!at) {
+      run.waves.toSpawn++; // owed: the continuous spawner sends it instead
+      continue;
+    }
+    sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), p.waveTuning, false);
+    spot ??= at;
+  }
+  if (spot) sys.horde.alert(spot.x, spot.z, AMBUSH_ALERT);
+}
+
 /** The night's waves: start when you pass one, keep sending zombies, spring its ambushes, open the barricade when it's dead. */
 function tickWaves(p: State, dt: number): void {
   const { sys, run, sense } = p;
   if (!run.waves.fighting) p.waveD = DIFFICULTY[sys.ctx.difficulty()];
+  else if (p.pendingN > 0) {
+    refreshView(p);
+    flushPending(p);
+  }
   const event = stepWaves(
     run.waves,
     sys.area.waves,
     sense.z,
-    sys.horde.aliveCount(),
+    sys.horde.aliveCount() + p.pendingN,
     dt,
     p.waveD,
     Math.random,
@@ -218,26 +307,7 @@ function tickWaves(p: State, dt: number): void {
     sys.gates.open(event.wave);
     p.events.checkpoint(event.wave + 1);
   } else if (event.kind === 'one') spawnOne(p);
-  else spawnAmbush(p, event.ambush);
-}
-
-/** One ambush's zombies, each on a free spot of the bank; the lying ones keep still until woken. */
-function spawnAmbush(p: State, ambush: AmbushDef): void {
-  const { sys, sense, run } = p;
-  const gateZ = sys.area.waves[run.waves.cleared]?.gateZ ?? sys.area.safeZ;
-  const maxX = EDGE_X - NIGHT_STRIP_MARGIN;
-  const lying = ambush.kind === 'lying';
-  let spot: { x: number; z: number } | null = null;
-  for (let i = 0; i < ambush.count; i++) {
-    for (let tries = 0; tries < 6; tries++) {
-      const at = ambushSpot(ambush, sense, gateZ, sys.area.landX + 1, maxX, Math.random);
-      if (p.blocked(at.x, at.z)) continue;
-      sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), p.waveTuning, lying);
-      spot ??= at;
-      break;
-    }
-  }
-  if (spot && !lying) sys.horde.alert(spot.x, spot.z, AMBUSH_ALERT);
+  else springAmbush(p, event.ambush);
 }
 
 /** Shack darkness: eases toward 1 inside, 0 outside; lights are touched only when it moved. */
@@ -273,7 +343,7 @@ function syncCutscene(p: State): void {
 function isWaiting(p: State): boolean {
   const def = p.sys.area.waves[p.run.waves.cleared];
   const w = p.run.waves;
-  return !!def && p.sys.horde.aliveCount() === 0 && w.toSpawn <= reservedFrom(def, w.fired);
+  return !!def && p.sys.horde.awakeCount() === 0 && w.toSpawn <= reservedFrom(def, w.fired);
 }
 
 function tickView(p: State, dt: number): void {
@@ -370,6 +440,7 @@ export function createPlay(sys: Systems, run: Run, events: Events): Play {
       p.cutscene = false;
       p.torchBefore = false;
       p.sys.hud.setHidden(false);
+      p.pendingN = 0;
       p.toldAboutWait = false;
       p.wasInShack = false;
       p.hitPause = false;

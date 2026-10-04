@@ -6,10 +6,14 @@ import type { WaveDef } from './areas/types';
 import { spawnFor } from './flow';
 import { EDGE_X } from './river';
 import {
+  ambushPlace,
   ambushSpot,
   edgePickups,
+  fallbackSpot,
+  inCone,
   newWaveState,
   objective,
+  placeOk,
   spawnSpot,
   stepWaves,
   WAVE,
@@ -208,6 +212,97 @@ describe('spawn spots', () => {
     for (let i = 0; i < 1000; i++)
       if (spawnSpot({ x: -2, z: -180 }, zone, view, r).z < -180) ahead++;
     expect(ahead).toBeLessThan(300);
+  });
+});
+
+describe('fallback and ambush placement', () => {
+  const zone = { startZ: -134, gateZ: -239, minX: -17, maxX: 2.5 };
+  const down = { lookX: 0, lookZ: -1, fogFar: 45 };
+
+  it('the fallback is 12-20 m off, on the bank, random, and flips at the zone ends', () => {
+    const r = rng(8);
+    const zs = new Set<number>();
+    for (const [pz, look] of [
+      [-180, -1],
+      [-237, -1],
+      [-124, -1], // at the upstream end facing downstream: behind is outside, so flip is unseen only if out of cone
+      [-135, 1],
+    ] as const) {
+      for (let i = 0; i < 300; i++) {
+        const s = fallbackSpot({ x: 2.7, z: pz }, zone, { ...down, lookZ: look }, r);
+        zs.add(s.z);
+        expect(s.x).toBeLessThanOrEqual(zone.maxX);
+        expect(s.x).toBeGreaterThanOrEqual(zone.minX);
+        const dist = Math.hypot(s.x - 2.7, s.z - pz);
+        expect(dist).toBeGreaterThanOrEqual(12 - 1e-9);
+        expect(dist).toBeLessThanOrEqual(25);
+        expect(inCone({ x: 2.7, z: pz }, s, { ...down, lookZ: look })).toBe(false);
+      }
+    }
+    expect(zs.size).toBeGreaterThan(100);
+  });
+
+  it('street and behind ambushes never appear in view inside the fog', () => {
+    const r = rng(12);
+    const cone = Math.cos((75 * Math.PI) / 180);
+    const bad: string[] = [];
+    for (const look of [-1, 1])
+      for (const kind of ['street', 'behind'] as const)
+        for (let i = 0; i < 1000; i++) {
+          const p = { x: -2, z: -180 };
+          const s = ambushPlace({ z: -180, count: 1, kind }, p, zone, { ...down, lookZ: look }, r);
+          const dist = Math.hypot(s.x - p.x, s.z - p.z);
+          if (dist < 12 - 1e-9) bad.push(`close ${dist}`);
+          if (((s.z - p.z) * look) / dist > cone && dist < 42) bad.push(`seen ${dist}`);
+        }
+    expect(bad).toEqual([]);
+  });
+
+  it('street ambushes still come from the land side', () => {
+    const r = rng(13);
+    let land = 0;
+    for (let i = 0; i < 300; i++) {
+      const s = ambushPlace(
+        { z: -180, count: 1, kind: 'street' },
+        { x: -2, z: -180 },
+        zone,
+        down,
+        r,
+      );
+      if (s.x < -10) land++;
+    }
+    expect(land).toBeGreaterThan(150);
+  });
+
+  it('puts lying and cover zombies down at the start: not reserved, trigger only alerts', () => {
+    const placed: WaveDef = {
+      ...def,
+      quota: 8,
+      ambushes: [
+        { z: -150, count: 2, kind: 'lying', x: -4, at: -170 },
+        { z: -160, count: 1, kind: 'street' },
+      ],
+    };
+    const w = newWaveState();
+    const r = rng(2);
+    expect(stepWaves(w, [placed], -136, 0, 0.1, N, r)?.kind).toBe('start');
+    expect(w.toSpawn).toBe(6); // 8 minus the 2 placed
+    let spawned = 0;
+    for (let t = 0; t < 200; t += 0.1) {
+      const e = stepWaves(w, [placed], -136, 2, 0.1, N, r); // the two lying ones are alive
+      if (e?.kind === 'one') spawned++;
+    }
+    expect(spawned).toBe(5); // 6 minus the street ambush still reserved
+    const e = stepWaves(w, [placed], -151, 2, 0.1, N, r);
+    expect(e).toMatchObject({ kind: 'spawn' });
+    expect(w.toSpawn).toBe(1); // the lying trigger took nothing
+  });
+
+  it('places lying zombies only out of view or far off', () => {
+    const p = { x: -2, z: -180 };
+    expect(placeOk(p, { x: -2, z: -200 }, down)).toBe(false); // ahead, 20 m
+    expect(placeOk(p, { x: -2, z: -220 }, down)).toBe(true); // ahead, 40 m
+    expect(placeOk(p, { x: -2, z: -160 }, down)).toBe(true); // behind
   });
 });
 

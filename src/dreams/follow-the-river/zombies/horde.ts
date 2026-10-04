@@ -54,6 +54,8 @@ export interface Horde {
   /** Alive zombies (not dying, taken or dead). */
   forEachAlive(fn: (id: number, x: number, z: number) => void): void;
   aliveCount(): number;
+  /** Alive and awake: not lying down and not standing idle (rising, chasing, hitting, stunned). */
+  awakeCount(): number;
   reset(): void;
   dispose(): void;
 }
@@ -289,6 +291,15 @@ function aliveCount(bodies: readonly Body[]): number {
   return n;
 }
 
+function awakeCount(bodies: readonly Body[]): number {
+  let n = 0;
+  for (const b of bodies) {
+    const s = b.mind.state;
+    if (b.active && isAlive(b.mind) && s !== 'lying' && s !== 'idle') n++;
+  }
+  return n;
+}
+
 function resetHorde(h: HordeState): void {
   h.voices.stopAll();
   for (const b of h.bodies) park(b);
@@ -372,6 +383,7 @@ export async function createHorde(
       }
     },
     aliveCount: () => aliveCount(bodies),
+    awakeCount: () => awakeCount(bodies),
     reset: () => resetHorde(h),
     dispose: () => disposeHorde(h),
   };

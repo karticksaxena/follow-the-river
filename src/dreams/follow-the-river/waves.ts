@@ -56,8 +56,15 @@ export const waveTotal = (def: WaveDef): number => def.ambushes.reduce((n, a) =>
 export const quotaOf = (def: WaveDef, k: number): number =>
   Math.max(waveTotal(def), Math.round(def.quota * k));
 
+/** Lying and cover ambushes are put in place when the wave starts (nothing pops in); the trigger only alerts them. */
+export const isPlaced = (a: AmbushDef): boolean => a.kind === 'lying' || a.kind === 'cover';
+
+const placedTotal = (def: WaveDef): number =>
+  def.ambushes.reduce((n, a) => n + (isPlaced(a) ? a.count : 0), 0);
+
+/** Zombies still held back for ambushes not yet sprung (the placed ones are already down). */
 export const reservedFrom = (def: WaveDef, fired: number): number =>
-  def.ambushes.slice(fired).reduce((n, a) => n + a.count, 0);
+  def.ambushes.slice(fired).reduce((n, a) => n + (isPlaced(a) ? 0 : a.count), 0);
 
 const ONE: WaveEvent = { kind: 'one' };
 
@@ -81,14 +88,14 @@ export function stepWaves(
     if (z > def.z) return null;
     w.fighting = true;
     w.fired = 0;
-    w.toSpawn = quotaOf(def, d.quota);
+    w.toSpawn = quotaOf(def, d.quota) - placedTotal(def); // the placed ones are put down at the start
     w.nextIn = 0;
     return { kind: 'start', wave: w.cleared };
   }
   const next = def.ambushes[w.fired];
   if (next && z <= next.z) {
     w.fired++;
-    w.toSpawn -= next.count;
+    if (!isPlaced(next)) w.toSpawn -= next.count;
     return { kind: 'spawn', ambush: next };
   }
   w.nextIn -= dt;
@@ -116,6 +123,8 @@ export const SPAWN = {
   halfView: (75 * Math.PI) / 180,
   fogMargin: 3,
   tries: 10,
+  /** The last-resort spot is this much further than keepAway at most (m). */
+  fallbackSpread: 8,
 } as const;
 
 /** A z `keepAway` from the player for a spawn `dx` across: on the side asked, else the other. */
@@ -136,16 +145,31 @@ export interface SpawnView {
 type Zone = { startZ: number; gateZ: number; minX: number; maxX: number };
 type Spot = { x: number; z: number };
 
-/** True when the spot is inside the view cone and close enough to be seen through the fog. */
-function seen(player: Spot, s: Spot, v: SpawnView, facing: number): boolean {
+/** True when the spot is inside the player's view cone (any distance). */
+export function inCone(player: Spot, s: Spot, v: SpawnView): boolean {
   const dx = s.x - player.x;
   const dz = s.z - player.z;
-  const dist = Math.hypot(dx, dz);
-  if (dist >= v.fogFar - SPAWN.fogMargin) return false;
   const len = Math.hypot(v.lookX, v.lookZ);
-  const [lx, lz] = len < 1e-3 ? [0, facing] : [v.lookX / len, v.lookZ / len];
-  return dx * lx + dz * lz > Math.cos(SPAWN.halfView) * dist;
+  const lx = len < 1e-3 ? 0 : v.lookX / len;
+  const lz = len < 1e-3 ? -1 : v.lookZ / len;
+  return dx * lx + dz * lz > Math.cos(SPAWN.halfView) * Math.hypot(dx, dz);
 }
+
+/** True when the spot is in view and close enough to be seen through the fog. */
+function seen(player: Spot, s: Spot, v: SpawnView): boolean {
+  return (
+    Math.hypot(s.x - player.x, s.z - player.z) < v.fogFar - SPAWN.fogMargin && inCone(player, s, v)
+  );
+}
+
+/** Lying and cover zombies placed at a wave's start may appear in view only this far away (m). */
+export const PLACE_FAR = 30;
+
+/** True when a spot placed at the wave's start would not visibly pop in (out of view, or far enough). */
+export const placeOk = (player: Spot, s: Spot, v: SpawnView): boolean =>
+  Math.hypot(s.x - player.x, s.z - player.z) > PLACE_FAR || !inCone(player, s, v);
+
+const clampTo = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
 
 /** One candidate: forward 25 %, behind 45 %, land side 30 %; at least `keepAway` from the player. */
 function candidate(
@@ -183,13 +207,51 @@ export function spawnSpot(player: Spot, zone: Zone, view: SpawnView, rand: () =>
   const facing = view.lookZ > 0 ? 1 : -1;
   for (let tries = 0; tries < SPAWN.tries; tries++) {
     const s = candidate(player, zone, view, facing, rand);
-    if (!seen(player, s, view, facing)) return s;
+    if (!seen(player, s, view)) return s;
   }
-  // nothing unseen: straight behind you, as far as the zone allows
+  return fallbackSpot(player, zone, view, rand);
+}
+
+/**
+ * Pure: the last resort, 12-20 m off (random, so retries differ), always on the bank: straight
+ * behind you; else beside you along the bank, at your z (out of the cone); else the other side of
+ * you at the zone's end, even if seen (only when the zone is too short for anything else).
+ */
+export function fallbackSpot(player: Spot, zone: Zone, view: SpawnView, rand: () => number): Spot {
+  const facing = view.lookZ > 0 ? 1 : -1;
   const lo = zone.gateZ + 2;
   const hi = zone.startZ + SPAWN.behindMax;
-  const z = Math.max(lo, Math.min(hi, player.z - facing * (SPAWN.keepAway + 2)));
-  return { x: player.x, z };
+  const d = SPAWN.keepAway + rand() * SPAWN.fallbackSpread;
+  const x = clampTo(player.x, zone.minX, zone.maxX);
+  const behind = { x, z: player.z - facing * d };
+  if (behind.z >= lo && behind.z <= hi) return behind;
+  const side = player.x - zone.minX >= SPAWN.keepAway ? zone.minX : zone.maxX;
+  const beside = { x: side, z: clampTo(player.z + (rand() - 0.5) * 4, lo, hi) };
+  if (Math.abs(side - player.x) >= SPAWN.keepAway) return beside;
+  return { x, z: clampTo(player.z + facing * d, lo, hi) };
+}
+
+/**
+ * Pure: where one zombie of a street or behind ambush appears, with the same rule as `spawnSpot`
+ * (never seen popping in, 12 m off). Street ones come from the land side, beside you if need be.
+ * Lying and cover zombies are placed at the wave's start instead (see `placeOk`).
+ */
+export function ambushPlace(
+  a: AmbushDef,
+  player: Spot,
+  zone: Zone,
+  view: SpawnView,
+  random: () => number,
+): Spot {
+  for (let tries = 0; tries < SPAWN.tries; tries++) {
+    const beside = a.kind === 'street' && tries >= SPAWN.tries / 2;
+    const s = beside
+      ? { x: zone.minX + random() * SPAWN.flank, z: player.z + (random() - 0.5) * 6 }
+      : ambushSpot(a, player, zone.gateZ, zone.minX, zone.maxX, random);
+    if (Math.hypot(s.x - player.x, s.z - player.z) >= SPAWN.keepAway && !seen(player, s, view))
+      return s;
+  }
+  return fallbackSpot(player, zone, view, random);
 }
 
 /** Pure: where one zombie of an ambush goes, on the bank within [minX, maxX], never past the gate. */
