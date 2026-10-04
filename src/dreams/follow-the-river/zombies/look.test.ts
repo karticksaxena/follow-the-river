@@ -1,5 +1,15 @@
+import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { bodyHit, CLIP_FOR, OUTFITS, pickOutfit, RIM, rimStrength, timeScaleFor } from './look';
+import {
+  addRim,
+  bodyHit,
+  CLIP_FOR,
+  OUTFITS,
+  pickOutfit,
+  RIM,
+  rimStrength,
+  timeScaleFor,
+} from './look';
 
 describe('zombie looks', () => {
   it('uses every outfit before repeating one', () => {
@@ -41,5 +51,20 @@ describe('moon rim', () => {
     expect(rimStrength(0.5)).toBeCloseTo(RIM.strength / 2);
     expect(rimStrength(3)).toBe(RIM.strength);
     expect(RIM.strength).toBeLessThan(0.5); // faint: it must not brighten the scene
+  });
+
+  it('rims one shared twin per source material and leaves orca materials alone', () => {
+    const skin = new THREE.MeshStandardMaterial({ name: 'skin' });
+    const orca = new THREE.MeshStandardMaterial({ name: 'orca-body' });
+    const g = new THREE.BufferGeometry();
+    const [a, b, c] = [skin, skin, orca].map((m) => new THREE.Mesh(g, m));
+    const root = new THREE.Group().add(a, b, c);
+    addRim(root);
+    expect(a.material).not.toBe(skin);
+    expect(a.material).toBe(b.material);
+    expect(c.material).toBe(orca);
+    const other = new THREE.Mesh(g, skin);
+    addRim(other);
+    expect(other.material).toBe(a.material);
   });
 });

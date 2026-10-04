@@ -70,6 +70,8 @@ export interface Fish {
   readonly lastStrike: { readonly x: number; readonly z: number } | null;
   /** Where her eye is now (read-only; writes `out`), for the torch's eye adjustment. Null before she is placed. */
   head(out: { x: number; y: number; z: number }): typeof out | null;
+  /** True while she is out of the water: blowing, breaching, mid-strike or stranded (not just a fin). */
+  readonly surfaced: boolean;
   /** Night: strikes left this phase. */
   readonly strikes: number;
   /** Arms `strikes` for the night, struck in `style` (a normal night's by default). */
@@ -80,6 +82,17 @@ export interface Fish {
   update(dt: number, player: { x: number; z: number }, horde: Horde | null, night: boolean): void;
   reset(): void;
   dispose(): void;
+}
+
+/**
+ * Writes her head into `out` and returns true only while she is surfaced or stranded and placed:
+ * the torch's exposure watches her then (else it must be cleared).
+ */
+export function drasWatchPoint(
+  fish: Pick<Fish, 'surfaced' | 'head'>,
+  out: { x: number; y: number; z: number },
+): boolean {
+  return fish.surfaced && fish.head(out) !== null;
 }
 
 /** In the last stand she fights beside you: a finite guard (see `Fish.setGuards`). */
@@ -435,6 +448,12 @@ export async function createFish(
       f.placed
         ? headPoint(f.root.position.x, f.root.position.y, f.root.position.z, f.yaw, out)
         : null,
+    get surfaced() {
+      return (
+        f.placed &&
+        (f.rise?.surface === true || f.mistT >= 0 || f.grab !== null || f.strand !== null)
+      );
+    },
     get strikes() {
       return f.strikes;
     },

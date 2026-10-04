@@ -4,6 +4,7 @@ import type { AmbushDef } from './areas/types';
 import { createControls, cutsceneChange, type Controls } from './controls';
 import { DIFFICULTY, nightTuning, type DifficultyTuning } from './difficulty';
 import { nightEnd } from './ending';
+import { drasWatchPoint } from './fish';
 import {
   BEAM,
   chargeBattery,
@@ -203,6 +204,8 @@ function moveMotion(p: State, dt: number): void {
   sys.motion.update(dt);
 }
 
+const drasEye = { x: 0, y: 0, z: 0 }; // reused each frame: no allocation
+
 /** Every rendered frame, pages and cutscenes included: the torch's eye adjustment and the water's tier. */
 function lightTorch(p: State, dt: number): void {
   const { sys, run } = p;
@@ -210,6 +213,9 @@ function lightTorch(p: State, dt: number): void {
   setTorchShadowTier(sys.flashlight.light, sys.ctx.stage.tier);
   sys.flashlight.clearWatch(WATCH.horde);
   sys.horde.forEachAlive(p.watchZombie);
+  if (drasWatchPoint(sys.fish, drasEye)) {
+    sys.flashlight.watch(WATCH.dras, drasEye.x, drasEye.y, drasEye.z);
+  } else sys.flashlight.clearWatch(WATCH.dras);
   sys.flashlight.apply(run.live.supplies.battery, run.time, dt);
   moveMotion(p, dt);
 }
@@ -532,6 +538,7 @@ export function createPlay(sys: Systems, run: Run, events: Events): Play {
       p.offFor = 0;
       p.sys.flashlight.clearWatch(WATCH.horde);
       p.sys.flashlight.clearWatch(WATCH.mom);
+      p.sys.flashlight.clearWatch(WATCH.dras);
       // beginPhase already cleared run.cutscene and set the torch: just forget the cutscene (no restore).
       p.cutscene = false;
       p.torchBefore = false;

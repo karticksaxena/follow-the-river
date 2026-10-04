@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { waterlineX } from './banks';
 import { ANATOMY } from './dras-anatomy';
-import { canThrow, cruiseHeading, FISH, pickStrike, strikesFor } from './fish';
+import { canThrow, cruiseHeading, drasWatchPoint, FISH, pickStrike, strikesFor } from './fish';
 import {
   BODY_HALF_WIDTH,
   cruiseTargetX,
@@ -105,5 +105,18 @@ describe('the last stand beside you', () => {
     expect(FIGHT.laneIn).toBe(2);
     expect(fightSurfacing(0)).toBe(6);
     expect(fightSurfacing(0.999)).toBeLessThan(10);
+  });
+
+  it('feeds the torch her head only while she is surfaced or stranded and placed', () => {
+    const out = { x: 0, y: 0, z: 0 };
+    const head = { x: 1, y: 2, z: 3 };
+    const fish = (surfaced: boolean, placed: boolean): Parameters<typeof drasWatchPoint>[0] => ({
+      surfaced,
+      head: (o: typeof out) => (placed ? Object.assign(o, head) : null),
+    });
+    expect(drasWatchPoint(fish(false, true), out)).toBe(false); // under water or only the fin up
+    expect(drasWatchPoint(fish(true, false), out)).toBe(false); // not placed / after a reset
+    expect(drasWatchPoint(fish(true, true), out)).toBe(true);
+    expect(out).toEqual(head);
   });
 });
