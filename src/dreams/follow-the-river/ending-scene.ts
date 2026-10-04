@@ -7,11 +7,29 @@ import { EDGE_X, shoreY } from './river';
 import type { Systems } from './run';
 
 /** Tuning knobs. Mom's lantern is the chapter's lantern, beside her on the pebbles. */
-export const MOM_LANTERN = { intensity: 2, distance: 14, height: 1.3 } as const;
+export const MOM_LANTERN = { intensity: 1.6, distance: 14, height: 1.3 } as const;
 const LANTERN_SIZE = { width: 0.14, height: 0.24 } as const;
 const LANTERN_COLOR = 0xc07a30; // dim, so bloom only haloes it
 const LANTERN_GLOW_UP = 0.05;
+/** The light hangs this far (m) out from the lantern toward the camera: a point light right against her arm, hand and dress is a 1/d² hot spot that blooms. */
+export const LANTERN_OUT = 0.45;
 const lamp = new THREE.Vector3();
+
+/** Pure: where the lantern's light goes: `LANTERN_OUT` m from `hand` toward `cam` on the ground plane. Writes `out`. */
+export function lanternSpot(
+  hand: { x: number; y: number; z: number },
+  cam: { x: number; z: number },
+  out: { x: number; y: number; z: number },
+): typeof out {
+  const dx = cam.x - hand.x;
+  const dz = cam.z - hand.z;
+  const len = Math.hypot(dx, dz);
+  const [ux, uz] = len > 1e-6 ? [dx / len, dz / len] : [0, 1];
+  out.x = hand.x + ux * LANTERN_OUT;
+  out.y = hand.y + LANTERN_GLOW_UP;
+  out.z = hand.z + uz * LANTERN_OUT;
+  return out;
+}
 
 /** The yaw that points a model's +Z from `(x, z)` toward `(toX, toZ)`. */
 export function facing(x: number, z: number, toX: number, toZ: number): number {
@@ -79,7 +97,7 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
       if (lakeZ !== null) mom.group.position.y = shoreY(mom.group.position.z - lakeZ);
       if (held) {
         mom.pack.getWorldPosition(lamp); // the lantern mesh rides her right hand
-        held.position.set(lamp.x, lamp.y + LANTERN_GLOW_UP, lamp.z);
+        lanternSpot(lamp, sys.ctx.stage.camera.position, held.position);
       }
     },
     place(toX, toZ, lantern) {

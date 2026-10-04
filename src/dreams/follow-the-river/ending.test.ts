@@ -16,7 +16,14 @@ import {
   type EndingStep,
 } from './ending';
 import { FAREWELL, FAREWELL_PAGES, shoreFor } from './ending-farewell';
-import { facing, retreatPoint, stopShort } from './ending-scene';
+import {
+  facing,
+  LANTERN_OUT,
+  lanternSpot,
+  MOM_LANTERN,
+  retreatPoint,
+  stopShort,
+} from './ending-scene';
 import { EDGE_X } from './river';
 import { freshRun, restartPhase, SUPPLY_LIMITS, type GunKind } from './state';
 
@@ -190,5 +197,29 @@ describe("Mom's movement", () => {
     expect(p.x).toBeCloseTo(0);
     expect(p.z).toBeCloseTo(4.5);
     expect(stopShort({ x: 1, z: 1 }, { x: 1, z: 2 }, 1.5)).toEqual({ x: 1, z: 1 });
+  });
+});
+
+describe("Mom's lantern light", () => {
+  it('sits out from the hand toward the camera, clear of her body', () => {
+    const hand = { x: 2, y: 1, z: 5 };
+    for (const cam of [
+      { x: 2, y: 1.6, z: 9 },
+      { x: -4, y: 1.6, z: 5 },
+      { x: 2, y: 1.6, z: 5 },
+    ]) {
+      const out = { x: 0, y: 0, z: 0 };
+      lanternSpot(hand, cam, out);
+      const d = Math.hypot(out.x - hand.x, out.z - hand.z);
+      expect(Math.hypot(d, out.y - hand.y)).toBeGreaterThanOrEqual(0.25);
+      expect(d).toBeCloseTo(LANTERN_OUT);
+      const toCam = (cam.x - hand.x) * (out.x - hand.x) + (cam.z - hand.z) * (out.z - hand.z);
+      expect(toCam >= 0).toBe(true);
+    }
+  });
+
+  it('lights her softly from outside, and is nearly out by sunrise', () => {
+    expect(LANTERN_OUT).toBeGreaterThanOrEqual(0.3);
+    expect(MOM_LANTERN.intensity).toBeLessThanOrEqual(2);
   });
 });

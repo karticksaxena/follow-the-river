@@ -31,7 +31,7 @@ const HANDOVER = 0.1;
 /** Seconds between image-based light refreshes while the dawn blends (six 128 px faces each). */
 const ENV_EVERY = 0.5;
 /** How much of the lantern's light is left once the moon has set. */
-const LANTERN_LEFT = 0.5;
+const LANTERN_LEFT = 0.15;
 /** The stars are gone by this share of the dawn (they fade across the switch, never pop). */
 const STARS_GONE = 0.5;
 /** The painted dome fades out over the physical sky between these shares of phase two. */
