@@ -14,6 +14,10 @@ steps that made them, so they can be rebuilt or changed.
   --python tools/blender/orca.py -- public/assets/characters/orca.glb
 /Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
   --python tools/blender/flashback_props.py -- public/assets/props   # lab, tank, cage (delete the preview PNGs after)
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
+  --python tools/blender/plan3_props.py -- public/assets/props       # pistol, barn, cabin, dam
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
+  --python tools/blender/plan6_guns.py -- public/assets/props        # shotgun, rifle
 ```
 
 ## Bedroom ceiling fan (home screen)
@@ -50,8 +54,10 @@ Skinned characters are compressed with meshoptimizer (the game's `GLTFLoader` ha
 
 ```bash
 pnpm dlx @gltf-transform/cli@latest optimize in.glb out.glb --compress meshopt \
-  --join false --flatten false --palette false --instance false --simplify false --texture-compress auto
+  --join false --flatten false --palette false --instance false --simplify false --texture-compress auto --resample false
 ```
+
+`--resample false` matters for clips retargeted from the animation libraries (the default resampling moved Mom's Throw foot 3.7 cm).
 
 ## Dras (orca.glb)
 
@@ -116,7 +122,7 @@ python3 tools/assets/cut_sound.py big-water-splash-qubodup-442773.wav   splash-b
 ```
 
 Voice and clicks: NPS Glacier Bay killer whale files (public domain), `killer_whale.wav` (29.8 s) and `killer_whale_2.wav` (85 s; broadband bursts with click
-trains). Not reused: the cry (kw 7.5-10.4) and answer (kw 16.3-17.55); `orca-underwater-nps.wav` is the same cry looped twice, so it adds nothing.
+trains). `call-cry` is kw 7.5-10.4 and `call-answer` is kw 16.3-17.55 (both `--hp 250 --mono`); `orca-underwater-nps.wav` is the same cry looped twice, so it adds nothing.
 `call-short-1` is the series of falling whistles; 2 and 3 are pulsed/burst calls (hum floor below ~1 kHz is not removable).
 
 ```bash
@@ -125,6 +131,13 @@ python3 tools/assets/cut_sound.py killer_whale_2.wav call-short-2.wav --start 33
 python3 tools/assets/cut_sound.py killer_whale_2.wav call-short-3.wav --start 26.3  --end 27.35 --hp 250 --mono
 python3 tools/assets/cut_sound.py killer_whale_2.wav clicks.wav       --start 62.5  --end 65.5  --hp 150 --mono --loop 0.2   # 2.8 s loop of low-frequency ticks
 ```
+
+### Canoe paddles and birds
+
+Paddles: EpicWizard "Water - Paddle Strokes" (Freesound ids 316596, 316589, 316590, 316595; CC0), already single clean strokes, so only a tail trim:
+`python3 tools/assets/cut_sound.py <id>.wav paddle-N.wav --start 0 --end 1.2 --mono` (paddle-4 also `--peak -3.6`, AAC overshoots about 0.7 dB), then
+`afconvert -f m4af -d aac -b 96000 -c 1`. Birds: isaiah658 "Ambient Bird Sounds" (OpenGameArt, CC0), whole file looped with `--loop 2`, stereo AAC 96 kbps.
+Zombie groans, water, wind, night beds and stings come from artisticdude's "Zombies Sound Pack" and the "30 CC0 SFX loops" (see `LICENSES.md`), converted with the `afconvert` lines above.
 
 ### Weapon sounds
 
@@ -141,6 +154,25 @@ afconvert -f m4af -d aac -b 96000 -c 1 pistol.wav public/assets/sounds/weapons/p
 ```
 
 No CC0 bow, shotgun-pump or dry-fire clip was found (OpenGameArt bow sounds are CC-BY / CC-BY-SA), so those stay procedural.
+
+## Kartik (player body and arm)
+
+`tools/blender/kartik.py` recolours the Quaternius "Casual 2" man (poly.pizza `kZ3DmIoGip`) and retargets clips with `tools/blender/ual_retarget.py`
+(shared helper, also used by `mom_clips.py`) from the two Universal Animation Libraries (zombie step above):
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python tools/blender/kartik.py -- \
+  "<UAL1>/Unreal Engine/AL_Standard.fbx" "<UAL2>/Unreal-Godot/UAL2_Standard.glb" kZ3DmIoGip.glb \
+  public/assets/characters/kartik.glb public/assets/characters/kartik-arm.glb
+```
+
+Compress both with the meshopt command above (with `--resample false`).
+
+## Textures (`public/assets/textures/`)
+
+No script: seven Poly Haven CC0 sets (`asphalt_02`, `concrete_pavement`, `mud_forest`, `sparse_grass`, `forest_leaves_02`, `river_small_rocks`,
+`forest_ground_04`). From `https://polyhaven.com/a/<id>` download the 1k JPG maps Diffuse, Normal (OpenGL) and ARM, rename to `diff.jpg`, `nor.jpg`,
+`arm.jpg` and shrink with `sips -Z 512 *.jpg`. Darken in the material, not in the file.
 
 ## Mom's extra clips
 

@@ -1,6 +1,6 @@
 # Asset licences
 
-Every file in `public/assets/` must be listed here. CC0 only.
+Every file in `public/assets/` must be listed here. CC0 or public domain only (the US Government recordings are public domain).
 
 | Files | Source | Licence |
 |---|---|---|
@@ -36,3 +36,8 @@ Every file in `public/assets/` must be listed here. CC0 only.
 | Fonts: IM Fell English (titles), Special Elite (body) — bundled via @fontsource packages | Google Fonts via Fontsource | OFL 1.1 (IM Fell English), Apache 2.0 (Special Elite) |
 | `props/{lab,tank,cage}.glb` | Made for this project by `tools/blender/flashback_props.py` | CC0 1.0 (original work) |
 | `kits/megakit/*.glb` | Quaternius — Stylized Nature MegaKit (Standard), https://opengameart.org/content/stylized-nature-megakit (optimized with gltf-transform: merged per category, meshopt + WebP; `-far` trees thinned) | CC0 1.0 |
+
+## TO VERIFY
+
+- `sounds/ambience/{night-1,night-2,night-3,water,wind}.m4a`: the pack is recorded ("30 CC0 SFX loops"), but which source loop became which file is not written down (the pack's `ambient_01-03`, `water_flowing`, `noise_01`). Check against the pack when next touched.
+- `sounds/stings/{weird-1..3,alarm}.m4a`: same, mapped to `weird_01-03` and `alarm_01` by name only.

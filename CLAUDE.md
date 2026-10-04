@@ -44,4 +44,9 @@ Tooling mirrors `~/Code/base-repo-ts/SETUP.md`: oxlint type-aware (`.oxlintrc.js
 - Browser checks: Claude in Chrome on `http://localhost:5173/?nolock` and `?nolock&webgl`; `window.kd` (dev only) exposes the app. Pointer lock and audio need a real click, so Kartik checks those and Safari by hand.
 - Rebuild assets (zombies, orca, props, sounds) with `tools/assets/README.md`.
 - Play-test: `?nolock`, `?phase=intro|day1|…|night3`, `?webgl`; `window.kd` and `window.kdRiver` (dev). Hidden tab: Chrome pauses rAF and THREE.Timer zeroes delta — override `document.hidden` and step `renderer._animation._animationLoop(t)` by hand, `await` between stepped seconds (pages/fades are promises), and shim `requestAnimationFrame` with `setTimeout` for `?webgl` (its shader compile polls rAF).
+- Frozen play-test build (the dev server tracks moving WIP): from plan-9, create a detached worktree at `.claude/worktrees/<name>` pinned to a commit sha (`git worktree add --detach`), run `pnpm install --frozen-lockfile --prefer-offline` there, then `pnpm exec vite --port N --strictPort`. Remove it when done.
+- `window.kdRun` (dev) is the live run: `kdRun.cutscene` (true hides HUD/weapons and holds input), `kdRun.interact`.
+- `?webgl` screenshots: `preserveDrawingBuffer` is false, so `drawImage` the canvas into an overlay canvas right after a stepped frame. A first screenshot after a long JS call is often black; step ~5 frames in a separate call first.
+- A background tab throttles `setInterval` and rAF: drive game time by stepping frames, never wait on timers.
+- Luminance probe: read the canvas after a stepped frame, report mean sRGB luminance and the crushed share (pixels below ~0.05). Plan 9 targets: day >= 0.28 mean / <= 10% crushed, nights 0.08-0.11 / <= 55%.
 - Blender: headless (`/Applications/Blender.app/Contents/MacOS/Blender --background --python …`) or the project Blender MCP (`.mcp.json`) for converting/posing models.
