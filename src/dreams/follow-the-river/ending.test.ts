@@ -15,7 +15,7 @@ import {
   waveSpot,
   type EndingStep,
 } from './ending';
-import { FAREWELL_PAGES, shoreFor } from './ending-farewell';
+import { FAREWELL, FAREWELL_PAGES, shoreFor } from './ending-farewell';
 import { facing, retreatPoint, stopShort } from './ending-scene';
 import { EDGE_X } from './river';
 import { freshRun, restartPhase, SUPPLY_LIMITS, type GunKind } from './state';
@@ -96,6 +96,19 @@ describe('the last stand', () => {
 });
 
 describe('the farewell', () => {
+  it('puts both E spots on the pebbles you can walk to (short of the shore wall)', () => {
+    const meet = FOREST.meetAt;
+    const lake = FOREST.lake;
+    if (!meet || !lake) throw new Error('the forest has Mom and a lake');
+    const at = shoreFor(meet, lake.z);
+    const reach = FOREST.endZ + 0.3; // the wall's land face plus your body
+    const side = { x: at.noseX + FAREWELL.side.x, z: at.noseZ + FAREWELL.side.z };
+    const edge = { x: at.noseX + FAREWELL.edge.x, z: at.lakeZ + FAREWELL.edge.z };
+    expect(side.z - FAREWELL.side.radius).toBeLessThan(reach + 2);
+    expect(side.z).toBeGreaterThan(reach);
+    expect(edge.z + FAREWELL.edge.radius).toBeGreaterThan(reach);
+  });
+
   it('lands its nose up the shore beside Mom, with the water line behind it', () => {
     const at = shoreFor({ x: -3, z: -387.5 }, -392);
     expect(at.noseZ).toBeGreaterThan(at.lakeZ);

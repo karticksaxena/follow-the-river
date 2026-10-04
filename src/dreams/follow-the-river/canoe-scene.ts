@@ -384,7 +384,8 @@ export async function buildCanoeScene(length: number): Promise<CanoeScene> {
     addForest(scene, zNear, zFar),
   ]);
   const mom = createMom(momAsset, new THREE.Group());
-  mom.play('Idle_Neutral');
+  // Arms held out in front (her gun-holding idle, without the gun): they grip the paddle's shaft.
+  mom.play('Idle_Gun');
   const paddle = makePaddle();
   canoe.add(mom.group, paddle);
   const calf = makeCalf(orca);

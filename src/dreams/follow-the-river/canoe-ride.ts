@@ -22,7 +22,7 @@ export const RIDE = {
 export const SEAT = {
   eye: [0, 1.0, 0.9],
   mom: [0, -0.5, -0.9],
-  paddle: [0, 0.75, -0.55],
+  paddle: [0, 0.68, -0.72],
 } as const;
 /** Calf: side of the canoe (m), pace-keeping drift and how deep it starts. */
 export const CALF = { side: 4.2, ahead: 1.6, hidden: -1.7, cruise: -0.15, blow: 0.35 } as const;

@@ -15,8 +15,8 @@ import { spend } from './state';
 export const FAREWELL = {
   /** Where its nose comes to rest, from Mom's spot (x) and from the water line (z, up the shore). */
   nose: { fromMom: 4.5, upShore: 3.5 },
-  /** Where you stand to touch it (beside its middle, on the land side) and how close is close. */
-  side: { x: -1.7, z: -1.2, radius: 2.4 },
+  /** Where you stand to touch it (beside its head, on the pebbles: its middle lies at the water line). */
+  side: { x: -1.7, z: -1.6, radius: 2.4 },
   /** Where you lay the pack: at the water's edge beside it, and where it floats. */
   edge: { x: -1.8, z: 1.2, radius: 2.4 },
   float: { x: -1.2, z: -1 },
@@ -114,9 +114,10 @@ function waitForE(
 
 /** You put your hand on its side; Mom comes and puts hers beside it. */
 export async function hand(s: Script, at: Shore): Promise<void> {
-  const side = { x: at.noseX + FAREWELL.side.x, z: at.noseZ - 3.5 + FAREWELL.side.z };
+  const side = { x: at.noseX + FAREWELL.side.x, z: at.noseZ + FAREWELL.side.z };
   await waitForE(s, side, FAREWELL.side.radius, 'E: put your hand on it');
   if (s.cancelled) return;
+  s.sys.flashlight.on = false; // this close the beam only glares: Mom's lantern lights it
   const cam = s.sys.ctx.stage.camera;
   cam.rotation.set(
     -0.35,
