@@ -1,5 +1,6 @@
 import type { AudioBus } from '../engine/audio';
 import type { KeyState } from '../engine/input';
+import type { PageHooks } from '../engine/menus';
 import type { Player } from '../engine/player';
 import type { Stage } from '../engine/stage';
 import type { Overlay } from '../engine/ui';
@@ -27,7 +28,7 @@ export interface DreamContext {
   /** True while the pause menu or a page is open. Dreams freeze their logic then. */
   isPaused: () => boolean;
   /** Show player-paced pages (pauses the game until the player finishes reading). */
-  read: (pages: readonly string[], onDone?: () => void) => void;
+  read: (pages: readonly string[], onDone?: () => void, hooks?: PageHooks) => void;
   /** Player-paced question with buttons; resolves with the chosen index. `focus` is the button Enter picks (default 0). Pauses the game. */
   choose: (text: string, labels: readonly string[], focus?: number) => Promise<number>;
   /** Freeze input (no pause menu) until the next `read`/`choose` closes; for scene swaps. */

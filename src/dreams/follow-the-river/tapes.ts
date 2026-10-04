@@ -1,9 +1,5 @@
-import type * as THREE from 'three/webgpu';
 import type { DreamContext } from '../types';
-import type { Sounds } from './sounds';
-
-/** Loudness of the muffled voice under the pages (tuning knob). */
-const TAPE_VOLUME = 0.5;
+import { stopVoice, voiceFor, voiceHooks } from './voice';
 
 export const TAPES: Readonly<Record<number, readonly string[]>> = {
   1: [
@@ -33,27 +29,14 @@ export const TAPES: Readonly<Record<number, readonly string[]>> = {
   ],
 };
 
-let voice: THREE.Audio | null = null;
-
 /** Stops the tape voice (also called when the chapter is torn down mid-read). */
-export function stopTape(): void {
-  if (!voice) return;
-  if (voice.isPlaying) voice.stop();
-  voice.disconnect();
-  voice = null;
-}
+export const stopTape = stopVoice;
 
-/** Plays the muffled voice on the voice channel while the transcript pages are open. */
-export function playTape(
-  ctx: DreamContext,
-  sounds: Sounds,
-  tape: number,
-  onDone: () => void,
-): void {
-  stopTape();
-  voice = ctx.audio.loop(sounds.tapeVoice, TAPE_VOLUME, 'voice', false);
-  ctx.read(TAPES[tape] ?? [], () => {
-    stopTape();
-    onDone();
-  });
+/** Reads the transcript pages; each quoted line is voiced as Mom on the tape. */
+export function playTape(ctx: DreamContext, tape: number, onDone: () => void): void {
+  ctx.read(
+    TAPES[tape] ?? [],
+    onDone,
+    voiceHooks(ctx.audio, (page) => voiceFor(page, 'tape')),
+  );
 }

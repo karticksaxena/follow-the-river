@@ -3,7 +3,7 @@ import type { App } from './app';
 import type { DreamContext, DreamInfo, DreamModule } from './dreams/types';
 import { disposeScene } from './engine/dispose';
 import { screenAfter, type LockEvent, type Screen } from './engine/lock';
-import { showChoice, showPages, showPauseMenu } from './engine/menus';
+import { showChoice, showPages, showPauseMenu, type PageHooks } from './engine/menus';
 import { createPlayer, type Player } from './engine/player';
 
 /**
@@ -116,12 +116,17 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
     cleanUp();
     onQuit();
   }
-  const read = (pages: readonly string[], onDone?: () => void): void => {
+  const read = (pages: readonly string[], onDone?: () => void, hooks?: PageHooks): void => {
     gate.openReader();
-    showPages(app.overlay, pages, () => {
-      gate.closeReader();
-      onDone?.();
-    });
+    showPages(
+      app.overlay,
+      pages,
+      () => {
+        gate.closeReader();
+        onDone?.();
+      },
+      hooks,
+    );
   };
   const choose = (text: string, labels: readonly string[], focus = 0): Promise<number> =>
     new Promise((resolve) => {

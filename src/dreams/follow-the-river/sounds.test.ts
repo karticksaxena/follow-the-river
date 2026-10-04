@@ -10,7 +10,6 @@ import {
   orcaCrySamples,
   pluckSamples,
   splashSamples,
-  tapeVoiceSamples,
   thudSamples,
 } from './sounds';
 
@@ -28,7 +27,6 @@ describe('procedural sounds', () => {
     ['blow', () => blowSamples(RATE, 0.6, seeded())],
     ['thud', () => thudSamples(RATE)],
     ['heartbeat', () => heartbeatSamples(RATE)],
-    ['tape voice', () => tapeVoiceSamples(RATE, 2, seeded())],
     ['gunshot', () => gunshotSamples(RATE, seeded())],
     ['orca cry', () => orcaCrySamples(RATE, 2.5, seeded())],
     ['dawn', () => dawnSamples(RATE, 12)],

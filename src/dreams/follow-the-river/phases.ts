@@ -45,7 +45,7 @@ export function readTape(f: Flow, pickup: PickupDef): void {
   const { sys } = f;
   const shack = shackAt(sys.area.shacks, pickup.x, pickup.z);
   const play = (): void =>
-    playTape(sys.ctx, sys.sounds, pickup.tape ?? 0, () => {
+    playTape(sys.ctx, pickup.tape ?? 0, () => {
       if (shack && !f.disposed) sys.scares.tapeTaken(shack);
     });
   const hint = hintPages(f, 'tape');

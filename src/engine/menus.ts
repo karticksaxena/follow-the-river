@@ -3,6 +3,14 @@ import { pagerActionForKeyEvent, startPager, stepPager, type PagerAction } from 
 import { SENSITIVITY_RANGE, type Settings } from './settings';
 import { button, el, type Overlay } from './ui';
 
+/** Optional callbacks for a pager: voice lines, sounds. Existing callers pass none. */
+export interface PageHooks {
+  /** A page appeared (first open, Next or Back). */
+  onPage?: (page: string, index: number) => void;
+  /** The pager closed (last Next or Skip), just before `onDone`. */
+  onClose?: () => void;
+}
+
 export function showUnsupported(overlay: Overlay): void {
   overlay.panel((panel) => {
     panel.append(
@@ -22,7 +30,12 @@ export function showMessage(overlay: Overlay, title: string, text: string): void
  * ← or Backspace = back; Skip ends early. `onDone` runs inside the key or click
  * handler, so it may request pointer lock.
  */
-export function showPages(overlay: Overlay, pages: readonly string[], onDone: () => void): void {
+export function showPages(
+  overlay: Overlay,
+  pages: readonly string[],
+  onDone: () => void,
+  hooks: PageHooks = {},
+): void {
   let state = startPager(pages.length);
   if (state.done) return onDone();
   const text = el('p', 'page-text');
@@ -32,6 +45,7 @@ export function showPages(overlay: Overlay, pages: readonly string[], onDone: ()
   const render = (): void => {
     text.textContent = pages[state.index] ?? '';
     count.textContent = `${state.index + 1} / ${state.total}`;
+    hooks.onPage?.(pages[state.index] ?? '', state.index);
     back.disabled = state.index === 0;
     next.textContent = state.index + 1 === state.total ? 'Continue ✓' : 'Next →';
   };
@@ -53,6 +67,7 @@ export function showPages(overlay: Overlay, pages: readonly string[], onDone: ()
     if (!state.done) return render();
     removeEventListener('keydown', onKey);
     overlay.closePanel();
+    hooks.onClose?.();
     onDone();
   };
   const panel = overlay.panel((body) => {

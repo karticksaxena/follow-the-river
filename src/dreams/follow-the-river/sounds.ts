@@ -18,7 +18,6 @@ export interface Sounds {
   blow: AudioBuffer;
   sting: AudioBuffer;
   heartbeat: AudioBuffer;
-  tapeVoice: AudioBuffer;
   click: AudioBuffer;
   gunshot: AudioBuffer;
   dryFire: AudioBuffer;
@@ -127,30 +126,6 @@ export function heartbeatSamples(rate: number): Float32Array<ArrayBuffer> {
     const thump = (start: number, gain: number): number =>
       t < start ? 0 : gain * Math.sin(2 * Math.PI * 50 * (t - start)) * Math.exp(-(t - start) * 18);
     samples[i] = clamp(thump(0, 0.9) + thump(0.18, 0.7));
-  }
-  return samples;
-}
-
-/** Mom on a worn tape: muffled syllable bursts (band-passed noise at ~4 Hz), hiss and wow. */
-export function tapeVoiceSamples(
-  rate: number,
-  seconds: number,
-  random: () => number,
-): Float32Array<ArrayBuffer> {
-  const samples = new Float32Array(Math.floor(rate * seconds));
-  const fast = onePole(1200, rate);
-  const slow = onePole(300, rate);
-  let hi = 0;
-  let lo = 0;
-  for (let i = 0; i < samples.length; i++) {
-    const t = i / rate;
-    const noise = random() * 2 - 1;
-    hi += fast * (noise - hi);
-    lo += slow * (noise - lo);
-    const syllable =
-      Math.max(0, Math.sin(2 * Math.PI * 3.7 * t + 2 * Math.sin(2 * Math.PI * 0.7 * t))) ** 2;
-    const wow = 0.95 + 0.05 * Math.sin(2 * Math.PI * 0.5 * t);
-    samples[i] = clamp(((hi - lo) * 6 * syllable + noise * 0.04) * wow);
   }
   return samples;
 }
@@ -312,7 +287,6 @@ export async function loadSounds(audio: AudioBus): Promise<Sounds> {
     blow: toBuffer(context, blowSamples(rate, 0.6, Math.random)),
     sting: toBuffer(context, stingSamples(rate)),
     heartbeat: toBuffer(context, heartbeatSamples(rate)),
-    tapeVoice: toBuffer(context, tapeVoiceSamples(rate, 6, Math.random)),
     click: toBuffer(context, clickSamples(rate, Math.random)),
     gunshot: toBuffer(context, gunshotSamples(rate, Math.random)),
     dryFire: toBuffer(context, dryFireSamples(rate, Math.random)),

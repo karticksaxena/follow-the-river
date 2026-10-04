@@ -6,6 +6,7 @@ import { atSafeSpot } from './flow';
 import { applyLighting, LIGHTING, mixPreset, type LightPreset } from './lighting';
 import { EDGE_X } from './river';
 import type { Run, Systems } from './run';
+import { stopVoice, voiceFor, voiceHooks } from './voice';
 
 export type EndingStep = 'mom' | 'fight' | 'silence' | 'dawn' | 'epilogue' | 'credits' | 'done';
 type PagedStep = 'mom' | 'silence' | 'epilogue' | 'credits';
@@ -156,7 +157,14 @@ async function setUp(h: EndingHost, st: State): Promise<void> {
 }
 
 const read = (h: EndingHost, pages: readonly string[]): Promise<void> =>
-  new Promise((resolve) => h.sys.ctx.read(pages, resolve));
+  new Promise((resolve) => {
+    const { ctx } = h.sys;
+    ctx.read(
+      pages,
+      resolve,
+      voiceHooks(ctx.audio, (page) => voiceFor(page, 'scene')),
+    );
+  });
 
 /** Spawns every wave zombie that is due and has not appeared yet; they come running. */
 function spawnWave(h: EndingHost, spawned: { n: number }, elapsed: number): void {
@@ -261,6 +269,7 @@ export function createEnding(h: EndingHost): Ending {
     st.cancelled = true; // the running `play` sees this after its next await and stops
     st.wait = null;
     stopPad(st);
+    stopVoice();
   };
   return {
     start() {
