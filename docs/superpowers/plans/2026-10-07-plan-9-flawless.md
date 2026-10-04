@@ -221,3 +221,286 @@ window.__gpuFrames = async (n) => { const dev = kd.stage.renderer.backend.device
 - Ruling: the HUD shows the wave number only ("Wave 2 of 3"), never how many are left (Kartik, #29).
 - Ruling: one sky system. `SkyMesh` (r186, verified in `node_modules/three/examples/jsm/objects/SkyMesh.js`: `turbidity`, `rayleigh`, `mieCoefficient`, `mieDirectionalG`, `sunPosition`, `showSunDisc`, cloud uniforms) for dusk, day, dawn and sunrise; at night the sun is below the horizon, so a dark star dome plus the moon disc (kept from today) take over, blended by sun elevation. Every night preset is checked "never bright" by screenshot.
 
+
+---
+
+## 5. Tasks
+
+Execution order is the order below. Every task: read its section, write the failing test first where the logic is pure, implement, `pnpm vitest run <files>` green, the **player's-eye Chrome check** (section 0) with screenshots looked at, `pnpm run check` green, commit, append a ledger line. A Chrome check that shows anything a player would call broken means the task is not done.
+
+Ledger: `.claude/worktrees/plan-9/.superpowers/sdd/plan-9/progress.md`, first line `# SDD ledger — plan: docs/superpowers/plans/2026-10-07-plan-9-flawless.md`.
+
+### Task A0: Workspace
+
+- [ ] `git worktree add .claude/worktrees/plan-9 -b plan-9 main` (the session then works inside it; `EnterWorktree` with `path`).
+- [ ] `pnpm install`; `pnpm run check` → expect 402 tests green.
+- [ ] Start a dev server on port 5180 in the background: `pnpm exec vite --port 5180 --strictPort`. Never use :5173.
+- [ ] Create the ledger file with its first line.
+
+### Task A1: Quick fixes (home fade-in, throw revert, wave text, canoe ground, Mom's lantern)
+
+**Files:**
+- Modify: `src/main.ts:60-71` (goHome), `src/dreams/follow-the-river/intro.ts:67,218`, `src/dreams/follow-the-river/hud.ts:41-44`, `src/dreams/follow-the-river/hud.test.ts:24-25`, `src/dreams/follow-the-river/canoe-scene.ts` (export `meshY`, use it in `scatter` and `makeFlowers`), `src/dreams/follow-the-river/canoe-ride.test.ts` (new tests), `src/dreams/follow-the-river/ending-scene.ts:73-96` (lantern).
+
+**Interfaces:**
+- Produces: `meshY(x: number, z: number): number` in `canoe-scene.ts` (the exact height of the terrain mesh, same triangulation as `makeTerrain`); `waveText(wave: number, waves: number): string`.
+
+- [ ] **Step 1: failing tests.** In `hud.test.ts` replace the two `waveText` lines:
+```ts
+    expect(waveText(2, 3)).toBe('Wave 2 of 3');
+    expect(waveText(0, 3)).toBe('');
+```
+In `canoe-ride.test.ts` add:
+```ts
+import { meshY, rng, terrainY, pathX, RIVER_HALF } from './canoe-scene';
+
+describe('ground under the scenery', () => {
+  it('meshY equals terrainY on every grid vertex', () => {
+    for (const [x, z] of [[-125, 70], [0, 0], [12.5, -100], [-2.5, -297.5]] as const)
+      expect(meshY(x, z)).toBeCloseTo(terrainY(x, z), 5);
+  });
+  it('is the flat triangle between vertices (never the curve above it)', () => {
+    const r = rng(5);
+    let worst = 0;
+    for (let i = 0; i < 20000; i++) {
+      const z = 70 - r() * 400;
+      const x = pathX(z) + (r() < 0.5 ? -1 : 1) * (RIVER_HALF + 1.5 + r() * 80);
+      worst = Math.max(worst, Math.abs(meshY(x, z) - terrainY(x, z)));
+    }
+    expect(worst).toBeGreaterThan(0.2); // proves the old placement could float
+    expect(worst).toBeLessThan(0.8);
+  });
+});
+```
+Run `pnpm vitest run src/dreams/follow-the-river/hud.test.ts src/dreams/follow-the-river/canoe-ride.test.ts` → FAIL (`waveText` signature, `meshY` not exported).
+
+- [ ] **Step 2: implement.**
+  - `hud.ts`: `export function waveText(wave: number, waves: number): string { return wave > 0 ? \`Wave ${wave} of ${waves}\` : ''; }` and update its one caller (`renderHud`: `waveText(s.wave, s.waves)`); keep `HudState.left` out (delete the field and its writer in `play.ts tickView`, `hudState.left = ...`).
+  - `canoe-scene.ts`: export the grid constants used by `makeTerrain` (`TERRAIN`, `zNear` passed in) and add:
+```ts
+/** Pure: the terrain mesh's own height at (x, z): the flat triangle of the grid cell, exactly as drawn. */
+export function meshY(x: number, z: number, zNear: number = TERRAIN.behind): number {
+  const { cell, halfWidth } = TERRAIN;
+  const k = Math.floor((x + halfWidth) / cell);
+  const r = Math.floor((zNear - z) / cell);
+  const x0 = -halfWidth + k * cell;
+  const z0 = zNear - r * cell;
+  const u = (x - x0) / cell;
+  const v = (z0 - z) / cell;
+  const h00 = terrainY(x0, z0);
+  const h10 = terrainY(x0 + cell, z0);
+  const h01 = terrainY(x0, z0 - cell);
+  const h11 = terrainY(x0 + cell, z0 - cell);
+  // makeTerrain's index order: (i, i+cols, i+1) and (i+1, i+cols, i+cols+1).
+  return u + v <= 1
+    ? h00 + (h10 - h00) * u + (h01 - h00) * v
+    : h11 + (h01 - h11) * (1 - u) + (h10 - h11) * (1 - v);
+}
+```
+  In `scatter`, place items at `meshY(x, z) - SINK` where `const SINK = 0.15;` (named knob: trunks bite into the ground), and keep the `minY` filter on `terrainY`. In `makeFlowers` use `meshY(x, z) + 0.13`.
+  - `main.ts goHome`: after `const home = await startHome(...)` add `void overlay.fade(false); // finish() left the screen black` (inside the `try`, before the dream callback runs; the boot path's fader is already clear so this is a no-op there).
+  - `intro.ts`: `const THROW_DELAY = 0.7; // Mom's wind-up before the pack leaves her hand` and `mom.play('Interact', true);` (exactly as before `851f1b8`).
+  - `ending-scene.ts`: the lantern light lives inside the lantern. Replace the world-space placement with the lamp's own world position:
+```ts
+const lamp = new THREE.Vector3();
+...
+update(dt) {
+  actor.update(dt);
+  mom.update(dt);
+  if (lakeZ !== null) mom.group.position.y = shoreY(mom.group.position.z - lakeZ);
+  if (held) {
+    mom.pack.getWorldPosition(lamp); // the lantern mesh rides her right hand
+    held.position.set(lamp.x, lamp.y + LANTERN_GLOW_UP, lamp.z);
+  }
+},
+```
+  with `const LANTERN_GLOW_UP = 0.05;` and retune `MOM_LANTERN = { intensity: 2, distance: 14, height: 1.3 }` (`height` stays for `place()`); the lantern mesh colour becomes `0xc07a30` (dimmer, so bloom only haloes it). Final values are retuned under AgX in Task A13.
+- [ ] **Step 3:** run the two test files → PASS. `pnpm run check` → green.
+- [ ] **Step 4: Chrome check.**
+  - Canoe ride via the fake `ctx` (section 0): step to t = 20, 40, 60 s; at each, look left and right (`camera.rotation.y ±1.2`), screenshot: no tree, bush or rock base hangs above the ground; zoom the bank line.
+  - `?phase=night3`, run the ending to the dawn (section 0 recipe: teleport to (−1, −378), skip pages, step the fight, teleport to the farewell spots, E): screenshot Mom facing you at "Let's go home": no glowing face or eyes; the lantern glows in her hand.
+  - Quit to dreams from the pause menu and finish a run (the fake ctx `finish`), screenshot the home screen: the bedroom shows (not black).
+  - Intro (`?phase=intro`): the throw is the old underarm `Interact` gesture.
+- [ ] **Step 5: commit** `fix: home fades back in after the credits, the old throw, wave number only, canoe scenery on the ground, Mom's lantern light in the lantern`.
+
+### Task A2: Words (Dras, Subject R-7, Kartik), the naming tape, flashbacks swapped
+
+**Files:**
+- Modify: `src/dreams/follow-the-river/tapes.ts`, `intro.ts` (INTRO_PAGES), `hints.ts`, `controls.ts:200-201` (prompt), `ending.ts` (ENDING_PAGES, REPLAY_PAGES), `ending-farewell.ts` (FAREWELL_PAGES), `canoe-ride.ts` (CLOSING_PAGES), `src/dreams/registry.ts` (intro, howToPlay), `flashback-scene.ts` (BUILDERS, tank naming beat), `flow.ts:33` (`throw them to the fish first` → `feed them to Dras first`).
+- Test: `src/dreams/follow-the-river/tapes.test.ts` (extend), new `src/dreams/follow-the-river/words.test.ts`.
+
+**Interfaces:**
+- Produces: `BUILDERS` order `1: buildTank` (with the naming), `2: buildLab`, `3: buildSpillway`; `SHOTS[1]` is the tank shot, `SHOTS[2]` the lab shot (swap the two entries).
+
+- [ ] **Step 1: failing test** `words.test.ts` (every on-screen string list in one place):
+```ts
+import { describe, expect, it } from 'vitest';
+import { DREAMS } from '../registry';
+import { FAREWELL_PAGES } from './ending-farewell';
+import { ENDING_PAGES } from './ending';
+import { HINTS } from './hints';
+import { INTRO_PAGES } from './intro';
+import { TAPES } from './tapes';
+import { CLOSING_PAGES } from './canoe-ride';
+
+const all = (): string[] => [
+  ...Object.values(TAPES).flat(),
+  ...Object.values(INTRO_PAGES).flat(),
+  ...Object.values(HINTS).flat(),
+  ...Object.values(ENDING_PAGES).flat(),
+  ...Object.values(FAREWELL_PAGES).flat(),
+  ...CLOSING_PAGES,
+  ...DREAMS.flatMap((d) => [...d.intro, ...d.howToPlay]),
+];
+
+describe('on-screen words', () => {
+  it('never call her "the orca" (only the lab line about the cell line may say orca)', () => {
+    const bad = all().filter((t) => /orca/i.test(t) && !/orca cell line/i.test(t));
+    expect(bad).toEqual([]);
+  });
+  it('call him Kartik, never "K"', () => {
+    expect(all().filter((t) => /\bK\b(?!artik)/.test(t))).toEqual([]);
+  });
+  it('have no em dashes', () => {
+    expect(all().filter((t) => t.includes('—'))).toEqual([]);
+  });
+  it('name Dras and Subject R-7 on the first tape', () => {
+    const tape = TAPES[1]?.join(' ') ?? '';
+    expect(tape).toMatch(/Subject R-7/);
+    expect(tape).toMatch(/Dras/);
+    expect(tape).toMatch(/fresh water|freshwater|river/);
+  });
+});
+```
+Run → FAIL.
+
+- [ ] **Step 2: the text** (exact):
+```ts
+export const TAPES: Readonly<Record<number, readonly string[]>> = {
+  1: [
+    'The label says: "Day 12. For Kartik, when he is older."',
+    '[Tape hiss. Water lapping against glass. Mom, close to the microphone.]',
+    '"Day twelve. The board calls her Subject R-7. We grew her from an orca cell line and changed her, cell by cell, so she can live in fresh water."',
+    '"She was made to clean the river. She eats what the factories leave in it, and the water comes out clear."',
+    '"She comes to the glass when I sing. Every single time."',
+    '"I am not calling her R-7. Her name is Dras."',
+    '"Kartik, if you ever meet her, she is gentle. She is ours."',
+  ],
+  2: [
+    'The label says: "Day 41. Kartik, don\'t watch this."',
+    '[Tape hiss. Mom, tired, close to the microphone.]',
+    '"Day forty-one. Dras eats everything we give her. She is growing faster than the model said she could."',
+    '"Dr. Rao says the growth enzyme is stable. It isn\'t. Two of the test mice got out last night. They bit Arun."',
+    '"He went home sick. Nobody has heard from him since."',
+    '"The director buried the reports. I took the samples home, Kartik. I\'m scared of what I\'ve done, and of being found out."',
+    '"If you\'re watching this, sweetheart… I\'m sorry. I only wanted to make something that could save the river."',
+  ],
+  3: [
+    'The label says: "Last tape."',
+    "[Wind outside. Mom's voice is steady, but quiet.]",
+    '"It started at the lab by the dam, sweetheart. It got out, and it is spreading."',
+    '"I let Dras go into the river, so they couldn\'t destroy her."',
+    '"She knows my voice. She will protect you, Kartik."',
+    '"But every one of them she takes, she takes the sickness too. It\'s in her blood now. I don\'t know how long she can last."',
+    '"If you\'re watching this, you followed the river."',
+    "\"I'll wait for you at the lake below the dam. That's where it started. I'm going to fix what I can.\"",
+  ],
+};
+```
+  - `INTRO_PAGES.throw`: `'Mom: "Here, Dras. Here, girl."'`, `'Something enormous moves under the water. Black and white. She takes the fish and is gone.'`; `goodbye`: `'Mom: "She knows me. She will know you."'`, `'Mom: "Listen to me. Whatever happens, run. Always follow the river."'`, `'Mom: "Feed her, and she will keep you safe at night. Go!"'`, last page unchanged.
+  - `HINTS.fish`: `"Stand at the water's edge and press E to throw a fish pack in."`, `'Every pack you feed Dras makes her hunt harder for you at night.'`; `HINTS.night` last line: `'Stay close to the water. E at the edge feeds Dras: every fish pack makes her hunt harder.'`; `HINTS.night` barricade line: `'Downstream, a barricade holds you at each wave. They keep coming until the wave is dead; then it falls.'`.
+  - `controls.ts` prompt: `isNight(c.run.phase) ? 'E: feed Dras' : 'E: throw a fish pack'`.
+  - `ENDING_PAGES.mom[2]`: `'Mom: "They\'re coming, all of them. Take this, and stay by the water. Dras will fight with us."'`; `ENDING_PAGES.credits`: `["Kartik's Dreams - Follow the River", 'A dream by Kartik', 'Art: Kenney and Quaternius (CC0)', 'Sound: OpenGameArt and Freesound contributors (CC0), U.S. National Park Service recordings (public domain)', 'Made with three.js']`.
+  - `REPLAY_PAGES` is deleted in Task A16 (the replay plays the ride); until then: `'Dras lies on the pebbles below the dam, where she held them back.'`, `'Mom rows you down the river into the green. Something small swims beside the canoe.'`.
+  - `FAREWELL_PAGES`: stranded `['Mom: "No. No, no, no..."', 'Mom: "She was eating the sickness for us. Every one she took, she took the sickness too."', 'Mom: "She held on for us. She held on for you."']`; song second line `'She hums the song from the lab, the one Dras learned through the glass.'`; answer `['Dras answers her. Once, softly.']`; hand `['Her skin is cold and rough under your hand.', 'Mom puts her hand next to yours. Neither of you says anything.']`; pack `['You set your last fish pack on the water beside her.', 'She breathes out once, long and slow. Then she is still.']` (Task A15 adds the head-lift line).
+  - `CLOSING_PAGES[1]`: `'Mom: "Look. She wasn\'t alone."'`.
+  - `registry.ts` howToPlay: `"Throw fish packs into the river (E at the water's edge). The more you feed Dras, the harder she hunts for you at night."` and the night line `'By night: zombies keep coming in waves. Clear each wave and the barricade falls. Follow the river downstream.'`; add `'1 to 4: switch weapons. R: put in a spare battery.'`.
+- [ ] **Step 3: flashbacks.** In `flashback-scene.ts` swap `SHOTS[1]`/`SHOTS[2]` values and `BUILDERS` to `{ 1: buildTank, 2: buildLab, 3: buildSpillway }`; in `buildTank` the young Dras swims to the glass and holds still facing Mom for the naming (extend `tankSwim` with a `hold` window: between `TANK_SWIM.holdFrom` 18 s and `holdTo` 30 s she stays at x 0, nose to the glass, yaw π; pure, add a test in `flashback.test.ts`: `tankSwim(24, out).x === 0` and yaw π). Mom plays `Idle_Neutral` and turns her head to the glass (no new clip needed here).
+- [ ] **Step 4:** tests → PASS (also update `tapes.test.ts` / `flashback.test.ts` expectations that pinned the old order). `pnpm run check`.
+- [ ] **Step 5: Chrome check:** `?phase=day1`, walk into shack s3 (−16, −52), take the tape: screenshot the tank flashback at page 3 ("Day twelve...") and page 6 ("Her name is Dras"); Dras at the glass. Day 2 tape: the lab. Night prompt at the edge reads "E: feed Dras". The intro page reads "Here, Dras".
+- [ ] **Step 6: commit** `feat: she is Dras (Subject R-7), Kartik by name, the naming tape`.
+
+### Task A3: Cutscene mode (no weapons, no HUD, no input while a cinematic plays)
+
+**Files:**
+- Modify: `src/engine/player.ts` (input switch), `src/dreams/types.ts` (DreamContext), `src/session.ts` (expose it), `src/dreams/follow-the-river/run.ts` (`Run.cutscene`), `chapter.ts` (`newRun`, DEV `window.kdRun`), `controls.ts` (`switchWeapons`, `trigger`, `use`), `play.ts` (`tick`), `hud.ts` + `src/style.css` (`.hud.hidden`).
+- Test: `src/engine/movement.test.ts` is pure; add `src/dreams/follow-the-river/controls.test.ts` for the pure helper below.
+
+**Interfaces:**
+- Produces: `Player.setInputEnabled(on: boolean): void` (off: no movement, no mouse look, no jump; on: as now); `DreamContext.cinematic(on: boolean): void` (session: input off/on, cursor hidden, pause menu still opens on Esc); `Run.cutscene: boolean`; `viewVisible(weapon, current, owned, cutscene): boolean` in `controls.ts`.
+- Consumed by: Tasks A9, A15, A16.
+
+- [ ] **Step 1: failing test** `controls.test.ts`:
+```ts
+import { describe, expect, it } from 'vitest';
+import { viewVisible } from './controls';
+
+describe('viewmodels', () => {
+  it('shows only the weapon in hand, and nothing during a cutscene', () => {
+    expect(viewVisible('bow', 'bow', ['pistol'], false)).toBe(true);
+    expect(viewVisible('pistol', 'bow', ['pistol'], false)).toBe(false);
+    expect(viewVisible('bow', 'bow', ['pistol'], true)).toBe(false);
+    expect(viewVisible('pistol', 'pistol', [], false)).toBe(false);
+  });
+});
+```
+- [ ] **Step 2: implement.**
+  - `controls.ts`: `export const viewVisible = (w: Weapon, current: Weapon, guns: readonly GunKind[], cutscene: boolean): boolean => !cutscene && w === current && owns(guns, w);` used in `switchWeapons`; `tick()` returns right after `switchWeapons` when `c.run.cutscene` (no F, R, fire, E).
+  - `player.ts`: `let inputOn = true;` `setInputEnabled(on) { inputOn = on; controls.enabled = on; air.speed = 0; }` (verify `Controls.enabled` gates `PointerLockControls` mouse handling in `node_modules/three/examples/jsm/controls/PointerLockControls.js`; if it does not, skip `onMouseMove` by wrapping: keep the lock but restore the camera quaternion after each event while off); `update()` returns early when `!inputOn` (still runs `fall`, so a jump lands).
+  - `session.ts` context: `cinematic: (on) => { gate.player.setInputEnabled(!on); }`.
+  - `run.ts`: `cutscene: boolean` (`newRun`: false; `beginPhase` sets false and calls `ctx.cinematic(false)`).
+  - `hud.ts`: `Hud.setHidden(hidden: boolean)` toggling class `hidden` (CSS `.hud.hidden { display: none; }`); `play.ts tickView` calls `sys.hud.setHidden(run.cutscene)` only when it changes.
+  - `play.ts tick`: while `run.cutscene`, skip `p.controls.update` input effects (done in controls) and force `sys.flashlight.on = false` once on entry.
+  - DEV: `chapter.ts` `if (import.meta.env.DEV) Object.assign(window, { kdRun: run });` next to `kdRiver`, and delete it in `teardown`.
+- [ ] **Step 3:** test → PASS; `pnpm run check`.
+- [ ] **Step 4: Chrome check:** `?phase=night1`, `kdRun.cutscene = true; kd...` (call the session's `cinematic(true)` via `kdRiver.ctx.cinematic(true)`): screenshot: no bow, no HUD, WASD and mouse do nothing; Esc opens the pause menu, Resume returns still in cutscene; `cutscene = false` + `cinematic(false)`: bow and HUD back, controls work. Die while `cutscene` is true (set health 0): the restart has the HUD and the bow.
+- [ ] **Step 5: commit** `feat: cutscene mode hides weapons and HUD and holds the controls`.
+
+### Task A4: Reach the water (natural banks), and Dras swims in water only
+
+**Files:**
+- Modify: `src/dreams/follow-the-river/banks.ts` (natural profile, `waterlineX`), `fish-parts.ts` (`cruiseTargetX`, `inWaterX` take the waterline), `fish.ts` (`cruise`, `stepRise`, `placed`), `fish-state.ts` (store `waterline`), `assemble.ts:55` (pass `waterlineX(area.bank)`), `orca-grab.ts` (`landX`, `crawlBack` edge use the waterline for the water side and EDGE_X for the land side), `ending.ts` (`waveSpot` unchanged), `fish.test.ts`, `banks.test.ts`, `world.test.ts`.
+
+**Interfaces:**
+- Produces: `waterlineX(kind: BankKind): number` (embankment: EDGE_X; natural: where the profile crosses WATER_Y); `createFish(..., bank: { ground, onBreach, waterline })`.
+
+- [ ] **Step 1: the check first.** (Done this session: the blocker is `{minX 3}`; nothing else in the way.) If a re-check in Night 2 at z −150, −200, −260 and Night 3 at −150, −250 shows another box, rule and ledger it.
+- [ ] **Step 2: failing tests.** `banks.test.ts`:
+```ts
+it('a natural bank is a short cut bank: water within a metre of where you stand', () => {
+  expect(waterlineX('natural')).toBeGreaterThan(EDGE_X);
+  expect(waterlineX('natural') - EDGE_X).toBeLessThan(0.6);
+  expect(waterlineX('embankment')).toBe(EDGE_X);
+  expect(bankY('natural', waterlineX('natural'))).toBeCloseTo(WATER_Y, 2);
+});
+```
+`fish.test.ts`:
+```ts
+it('cruising never puts any of the body over the bank', () => {
+  // 10 minutes of a player wandering the strip, 30 fps
+  let worst = Infinity;
+  const water = waterlineX('natural');
+  for (let t = 0; t < 600; t += 1 / 30) {
+    for (const yaw of [0, 0.3, -0.3, Math.PI, Math.PI / 2]) {
+      const x = inWaterX(cruiseTargetX(water, t), yaw, water);
+      worst = Math.min(worst, x - Math.abs(Math.sin(yaw)) * 3.5 - BODY_HALF_WIDTH - water);
+    }
+  }
+  expect(worst).toBeGreaterThanOrEqual(0.5);
+});
+```
+(export `BODY_HALF_WIDTH = 0.9` from `fish-parts.ts`, measured from the model in Task A7; update it there.)
+- [ ] **Step 3: implement.** New natural profile (a short cut bank, water right below the grass edge):
+```ts
+return [
+  { x: 3.0, y: 0, color: grass },
+  { x: 3.12, y: -0.45, color: BANK.mud },
+  { x: 3.32, y: -0.9, color: BANK.mud },
+  { x: 3.6, y: -1.15, color: BANK.sand },
+  { x: 8, y: BED_Y, color: BANK.sand },
+];
+```
+`waterlineX` interpolates the profile for `WATER_Y` (pure, uses `bankProfile`). `cruiseTargetX(water, time) = water + LANE_OFFSET + Math.sin(time * 0.4) * WEAVE_X`; `inWaterX(x, yaw, water) = Math.max(x, water + BANK_MARGIN + BODY_HALF_WIDTH + Math.abs(Math.sin(yaw)) * HALF_LENGTH)`. Every caller passes the fish's `waterline` (city: EDGE_X, unchanged look). The grab still lands on the land (it is meant to leave the water), it starts from `water + GRAB.launchOut`.
+- [ ] **Step 4:** tests PASS; `pnpm run check`.
+- [ ] **Step 5: Chrome check:** Night 2 at z −150: walk +x: you stop at 2.7 with water 0.7 m away below the grass edge (screenshot down at the water: no dark mud strip). Watch Dras cruise for 60 s from the bank (screenshots every 10 s): fin always over water, never over mud; log `min(root.x) - waterline` over a whole wave, ≥ 0.9 when not grabbing. Night 1 (city) unchanged.
+- [ ] **Step 6: commit** `fix: natural banks drop straight to the water, and Dras cruises in the water only`.
