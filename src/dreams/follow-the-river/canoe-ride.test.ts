@@ -1,18 +1,25 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
 import {
+  BEATS,
   CALF,
   calfPose,
   canoePose,
   CLOSING_PAGES,
   crossedDown,
   dipPaddle,
+  newScript,
+  nextCue,
   PADDLE_DIP,
   RIDE,
   rowAmount,
+  speedAt,
+  STOP_AT,
+  STOP_PAUSE,
   toWorld,
   travelled,
   type CalfPose,
+  type Cue,
   type Pose,
 } from './canoe-ride';
 import { meshY, pathSlope, pathX, RIVER_HALF, rng, terrainY, WATER_LEVEL } from './canoe-scene';
@@ -201,5 +208,91 @@ describe('the paddle dips into the river', () => {
     }
     expect(Math.max(...low, ...high)).toBeGreaterThan(0.5);
     expect(PADDLE_DIP).toBeGreaterThan(0);
+  });
+});
+
+describe('the speed profile', () => {
+  it('glides to a drift after Mom stops rowing (it does not keep her speed)', () => {
+    expect(speedAt(30, null)).toBeCloseTo(RIDE.speed);
+    expect(speedAt(60, 55)).toBeLessThan(RIDE.speed * 0.5);
+    expect(speedAt(70, 55)).toBeCloseTo(RIDE.drift, 1);
+    for (let t = 55; t < 70; t += 0.5)
+      expect(speedAt(t + 0.5, 55)).toBeLessThanOrEqual(speedAt(t, 55) + 1e-9);
+  });
+
+  it('integrates the speed: distance matches a numeric sum, never backs up, slows after the stop', () => {
+    let sum = 0;
+    let last = 0;
+    let worst = 0;
+    let backed = 0;
+    const dt = 0.01;
+    for (let i = 0; i < 7000; i++) {
+      const t = i * dt;
+      const d = travelled(t, STOP_AT);
+      worst = Math.max(worst, Math.abs(d - sum));
+      backed = Math.min(backed, d - last);
+      last = d;
+      sum += speedAt(t + dt / 2, STOP_AT) * dt;
+    }
+    expect(worst).toBeLessThan(0.05);
+    expect(backed).toBeGreaterThanOrEqual(-1e-9);
+    expect(travelled(30, null)).toBeCloseTo(travelled(30, STOP_AT));
+  });
+});
+
+interface Entry {
+  t: number;
+  page: string;
+  rowing: boolean;
+  stoppedAt: number;
+}
+
+/** The ride's director run by hand: a player who reads each page for 3 s. */
+function simulateRide(): Entry[] {
+  const s = newScript();
+  const log: Entry[] = [];
+  let rowing = true;
+  let stoppedAt = Infinity;
+  let readingUntil = 0;
+  for (let i = 0; i < 1200; i++) {
+    const t = i * 0.1;
+    const cue: Cue | null = nextCue(s, t, t < readingUntil);
+    if (!cue) continue;
+    if (cue.kind === 'stop') {
+      rowing = false;
+      stoppedAt = t;
+      continue;
+    }
+    for (const page of cue.pages) log.push({ t, page, rowing, stoppedAt });
+    readingUntil = t + 3 * cue.pages.length;
+  }
+  return log;
+}
+
+describe('the director', () => {
+  it('only opens the "Mom stops rowing" page after she has stopped', () => {
+    const stop = simulateRide().find((e) => e.page === CLOSING_PAGES[0]);
+    expect(stop?.rowing).toBe(false);
+    expect(stop && stop.t - stop.stoppedAt).toBeGreaterThanOrEqual(STOP_PAUSE - 1e-6);
+    expect(STOP_PAUSE).toBeGreaterThanOrEqual(1);
+  });
+
+  it('has a few short talks with Mom, in order, before the calf', () => {
+    expect(BEATS.length).toBeGreaterThanOrEqual(3);
+    for (const b of BEATS) expect(b.at).toBeLessThan(RIDE.seconds - RIDE.calfLead);
+    for (let i = 1; i < BEATS.length; i++) expect(BEATS[i].at).toBeGreaterThan(BEATS[i - 1].at);
+    expect(BEATS.flatMap((b) => b.pages).some((p) => p.includes('\u2014'))).toBe(false);
+  });
+
+  it('plays every talk in order, then the closing pages, each once; a page open holds the next', () => {
+    const log = simulateRide().map((e) => e.page);
+    expect(log).toEqual([...BEATS.flatMap((b) => b.pages), ...CLOSING_PAGES]);
+    const s = newScript();
+    expect(nextCue(s, BEATS[0].at + 1, true)).toBeNull(); // a page is open: it waits
+    expect(nextCue(s, BEATS[0].at + 1, false)?.kind).toBe('beat');
+  });
+
+  it('stops Mom on time even while a page is open', () => {
+    expect(nextCue(newScript(), STOP_AT, true)?.kind).toBe('stop');
   });
 });

@@ -7,11 +7,13 @@ import { LOAD_TIMEOUT_MS } from '../load';
 import type { DreamContext, DreamModule } from '../types';
 import { areaFor } from './areas';
 import type { AreaDef } from './areas/types';
+import { playCanoeRide } from './canoe-ride';
 import { startChapter, type Chapter } from './chapter';
 import { runColdOpen, TITLE_PAGES, type ColdOpen } from './coldopen';
-import { REPLAY_PAGES } from './ending';
+import { ENDING_PAGES } from './ending';
 import { phaseTitle } from './flow';
 import { runIntro, type Intro } from './intro';
+import { loadSounds } from './sounds';
 import {
   completePhase,
   freshRun,
@@ -67,10 +69,16 @@ export function createDream(): DreamModule {
 
   let area: AreaDef | null = null;
 
-  /** "Watch the ending again": the epilogue and credits (the live finale plays inside Night 3). */
+  /** "Watch the ending again": the canoe ride, then the credits (the live finale plays inside Night 3). */
   const onFinale = (): void => {
-    if (ctx) ctx.stage.scene = new THREE.Scene(); // dark behind the pages, never a stale stage
-    ctx?.read(REPLAY_PAGES, () => ctx?.finish());
+    const c = ctx;
+    if (!c) return;
+    c.stage.scene = new THREE.Scene(); // dark behind the ride's build, never a stale stage
+    c.hold();
+    const credits = (): void => c.read(ENDING_PAGES.credits, () => c.finish());
+    void loadSounds(c.audio)
+      .then((sounds) => playCanoeRide(c, sounds, { replay: true }))
+      .then(credits, credits); // a failed load still ends with the credits
   };
 
   /** A night is survived: show the area's arrival pages, then hand over to the next chapter. */

@@ -10,7 +10,6 @@ import {
   ENDING_PAGES,
   nextEndingStep,
   nightEnd,
-  REPLAY_PAGES,
   sickenToEnd,
   struckNear,
   WAVE,
@@ -60,7 +59,6 @@ describe('ending steps', () => {
     for (const name of ['Kenney', 'Quaternius', 'OpenGameArt', 'Made with three.js']) {
       expect(credits).toContain(name);
     }
-    expect(REPLAY_PAGES.slice(-ENDING_PAGES.credits.length)).toEqual(ENDING_PAGES.credits);
   });
 
   it('never uses an em dash on screen', () => {

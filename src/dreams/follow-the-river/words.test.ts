@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DREAMS } from '../registry';
-import { CLOSING_PAGES } from './canoe-ride';
-import { ENDING_PAGES, REPLAY_PAGES } from './ending';
+import { BEATS, CLOSING_PAGES, OPENING_PAGES } from './canoe-ride';
+import { ENDING_PAGES } from './ending';
 import { FAREWELL_PAGES } from './ending-farewell';
 import { waitQuestion } from './flow';
 import { HINTS } from './hints';
@@ -23,7 +23,8 @@ const all = (): string[] => [
   ...Object.values(HINTS).flat(),
   ...Object.values(ENDING_PAGES).flat(),
   ...Object.values(FAREWELL_PAGES).flat(),
-  ...REPLAY_PAGES,
+  ...OPENING_PAGES,
+  ...BEATS.flatMap((b) => b.pages),
   ...CLOSING_PAGES,
   waitQuestion(1, true),
   waitQuestion(2, false),

@@ -80,6 +80,8 @@ export interface CanoeScene {
   scene: THREE.Scene;
   canoe: THREE.Group;
   mom: Character;
+  /** Kartik sitting in the bow; hidden (the camera is his eye) until the end shot. */
+  kartik: Character;
   paddle: THREE.Group;
   calf: Calf;
   sky: THREE.Object3D;
@@ -274,9 +276,10 @@ export async function buildCanoeScene(length: number, stage: CanoeStage): Promis
   water.rotation.x = -Math.PI / 2;
   water.position.set(0, WATER_LEVEL, (zNear + zFar) / 2);
   scene.add(terrain, water);
-  const [canoe, momAsset, orca] = await Promise.all([
+  const [canoe, momAsset, kartikAsset, orca] = await Promise.all([
     makeCanoe(),
     loadSkinned(characterUrl('mom')),
+    loadSkinned(characterUrl('kartik')),
     loadSkinned(characterUrl('orca')),
     addBanks(scene, zNear, zFar, stage),
     texturesReady(),
@@ -284,8 +287,12 @@ export async function buildCanoeScene(length: number, stage: CanoeStage): Promis
   const mom = createCharacter(momAsset, new THREE.Group());
   mom.rest = 'Row';
   mom.play('Row'); // paddling (tools/blender/mom_clips.py); the ride switches her to Sit at the end
+  const kartik = createCharacter(kartikAsset, new THREE.Group());
+  kartik.rest = 'Sit';
+  kartik.play('Sit');
+  kartik.group.visible = false;
   const paddle = makePaddle();
-  canoe.add(mom.group, paddle);
+  canoe.add(mom.group, kartik.group, paddle);
   const calf = makeCalf(orca);
   scene.add(canoe, calf.root);
   const sky = scene.getObjectByName(SKY_NAME) ?? new THREE.Object3D();
@@ -293,11 +300,13 @@ export async function buildCanoeScene(length: number, stage: CanoeStage): Promis
     scene,
     canoe,
     mom,
+    kartik,
     paddle,
     calf,
     sky,
     dispose() {
       mom.dispose();
+      kartik.dispose();
       calf.dispose();
       disposeScene(scene);
     },

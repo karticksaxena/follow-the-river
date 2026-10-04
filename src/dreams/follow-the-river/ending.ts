@@ -71,13 +71,6 @@ export const ENDING_PAGES: Readonly<Record<PagedStep, readonly string[]>> = {
   ],
 };
 
-/** The pages of the ending with no scene behind them ("Watch the ending again"). */
-export const REPLAY_PAGES: readonly string[] = [
-  'Dras lies on the pebbles below the dam, where she held them back.',
-  'Mom rows you down the river into the green. Something small swims beside the canoe.',
-  ...ENDING_PAGES.credits,
-];
-
 export { FLINCH, struckNear, WAVE, waveCount, waveDue, waveSpot } from './ending-wave';
 
 /** How the night ends at depth `z`: the safe spot, the lake shore (Night 3), or not yet. */

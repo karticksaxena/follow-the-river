@@ -1,32 +1,51 @@
 import * as THREE from 'three/webgpu';
 import type { DreamContext } from '../types';
 import { buildCanoeScene, pathSlope, pathX, WATER_LEVEL, type CanoeScene } from './canoe-scene';
+import { createShot, SHOT } from './canoe-shot';
+import {
+  CLOSING_PAGES,
+  newScript,
+  nextCue,
+  OPENING_PAGES,
+  RIDE,
+  smooth,
+  STOP_AT,
+  travelled,
+  type Script,
+} from './canoe-timing';
 import { CINEMATIC } from './flashback';
 import { createMotion, dripAt, type Motion } from './motion';
+import { lookAt } from './rig';
 import { picker, rateIn, type Sounds } from './sounds';
 
-/** Tuning knobs (seconds, metres, m/s). The ride is `seconds` long, then the closing pages. */
-export const RIDE = {
-  seconds: 72,
-  speed: 2.4,
-  /** Push-off: the canoe eases up to full speed over this long. */
-  easeIn: 3.5,
-  /** The calf starts to surface this long before the end, rising over `surface` seconds. */
-  calfLead: 20,
-  surface: 2.5,
-  /** Mom stops rowing this long before the end. */
-  rowStopLead: 5,
-  /** Glide allowed past `seconds` while the closing pages are read (world is built this long). */
-  tail: 40,
-  fadeMs: 700,
-} as const;
+export {
+  BEATS,
+  CLOSING_PAGES,
+  newScript,
+  nextCue,
+  OPENING_PAGES,
+  RIDE,
+  rowAmount,
+  speedAt,
+  STOP_AT,
+  STOP_PAUSE,
+  travelled,
+  type Cue,
+  type Script,
+} from './canoe-timing';
 
 export const SEAT = {
   eye: [0, 1.0, 0.9],
   // Her Sit/Row pelvis is 0.575 m above her feet: this puts it on the canoe's thwart.
   mom: [0, -0.22, -0.9],
   paddle: [0, 0.68, -0.72],
+  /** Kartik sits in the bow on the same thwart height, facing the bow. */
+  kartik: [0, -0.22, 0.9],
+  /** Where the paddle lies once she stops rowing: across the canoe between them, the blades out over the water. */
+  paddleRest: [0, 0.35, 0.1],
 } as const;
+/** How far Mom and Kartik may turn their heads (radians). */
+const HEAD_LIMITS = { yaw: 1.2, pitch: 0.7 };
 /** Calf: side of the canoe (m), pace-keeping drift and how deep it starts. */
 export const CALF = { side: 4.2, ahead: 1.6, hidden: -1.7, cruise: -0.15, blow: 0.35 } as const;
 export const VOLUME = {
@@ -39,13 +58,6 @@ export const VOLUME = {
   paddle: 0.5,
   paddleSpread: 0.1,
 } as const;
-
-export const OPENING_PAGES: readonly string[] = ['Mom pushes off from the shore.'];
-export const CLOSING_PAGES: readonly string[] = [
-  'Mom stops rowing. She has seen it too.',
-  'Mom: "Look. She wasn\'t alone."',
-  'She smiles for the first time since the river.',
-];
 
 /** Pure: a blade that was above `level` last frame and is at or below it now has just gone in. */
 export function crossedDown(prevY: number, y: number, level: number): boolean {
@@ -60,16 +72,9 @@ export interface Pose {
   roll: number;
 }
 
-/** Pure: metres travelled by time `t` (eases in, then constant speed). */
-export function travelled(t: number): number {
-  const { speed, easeIn } = RIDE;
-  const s = Math.max(0, t);
-  return s < easeIn ? (speed * s * s) / (2 * easeIn) : speed * (s - easeIn / 2);
-}
-
 /** Pure: the canoe at `t` (down the river toward -z, yaw faces its bow, a gentle bob and roll). */
 export function canoePose(t: number, out: Pose): Pose {
-  const z = -travelled(t);
+  const z = -travelled(t, STOP_AT); // the same road with or without the stop (it only slows the canoe after)
   out.z = z;
   out.x = pathX(z);
   out.yaw = Math.atan2(-pathSlope(z), -1);
@@ -84,16 +89,6 @@ export function toWorld(at: Pose, lx: number, lz: number, out: { x: number; z: n
   const c = Math.cos(at.yaw);
   out.x = at.x + lx * c + lz * s;
   out.z = at.z - lx * s + lz * c;
-}
-
-const smooth = (k: number): number => {
-  const c = Math.min(1, Math.max(0, k));
-  return c * c * (3 - 2 * c);
-};
-
-/** Pure: 1 while Mom rows, easing to 0 as she stops. */
-export function rowAmount(t: number): number {
-  return 1 - smooth((t - (RIDE.seconds - RIDE.rowStopLead)) / 1.5);
 }
 
 export interface CalfPose {
@@ -125,11 +120,27 @@ interface Ride {
   sounds: Sounds;
   cs: CanoeScene;
   t: number;
+  dt: number;
   started: boolean;
-  closing: boolean;
+  /** The talks and the stop, in order (canoe-timing). */
+  script: Script;
+  /** A talk or the closing pages are open: the ride runs on behind them. */
+  reading: boolean;
   blown: boolean;
   /** Mom is paddling (Row); she sits still (Sit) once she stops for the calf. */
   rowing: boolean;
+  /** 0..1: how far the heads have turned (to you while she talks, to the calf once she stops). */
+  look: number;
+  /** The end shot (set once the closing pages are read) and its clock in seconds. */
+  shot: ReturnType<typeof createShot> | null;
+  shotT: number;
+  fading: boolean;
+  /** Called when the ride is over and the screen is black. */
+  onEnd: () => void;
+  /** Mom's and Kartik's head bones. */
+  heads: { mom: THREE.Object3D; kartik: THREE.Object3D };
+  /** The ride has been torn down: late page callbacks do nothing. */
+  over: boolean;
   /** Mom's hands: the paddle's shaft is held between them (null if the rig has none). */
   hands: { left: THREE.Object3D; right: THREE.Object3D } | null;
   lastYaw: number;
@@ -211,24 +222,29 @@ function placeAll(r: Ride): void {
   const p = r.pose;
   cs.canoe.position.set(p.x, p.y, p.z);
   cs.canoe.rotation.set(0, p.yaw, p.roll);
-  const amp = rowAmount(t);
   cs.mom.group.position.set(...SEAT.mom); // her Row clip does the paddling and the twist
+  cs.kartik.group.position.set(...SEAT.kartik);
   holdPaddle(r);
-  if (r.rowing && amp < 0.5) {
-    r.rowing = false;
-    cs.mom.play('Sit'); // she stops rowing: she has seen it too
-  }
   placeCalf(r);
 }
 
 const handL = new THREE.Vector3();
 const handR = new THREE.Vector3();
 const along = new THREE.Vector3();
+const PADDLE_REST = new THREE.Vector3();
+const NO_TURN = new THREE.Quaternion();
 const SHAFT = new THREE.Vector3(1, 0, 0); // the paddle model lies along x
 
 /** The paddle's shaft runs from her left hand to her right, so it follows the rowing exactly. */
 function holdPaddle(r: Ride): void {
   const { cs, hands } = r;
+  if (!r.rowing) {
+    // She has let go: it settles across the canoe.
+    const k = 1 - Math.exp(-r.dt * 5);
+    cs.paddle.position.lerp(PADDLE_REST.set(...SEAT.paddleRest), k);
+    cs.paddle.quaternion.slerp(NO_TURN, k);
+    return;
+  }
   if (!hands) {
     cs.paddle.position.set(...SEAT.paddle);
     return;
@@ -259,24 +275,85 @@ function placeCalf(r: Ride): void {
   root.rotation.set(c.pitch, r.pose.yaw + Math.PI, 0);
 }
 
-/** Per frame: the ride clock, the camera glued to the seat (its look is the mouse's), animations. */
-function frame(r: Ride, dt: number, onEnd: () => void): void {
+const aim = new THREE.Vector3();
+
+/** Opens `pages` over the moving ride; `then` runs when the player has read them all. */
+function openPages(r: Ride, pages: readonly string[], then?: () => void): void {
+  r.reading = true;
+  r.ctx.read(pages, () => {
+    r.reading = false;
+    if (!r.over) then?.();
+  });
+}
+
+/** The end shot: input off, Kartik's body shows in the bow, the camera leaves his eye. */
+function startShot(r: Ride): void {
+  r.ctx.cinematic(true);
+  r.cs.kartik.group.visible = true;
+  r.shot = createShot(r.cs.canoe, r.ctx.stage.camera);
+}
+
+/** Does what the director says is due: a talk, Mom stopping, the closing pages. */
+function direct(r: Ride): void {
+  const cue = nextCue(r.script, r.t, r.reading || r.ctx.isPaused());
+  if (!cue) return;
+  if (cue.kind === 'stop') {
+    r.rowing = false; // the paddle strokes stop with the rowing; the speed eases down by itself
+    r.cs.mom.play('Sit');
+  } else openPages(r, cue.pages, cue.kind === 'closing' ? () => startShot(r) : undefined);
+}
+
+/** Mom looks at you while she talks and, once she has stopped, they both look at the calf. */
+function turnHeads(r: Ride): void {
+  const { cs } = r;
+  const want = r.reading || r.script.stopped ? 1 : 0;
+  r.look += (want - r.look) * (1 - Math.exp(-r.dt * 4));
+  if (r.look < 0.01) return;
+  const toCalf = r.script.stopped;
+  const camera = r.ctx.stage.camera;
+  const target = toCalf ? cs.calf.root.getWorldPosition(aim) : camera.getWorldPosition(aim);
+  lookAt(r.heads.mom, target, r.look, HEAD_LIMITS);
+  if (toCalf) lookAt(r.heads.kartik, target, r.look, HEAD_LIMITS);
+}
+
+/** The seat camera: glued to Kartik's eye, its look is the mouse's and it turns with the bends. */
+function seatCamera(r: Ride): void {
+  const { camera } = r.ctx.stage;
+  r.cs.canoe.localToWorld(camera.position.set(...SEAT.eye));
+  camera.rotation.y += r.pose.yaw - r.lastYaw;
+  r.lastYaw = r.pose.yaw;
+  camera.updateMatrixWorld(true);
+}
+
+/** The end shot's rail; the picture fades to black over its last seconds, then the ride is over. */
+function stepShot(r: Ride, shot: NonNullable<Ride['shot']>): void {
+  r.shotT += r.dt;
+  shot.place(Math.min(1, r.shotT / SHOT.seconds));
+  if (!r.fading && r.shotT >= SHOT.seconds - SHOT.fadeSeconds) {
+    r.fading = true;
+    void r.ctx.overlay.fade(true, SHOT.fadeSeconds * 1000).then(r.onEnd);
+  }
+}
+
+/** Per frame: the ride clock, the talks, the camera (the seat, then the end shot), animations. */
+function frame(r: Ride, dt: number): void {
   const { ctx, cs } = r;
-  const live = r.closing || (r.started && !ctx.isPaused());
+  const live = r.reading || r.shot !== null || (r.started && !ctx.isPaused());
+  r.dt = live ? dt : 0;
   if (live) {
     r.t = Math.min(RIDE.seconds + RIDE.tail, r.t + dt);
     cs.mom.update(dt);
+    cs.kartik.update(dt);
     cs.calf.mixer.update(dt);
+    direct(r);
   }
   placeAll(r);
   cs.canoe.updateMatrixWorld(true);
+  turnHeads(r);
   if (live && r.rowing) stepPaddles(r);
-  const { camera } = ctx.stage;
-  cs.canoe.localToWorld(camera.position.set(...SEAT.eye));
-  camera.rotation.y += r.pose.yaw - r.lastYaw; // the view turns with the bend, the mouse adds to it
-  r.lastYaw = r.pose.yaw;
-  camera.updateMatrixWorld(true);
-  cs.sky.position.copy(camera.position);
+  if (r.shot) stepShot(r, r.shot);
+  else seatCamera(r);
+  cs.sky.position.copy(ctx.stage.camera.position);
   r.motion.env.tier = ctx.stage.tier;
   r.motion.update(dt);
   if (!r.blown && r.calf.surfaced > 0.6) {
@@ -284,32 +361,39 @@ function frame(r: Ride, dt: number, onEnd: () => void): void {
     const blow = r.blows();
     if (blow) ctx.audio.once(blow, VOLUME.blow).setPlaybackRate(VOLUME.blowRate);
   }
-  if (!r.closing && r.t >= RIDE.seconds) {
-    r.closing = true;
-    ctx.read(CLOSING_PAGES, onEnd);
-  }
 }
 
 /**
  * The last scene: Mom rows the player down a sunrise river and the orca calf surfaces beside them.
- * Resolves when the closing pages are over, with the screen faded to black and the previous scene
- * back on the stage (the caller shows the credits). Safe against quits: if anything else replaces
- * the stage scene, the ride tears itself down and resolves.
+ * They talk, Mom stops rowing for the calf, the closing pages are read, then a calm shot rises
+ * from Kartik's eye to a wide view of the two of them in the boat and fades to black. Resolves
+ * then, with the previous scene back on the stage (the caller shows the credits). A replay does
+ * not fade from the lake first. Safe against quits: if anything else replaces the stage scene,
+ * the ride tears itself down and resolves.
  */
-export function playCanoeRide(ctx: DreamContext, sounds: Sounds): Promise<void> {
+export function playCanoeRide(
+  ctx: DreamContext,
+  sounds: Sounds,
+  opts: { replay?: boolean } = {},
+): Promise<void> {
   return new Promise((resolve) => {
     ctx.hold(); // freezes the chapter while the world builds
-    void run(ctx, sounds, resolve);
+    void run(ctx, sounds, resolve, opts.replay === true);
   });
 }
 
-async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise<void> {
+async function run(
+  ctx: DreamContext,
+  sounds: Sounds,
+  done: () => void,
+  replay: boolean,
+): Promise<void> {
   const { stage, overlay } = ctx;
   const previous = stage.scene;
-  const length = RIDE.speed * (RIDE.seconds + RIDE.tail);
+  const length = travelled(RIDE.seconds + RIDE.tail, STOP_AT);
   const [cs] = await Promise.all([
     buildCanoeScene(length, stage).catch(() => null),
-    overlay.fade(true, RIDE.fadeMs),
+    replay ? undefined : overlay.fade(true, RIDE.fadeMs),
   ]);
   if (stage.scene !== previous || !cs) {
     cs?.dispose();
@@ -325,8 +409,17 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
     sounds,
     cs,
     t: 0,
+    dt: 0,
     started: false,
-    closing: false,
+    script: newScript(),
+    reading: false,
+    look: 0,
+    shot: null,
+    shotT: 0,
+    fading: false,
+    onEnd: () => teardown(true),
+    heads: { mom: cs.mom.bone('Head'), kartik: cs.kartik.bone('Head') },
+    over: false,
     blown: false,
     rowing: true,
     hands: findHands(cs.mom.group),
@@ -344,9 +437,10 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
   };
   r.motion.env.fireflies = true; // it is dawn: the banks are alive
   let live = true;
-  const teardown = (): void => {
+  const teardown = (finished = false): void => {
     if (!live) return;
     live = false;
+    r.over = true;
     stop();
     const beds = birds ? [water, birds] : [water];
     for (const sound of [...beds, ...r.blades.map((b) => b.sound)]) {
@@ -354,6 +448,8 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
       sound.disconnect();
     }
     ctx.overlay.root.classList.remove(CINEMATIC);
+    if (r.shot) ctx.cinematic(false);
+    if (finished) ctx.hold(); // input stays off until the credits open
     if (stage.scene === cs.scene) {
       stage.scene = previous;
       ctx.grade(graded);
@@ -362,11 +458,10 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
     cs.dispose();
     done();
   };
-  const onEnd = (): void => void overlay.fade(true, RIDE.fadeMs).then(teardown);
   const stop = stage.addUpdater((dt) => {
     if (stage.scene !== cs.scene) return teardown(); // someone else took the stage
     try {
-      frame(r, dt, onEnd);
+      frame(r, dt);
       birds?.setVolume(VOLUME.birds * Math.min(1, r.t / VOLUME.birdsFade));
     } catch (error) {
       teardown();
