@@ -17,6 +17,7 @@ import { createFlashlight } from './flashlight';
 import { createArmory, type Armory } from './gun';
 import { createHud } from './hud';
 import { propUrl } from './kits';
+import { createMotion } from './motion';
 import { createPickupMeshes, type PickupMeshes } from './pickups';
 import type { Systems } from './run';
 import { createScares } from './scares';
@@ -108,6 +109,7 @@ function free(scene: THREE.Scene, camera: THREE.Camera, parts?: Partial<Systems>
   parts?.hud?.dispose();
   parts?.ambience?.dispose();
   parts?.scares?.dispose();
+  parts?.motion?.dispose();
   if (camera.parent === scene) camera.removeFromParent();
 }
 
@@ -157,6 +159,10 @@ export async function assemble(
   scene.add(atmosphere.mesh);
   ctx.stage.mist(atmosphere.mesh.material);
   const flashlight = createFlashlight(camera);
+  const motion = createMotion(scene, camera, {
+    fires: [area.waitSpot],
+    fireflies: { kind: 'band', minX: area.landX - 10, maxX: area.landX + 2, y: 0.4 },
+  });
   const scares = await createScares(
     ctx,
     scene,
@@ -168,7 +174,7 @@ export async function assemble(
   );
   if (isCancelled()) {
     ctx.stage.mist(null);
-    free(scene, camera, { ...bodies, flashlight, scares });
+    free(scene, camera, { ...bodies, flashlight, scares, motion });
     return null;
   }
   // Two bodies on show, so both outfits compile (parked bodies are invisible, so skipped).
@@ -179,7 +185,7 @@ export async function assemble(
   await compileMist(ctx.stage.renderer, scene, camera); // the mist's own layer, behind the loading screen
   if (isCancelled()) {
     ctx.stage.mist(null);
-    free(scene, camera, { ...bodies, flashlight, scares });
+    free(scene, camera, { ...bodies, flashlight, scares, motion });
     return null;
   }
   const hud = createHud(ctx.overlay.root);
@@ -202,6 +208,7 @@ export async function assemble(
     scares,
     gates,
     atmosphere,
+    motion,
   };
   return { sys, lantern };
 }

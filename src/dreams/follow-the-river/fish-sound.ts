@@ -1,5 +1,6 @@
 import type * as THREE from 'three/webgpu';
 import type { FishState } from './fish-state';
+import { splashAt } from './motion';
 import { WATER_Y } from './river';
 import { rateIn } from './sounds';
 
@@ -30,6 +31,7 @@ function fire(
 /** A real splash at (x, z): a big one (the burst, the leap) also gets a low thump of the body under it. */
 export function playSplash(f: FishState, x: number, z: number, big = false): void {
   f.splashAt.position.set(x, WATER_Y, z);
+  splashAt(x, WATER_Y, z, big);
   const pick = big ? f.pick.big : f.pick.splash;
   fire(f.splash, pick(), big ? SOUND.big : SOUND.splash, rateIn(0.9, 1.1));
   if (big) fire(f.thump, f.pick.big(), SOUND.thump.volume, SOUND.thump.rate);

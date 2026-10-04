@@ -4,7 +4,7 @@ import type { AmbushDef } from './areas/types';
 import { createControls, cutsceneChange, type Controls } from './controls';
 import { DIFFICULTY, nightTuning, type DifficultyTuning } from './difficulty';
 import { nightEnd } from './ending';
-import { BEAM, chargeBattery, TORCH_EXPOSURE, WATCH } from './flashlight';
+import { BEAM, chargeBattery, FLASHLIGHT, TORCH_EXPOSURE, WATCH } from './flashlight';
 import { nearSpot, takeDamage } from './flow';
 import { gunBits, type HudState } from './hud';
 import { applyDim, LIGHTING } from './lighting';
@@ -182,6 +182,20 @@ function updateSense(p: State): void {
   sense.beamOn = sys.flashlight.on && run.live.supplies.battery > 0;
 }
 
+/** The particles: dust in the beam, night mist, Night 3's fireflies at the forest edge, the forest's leaves by day. */
+function moveMotion(p: State, dt: number): void {
+  const { sys, run } = p;
+  const { env } = sys.motion;
+  const forest = sys.area.id === 'forest';
+  env.tier = sys.ctx.stage.tier;
+  env.night = isNight(run.phase);
+  env.torch = Math.min(1, sys.flashlight.light.intensity / FLASHLIGHT.intensity);
+  env.mist = env.night;
+  env.fireflies = forest && run.phase === 'night3';
+  env.leaves = forest && !env.night;
+  sys.motion.update(dt);
+}
+
 /** Every rendered frame, pages and cutscenes included: the torch's eye adjustment and the water's tier. */
 function lightTorch(p: State, dt: number): void {
   const { sys, run } = p;
@@ -189,6 +203,7 @@ function lightTorch(p: State, dt: number): void {
   sys.flashlight.clearWatch(WATCH.horde);
   sys.horde.forEachAlive(p.watchZombie);
   sys.flashlight.apply(run.live.supplies.battery, run.time, dt);
+  moveMotion(p, dt);
 }
 
 function tickWorld(p: State, dt: number): void {

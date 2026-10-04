@@ -9,6 +9,7 @@ import type { Flashlight } from './flashlight';
 import type { Armory } from './gun';
 import type { HintId } from './hints';
 import type { Hud } from './hud';
+import type { Motion } from './motion';
 import type { PickupMeshes } from './pickups';
 import type { Scares } from './scares';
 import type { Sounds } from './sounds';
@@ -37,6 +38,8 @@ export interface Systems {
   gates: Gates;
   /** The mist box that follows the player. */
   atmosphere: Atmosphere;
+  /** Splash spray, mist wisps, torch dust, fireflies, embers and leaves. */
+  motion: Motion;
 }
 
 export type Dying = 'no' | 'anim' | 'wait';

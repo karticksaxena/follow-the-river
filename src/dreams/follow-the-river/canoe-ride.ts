@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { DreamContext } from '../types';
 import { buildCanoeScene, pathSlope, pathX, WATER_LEVEL, type CanoeScene } from './canoe-scene';
 import { CINEMATIC } from './flashback';
+import { createMotion, dripAt, type Motion } from './motion';
 import { picker, rateIn, type Sounds } from './sounds';
 
 /** Tuning knobs (seconds, metres, m/s). The ride is `seconds` long, then the closing pages. */
@@ -139,6 +140,8 @@ interface Ride {
   blades: Blade[];
   strokes: () => AudioBuffer | null;
   blows: () => AudioBuffer | null;
+  /** Dawn fireflies round the canoe and the drops off the paddle. */
+  motion: Motion;
 }
 
 /**
@@ -183,7 +186,10 @@ function stroke(r: Ride, b: Blade): void {
 function stepPaddles(r: Ride): void {
   for (const b of r.blades) {
     const y = b.mark.getWorldPosition(bladeAt).y;
-    if (crossedDown(b.y, y, WATER_LEVEL)) stroke(r, b);
+    if (crossedDown(b.y, y, WATER_LEVEL)) {
+      stroke(r, b);
+      dripAt(bladeAt.x, WATER_LEVEL, bladeAt.z);
+    }
     b.y = y;
   }
 }
@@ -271,6 +277,8 @@ function frame(r: Ride, dt: number, onEnd: () => void): void {
   r.lastYaw = r.pose.yaw;
   camera.updateMatrixWorld(true);
   cs.sky.position.copy(camera.position);
+  r.motion.env.tier = ctx.stage.tier;
+  r.motion.update(dt);
   if (!r.blown && r.calf.surfaced > 0.6) {
     r.blown = true;
     const blow = r.blows();
@@ -329,7 +337,12 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
     blades: makeBlades(cs, ctx),
     strokes: picker(sounds.paddles),
     blows: picker(sounds.blows),
+    motion: createMotion(cs.scene, stage.camera, {
+      fires: [],
+      fireflies: { kind: 'ring', y: WATER_LEVEL + 0.3 },
+    }),
   };
+  r.motion.env.fireflies = true; // it is dawn: the banks are alive
   let live = true;
   const teardown = (): void => {
     if (!live) return;
@@ -345,6 +358,7 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
       stage.scene = previous;
       ctx.grade(graded);
     }
+    r.motion.dispose();
     cs.dispose();
     done();
   };
