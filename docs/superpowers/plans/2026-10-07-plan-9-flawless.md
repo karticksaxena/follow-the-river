@@ -1,6 +1,6 @@
 # Plan 9: the last iteration ("this should be picture perfect, then we launch")
 
-> **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:executing-plans` (Kartik's choice) to carry this out task by task. Steps use checkbox (`- [ ]`) syntax.
+> **For agentic workers:** REQUIRED SUB-SKILL: **`superpowers:subagent-driven-development`** (Kartik's choice, 2026-10-04: "use subagent driven development, it works better"), together with `grounded-research`, `superpowers:executing-plans` discipline (ledger, TDD, verification) and the repo game skill `webgpu-threejs-tsl`. Implementers and reviewers are Sonnet subagents (`model: "sonnet"`, Kartik's standing rule; it overrides the skill's "more capable model" escalation). Steps use checkbox (`- [ ]`) syntax.
 > - Use `grounded-research` for any asset, sound, API or version; use the repo skill `webgpu-threejs-tsl` for every three.js / TSL change.
 > - Subagents run on Sonnet only (`model: "sonnet"`). Blender and asset-building tasks go to Sonnet agents with exact briefs; the controller reviews their output by eye.
 > - Work in a git worktree `.claude/worktrees/plan-9` (branch `plan-9`) with its own Vite port (5180). :5173 is Kartik's: never touch it.
@@ -203,7 +203,7 @@ window.__gpuFrames = async (n) => { const dev = kd.stage.renderer.backend.device
 | 7b | Night 2 wall (confirmed this session) | Walking +x at z −150 stops at x 2.7 against `{minX 3, maxX 33, minZ −417, maxZ 16}` (the river blocker); a 4 m dark mud strip lies between the player and the water (screenshot). |
 | 28 | Flashlight at point blank blows the whole screen white (found this session) | A zombie 0.5 m away in the 80 cd beam, no tone mapping, bloom threshold 0.7: the frame went white-green behind the "You are hurt" page. |
 | 29 | "Don't tell people how many zombies are left" (Kartik, this session) | `hud.ts waveText` shows `Wave 2/3 · 5 left`. |
-| 30 | "Still white, where are its small eyes, it looks like a turd" (Kartik, this session, screenshot 33) | Besides the tint bug: `tools/blender/orca.py` builds a 5-bone blob with no eyeballs (the eye is only a white patch), no mouth, a male-sized straight dorsal fin and soft round proportions. Task A7 rebuilds it to real orca anatomy, done by the controller (not a Sonnet agent) with renders checked against reference photos. |
+| 30 | "Still white, where are its small eyes, it looks like a turd" (Kartik, this session, screenshot 33) | Besides the tint bug: `tools/blender/orca.py` builds a 5-bone blob with no eyeballs (the eye is only a white patch), no mouth, a male-sized straight dorsal fin and soft round proportions. Task A7 rebuilds it to real orca anatomy, with every render checked against reference photos. |
 | 2 | Phone missing | `intro.ts` goodbye plays `Idle_Gun_Pointing` with nothing in her hand. |
 | 1 | Baseball throw | `intro.ts throwAction` plays the retargeted UAL2 `OverhandThrow` (`Throw`, release 0.8 s). |
 
@@ -216,7 +216,7 @@ window.__gpuFrames = async (n) => { const dev = kd.stage.renderer.backend.device
 - Ruling: difficulty lives in `Settings` (shared, saved, changeable from the pause menu) and is asked once when a new run starts. Old settings without it default to Normal.
 - Ruling: zombies take two body hits on Normal and Hard (a head hit always kills; the shotgun's close blast always kills), one on Story. This, scarce ammo, no recovering an arrow that killed, and short stuns are together what makes the creature and the guns matter.
 - Ruling: the render pipeline upgrade (tone mapping, AA, full resolution, GTAO) moves from Track B into Track A as Task A13: the sunrise (`SkyMesh` outputs HDR), Mom's lantern glare (#26) and the flashlight blowout (#28) all need tone mapping, and "no realism" (#27) is a launch complaint.
-- Ruling: the creature model rebuild (A7) is done by the controller itself in Blender, not a Sonnet agent: it is the game's centrepiece and Kartik has rejected it twice. Kartik's character and Mom's clips (A10) go to Sonnet agents with exact briefs; their renders are reviewed by eye before use.
+- Ruling: every task runs through a Sonnet implementer (subagent-driven development, Kartik's choice). For the asset tasks (A7 Dras, A10 Kartik and Mom's clips) the controller additionally looks at every render the implementer produces and sends it back with concrete fixes until it reads right; A7 (the centrepiece, rejected twice) gets up to five fix rounds before the controller rules.
 - Ruling: Dras is female (Mom already says "Here, girl"): a female orca's dorsal fin is shorter (about 0.9 m on a 7 m body) and curved back (falcate), unlike the 1.45 m straight fin today.
 - Ruling: the HUD shows the wave number only ("Wave 2 of 3"), never how many are left (Kartik, #29).
 - Ruling: one sky system. `SkyMesh` (r186, verified in `node_modules/three/examples/jsm/objects/SkyMesh.js`: `turbidity`, `rayleigh`, `mieCoefficient`, `mieDirectionalG`, `sunPosition`, `showSunDisc`, cloud uniforms) for dusk, day, dawn and sunrise; at night the sun is below the horizon, so a dark star dome plus the moon disc (kept from today) take over, blended by sun elevation. Every night preset is checked "never bright" by screenshot.
@@ -762,7 +762,7 @@ export function stepWaves(w, waves, z, alive, dt, d, rand): WaveEvent {
 
 ### Task A7: Rebuild Dras to real orca anatomy (eyes, mouth and jaw, a female's fin, a smooth spine)
 
-Done by the controller (ruling), headless Blender (`/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python tools/blender/orca.py -- public/assets/characters/orca.glb`), renders checked by eye.
+Sonnet implementer, the controller reviews every render (ruling); headless Blender (`/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python tools/blender/orca.py -- public/assets/characters/orca.glb`), renders checked by eye.
 
 **Files:**
 - Rewrite: `tools/blender/orca.py` (same CLI). Output: `public/assets/characters/orca.glb` (meshopt-compressed per `tools/assets/README.md`).
