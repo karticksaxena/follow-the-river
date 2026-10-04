@@ -136,11 +136,19 @@ export function styleFor(model: THREE.Object3D, tier: Tier): void {
   });
 }
 
+/** Moves the placed skyline meshes in or out of the reflection when the tier changes mid-chapter. */
+export function setSkylineTier(meshes: readonly THREE.Object3D[], tier: Tier): void {
+  for (const mesh of meshes) {
+    if (tier === 'high') mesh.layers.set(0);
+    else mesh.layers.set(NO_REFLECTION_LAYER);
+  }
+}
+
 /**
  * Places the far-bank silhouettes (windows facing the river) and a tree line behind the bank,
  * spanning `startZ` to `endZ` plus a margin so no end of the row is visible. Past the walkable ends
  * the rows follow the river's `bend`, so the view turns out of sight instead of running straight.
- * Static meshes are merged per material and map cell (addBatched).
+ * Static meshes are merged per material and map cell (addBatched); returns those meshes.
  */
 export async function addSkyline(
   scene: THREE.Scene,
@@ -150,7 +158,7 @@ export async function addSkyline(
   endMargin = MARGIN,
   bend: Bend = noBend,
   tier: Tier = 'high',
-): Promise<void> {
+): Promise<THREE.Object3D[]> {
   const from = startZ + MARGIN;
   const span = startZ - endZ + MARGIN + endMargin;
   const count = Math.round(span / SPACING);
@@ -167,5 +175,7 @@ export async function addSkyline(
     model.scale.setScalar(item.scale);
     styleFor(model, tier);
   });
+  const before = scene.children.length; // addBatched is synchronous: the new children are ours
   addBatched(scene, models, SKYLINE_CELL);
+  return scene.children.slice(before);
 }

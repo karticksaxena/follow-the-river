@@ -12,12 +12,12 @@ import { groundSurfaces } from './ground';
 import { KIT_SCALE, kitUrl } from './kits';
 import { addLake } from './lake';
 import { createWorldLights, type WorldLights } from './lighting';
-import { addVegetation } from './nature';
+import { addVegetation, type Vegetation } from './nature';
 import type { Railing } from './railing';
 import { addRiver, bentPlane, EDGE_X, LAKE, OVERRUN, RIVER_WIDTH } from './river';
 import { addShack, shackBounds, shackColliders } from './shack';
 import { bendFor, type Bend } from './shore-shape';
-import { addSkyline } from './skyline';
+import { addSkyline, setSkylineTier } from './skyline';
 import { plantsOf, stripGrass } from './vegetation';
 
 export interface World {
@@ -27,6 +27,8 @@ export interface World {
   railing: Railing | null;
   lights: WorldLights;
   insideShack(x: number, z: number): boolean;
+  /** The live tier changed: vegetation reach, shadows and reflections follow (no-op if unchanged). */
+  setTier(tier: Tier): void;
 }
 
 /** Colliders are the prop's footprint shrunk a little so players don't snag on corners. */
@@ -123,8 +125,13 @@ function addGround(scene: THREE.Scene, area: AreaDef): void {
   scene.add(bentPlane([120, z0 - z1], area.ground, groundSurfaces(area).ground, at, bendOf(area)));
 }
 
+interface Waters {
+  railing: Railing | null;
+  skyline: THREE.Object3D[];
+}
+
 /** The river (stopping at a lake's shore, where the lake begins) and its skyline. */
-async function addWaters(scene: THREE.Scene, area: AreaDef, tier: Tier): Promise<Railing | null> {
+async function addWaters(scene: THREE.Scene, area: AreaDef, tier: Tier): Promise<Waters> {
   const { lake } = area;
   const embankment = area.bank === 'embankment';
   const grass = [area.ground, area.farBank] as const;
@@ -135,8 +142,16 @@ async function addWaters(scene: THREE.Scene, area: AreaDef, tier: Tier): Promise
     addRiver(scene, area.startZ, area.endZ, { farBankColor, farSurface: far, embankment, bend });
     const span = [area.startZ, area.endZ] as const;
     const railing = addBanks(scene, area.bank, span, grass, OVERRUN, bend, undefined, ground);
-    await addSkyline(scene, area.skyline, area.startZ, area.endZ, undefined, bend, tier);
-    return railing;
+    const skyline = await addSkyline(
+      scene,
+      area.skyline,
+      area.startZ,
+      area.endZ,
+      undefined,
+      bend,
+      tier,
+    );
+    return { railing, skyline };
   }
   addRiver(scene, area.startZ, lake.z, {
     farBankColor,
@@ -147,8 +162,8 @@ async function addWaters(scene: THREE.Scene, area: AreaDef, tier: Tier): Promise
   });
   const railing = addBanks(scene, area.bank, [area.startZ, lake.z], grass, 0, bend, lake.z, ground);
   addLake(scene, lake.z, area.ground, area.farBank, ground);
-  await addSkyline(scene, area.skyline, area.startZ, lake.z, 0, bend, tier);
-  return railing;
+  const skyline = await addSkyline(scene, area.skyline, area.startZ, lake.z, 0, bend, tier);
+  return { railing, skyline };
 }
 
 /** MegaKit trees, ferns, rocks and the tier's grass, instanced (`nature.ts`). */
@@ -157,9 +172,9 @@ async function addPlants(
   area: AreaDef,
   tier: Tier,
   camera: THREE.Camera | null,
-): Promise<void> {
+): Promise<Vegetation> {
   const grass = stripGrass(area, tier, area.shacks.map(shackBounds));
-  await addVegetation(scene, [...plantsOf(area), ...grass], tier, camera);
+  return addVegetation(scene, [...plantsOf(area), ...grass], tier, camera);
 }
 
 /** Builds an area: lights, ground, river, skyline, props, plants, shacks and every blocker. */
@@ -173,7 +188,7 @@ export async function buildWorld(
   addGround(scene, area);
   const colliders = stripBlockers(area);
   const paved = new Map<THREE.Texture, THREE.Material>();
-  const [props, fire, railing] = await Promise.all([
+  const [props, fire, waters, vegetation] = await Promise.all([
     Promise.all(area.props.filter((p) => p.kit !== 'megakit').map((p) => loadProp(p, paved, tier))),
     addCampfire(scene, area.waitSpot.x, area.waitSpot.z),
     addWaters(scene, area, tier),
@@ -188,12 +203,20 @@ export async function buildWorld(
     props.map((p) => p.model),
   );
   for (const shack of area.shacks) colliders.push(...shackColliders(shack));
+  let live = tier;
   const bounds = area.shacks.map(shackBounds);
+  const { railing, skyline } = waters;
   return {
     scene,
     colliders,
     railing,
     lights,
+    setTier(next) {
+      if (next === live) return;
+      live = next;
+      vegetation.setTier(next);
+      setSkylineTier(skyline, next);
+    },
     insideShack(x, z) {
       for (const b of bounds) {
         if (x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ) return true;

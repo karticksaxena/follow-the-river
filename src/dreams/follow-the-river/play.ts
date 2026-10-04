@@ -210,6 +210,7 @@ const drasEye = { x: 0, y: 0, z: 0 }; // reused each frame: no allocation
 function lightTorch(p: State, dt: number): void {
   const { sys, run } = p;
   setWaterTier(sys.ctx.stage.tier);
+  sys.world.setTier(sys.ctx.stage.tier); // vegetation reach, shadows, reflections (no-op if unchanged)
   setTorchShadowTier(sys.flashlight.light, sys.ctx.stage.tier);
   sys.flashlight.clearWatch(WATCH.horde);
   sys.horde.forEachAlive(p.watchZombie);

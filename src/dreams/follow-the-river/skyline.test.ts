@@ -5,7 +5,7 @@ import { CITY } from './areas/city';
 import { FOREST } from './areas/forest';
 import { SUBURBS } from './areas/suburbs';
 import { FAR_EDGE_X } from './river';
-import { addSkyline, buildingFor, skylineLayout } from './skyline';
+import { addSkyline, buildingFor, setSkylineTier, skylineLayout } from './skyline';
 
 const materials = new Map<string, THREE.Material>();
 
@@ -81,5 +81,25 @@ describe('buildingFor', () => {
     expect(buildingFor(25)).toBe('buildingTall');
     expect(buildingFor(15)).toBe('buildingMid');
     expect(buildingFor(8)).toBe('buildingLow');
+  });
+});
+
+describe('setSkylineTier', () => {
+  it('moves the returned meshes in and out of the reflection when the tier changes', async () => {
+    const scene = new THREE.Scene();
+    const meshes = await addSkyline(
+      scene,
+      CITY.skyline,
+      CITY.startZ,
+      CITY.endZ,
+      undefined,
+      undefined,
+      'high',
+    );
+    expect(meshes.length).toBeGreaterThan(0);
+    setSkylineTier(meshes, 'low');
+    for (const m of meshes) expect(m.layers.mask).toBe(1 << NO_REFLECTION_LAYER);
+    setSkylineTier(meshes, 'high');
+    for (const m of meshes) expect(m.layers.isEnabled(0)).toBe(true);
   });
 });

@@ -273,6 +273,16 @@ function groupItems(items: readonly Item[]): Group[] {
   return [...groups.values()];
 }
 
+/** Shadow casting and reflection layer for a cell; re-applied when the tier changes mid-chapter. */
+function styleForTier(mesh: THREE.InstancedMesh, category: Category, tier: Tier): void {
+  const tree = category === 'trees' || category === 'trees-far';
+  const solid = category === 'trees' || category === 'rocks';
+  mesh.castShadow = solid && tier === 'high';
+  // Only trees on High show in the water; everything else is off the reflection's layer.
+  if (tree && tier === 'high') mesh.layers.set(0);
+  else mesh.layers.set(NO_REFLECTION_LAYER);
+}
+
 function instances(part: Part, g: Group, tier: Tier): THREE.InstancedMesh {
   const scales = new Float32Array(g.plants.length);
   const matrices = new Float32Array(g.plants.length * 16);
@@ -288,13 +298,10 @@ function instances(part: Part, g: Group, tier: Tier): THREE.InstancedMesh {
     g.plants.length,
   );
   mesh.instanceMatrix.array.set(matrices);
-  const tree = g.category === 'trees' || g.category === 'trees-far';
   const solid = g.category === 'trees' || g.category === 'rocks';
   // Near trees and rocks cast shadows on High only; grass and ferns neither cast nor receive.
-  mesh.castShadow = solid && tier === 'high';
   mesh.receiveShadow = solid || g.category === 'trees-far';
-  // Only trees on High show in the water; everything else is off the reflection's layer.
-  if (!(tree && tier === 'high')) mesh.layers.set(NO_REFLECTION_LAYER);
+  styleForTier(mesh, g.category, tier);
   mesh.matrixAutoUpdate = false;
   mesh.computeBoundingSphere(); // frustum culling per cell
   return mesh;
@@ -303,6 +310,7 @@ function instances(part: Part, g: Group, tier: Tier): THREE.InstancedMesh {
 interface Cell {
   mesh: THREE.InstancedMesh;
   kind: Kind;
+  category: Category;
   minX: number;
   maxX: number;
   minZ: number;
@@ -322,7 +330,7 @@ const eye = new THREE.Vector3();
 export class Vegetation extends THREE.Group {
   private readonly cells: Cell[] = [];
   private readonly camera: THREE.Camera | null;
-  private readonly tier: Tier;
+  private tier: Tier;
   private lastX = NaN;
   private lastZ = NaN;
   private lastFog = NaN;
@@ -333,7 +341,24 @@ export class Vegetation extends THREE.Group {
     this.camera = camera;
   }
 
-  addCell(mesh: THREE.InstancedMesh, kind: Kind, plants: readonly Plant[]): void {
+  /**
+   * The live tier (Auto or the pause menu changed it): cull reach, shadows and reflection follow
+   * at once. Grass density and the material fade stay at the build tier (rebuilding instance
+   * buffers mid-play is not worth it); the narrower live reach still cuts the drawn grass.
+   */
+  setTier(tier: Tier): void {
+    if (tier === this.tier) return;
+    this.tier = tier;
+    this.lastX = NaN; // the next apply re-culls at the new reach
+    for (const c of this.cells) styleForTier(c.mesh, c.category, tier);
+  }
+
+  addCell(
+    mesh: THREE.InstancedMesh,
+    kind: Kind,
+    category: Category,
+    plants: readonly Plant[],
+  ): void {
     let minX = Infinity;
     let maxX = -Infinity;
     let minZ = Infinity;
@@ -345,7 +370,15 @@ export class Vegetation extends THREE.Group {
       maxZ = Math.max(maxZ, p.z);
     }
     const c = CROWN;
-    this.cells.push({ mesh, kind, minX: minX - c, maxX: maxX + c, minZ: minZ - c, maxZ: maxZ + c });
+    this.cells.push({
+      mesh,
+      kind,
+      category,
+      minX: minX - c,
+      maxX: maxX + c,
+      minZ: minZ - c,
+      maxZ: maxZ + c,
+    });
     this.add(mesh);
   }
 
@@ -396,7 +429,8 @@ export async function addVegetation(
   const all = await Promise.all(groups.map((g) => partsOf(g.category, g.model)));
   const vegetation = new Vegetation(tier, camera);
   groups.forEach((g, i) => {
-    for (const part of all[i]) vegetation.addCell(instances(part, g, tier), g.kind, g.plants);
+    for (const part of all[i])
+      vegetation.addCell(instances(part, g, tier), g.kind, g.category, g.plants);
   });
   vegetation.matrixAutoUpdate = false;
   parent.add(vegetation);

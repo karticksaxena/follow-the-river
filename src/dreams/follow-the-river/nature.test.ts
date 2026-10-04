@@ -137,3 +137,27 @@ describe('addVegetation', () => {
     for (const m of meshes) expect(m.boundingSphere).not.toBeNull();
   }, 60000);
 });
+
+describe('Vegetation.setTier (Auto or the pause menu changes the tier mid-chapter)', () => {
+  it('High to Medium stops casting and reflecting, and back to High restores it', async () => {
+    const vegetation = await built(canoe('high'), 'high');
+    const meshes = vegetation.children.filter(
+      (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh,
+    );
+    expect(meshes.some((m) => m.castShadow)).toBe(true);
+    vegetation.setTier('medium');
+    expect(meshes.some((m) => m.castShadow)).toBe(false);
+    expect(meshes.some((m) => m.layers.isEnabled(0))).toBe(false);
+    vegetation.setTier('high');
+    expect(meshes.some((m) => m.castShadow)).toBe(true);
+    expect(meshes.some((m) => m.layers.isEnabled(0))).toBe(true);
+  }, 60000);
+
+  it('narrows the cull reach live after a step-down', async () => {
+    const vegetation = await built(canoe('high'), 'high');
+    const [x, z] = SPOTS.canoe[2];
+    const high = vegetation.cull(x, z, 100).length;
+    vegetation.setTier('low');
+    expect(vegetation.cull(x, z, 100).length).toBeLessThan(high);
+  }, 60000);
+});
