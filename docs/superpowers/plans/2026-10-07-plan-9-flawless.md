@@ -1150,3 +1150,91 @@ sunrise: { skyTop: 0x6f9fd0, skyHorizon: 0xf0c890, fog: { color: 0xc9c2b0, near:
 - [ ] **Step 3:** tests PASS; `pnpm run check`.
 - [ ] **Step 4: Chrome check:** screenshots at t = 0, 2, 4, 5, 6, 8, 11, 14 s looking over the lake toward the dam, then one facing Mom: moon white and setting, then a warm sun rising, the sky turning blue, no visible jump at the switch (compare 4 and 5 s); sample `lights.key.color` every frame for 2 s: it changes every frame (no 4 Hz steps); `__gpuFrames(300)` during the dawn: p95 ≤ 16 ms.
 - [ ] **Step 5: commit** `feat: a real sunrise over the lake, changing every frame`.
+
+### Task A15: The farewell, as a cinematic (she swims in, the song, your hand and Mom's on her, she looks at you, the orbit, the last fish pack)
+
+**Files:**
+- Create: `src/dreams/follow-the-river/camera-rail.ts` (+ `camera-rail.test.ts`), `src/dreams/follow-the-river/farewell-shots.ts` (+ test: the shot list and its points).
+- Modify: `ending.ts` (ORDER, steps, cutscene on/off, `cancel`), `ending-farewell.ts` (rewritten around the shots), `ending-scene.ts` (Kartik's body and arm, loaded with Mom), `fish.ts` (`Fish.head(): THREE.Object3D`, `Fish.lookAtTarget(v | null, weight)` for her head lift and eye turn: after `mixer.update`, `lookAt(headBone, target, w, { yaw: 0.35, pitch: 0.25 })` from `rig.ts`, plus a Lunge-free tail).
+
+**Interfaces:**
+- Consumes: `ctx.cinematic(on)`, `run.cutscene` (A3); `characterUrl('kartik' | 'kartik-arm')`, `createCharacter`, `reach`, `lookAt`, Mom's `Kneel`/`StandUp`/`Talk`/`Lantern` (A10); `strand` swim-in (A9); `call-cry`, `call-answer` (A12); `ctx.focus` (A13); `dawn()` (A14).
+- Produces:
+```ts
+export interface RailKey { at: readonly [number, number, number]; look: readonly [number, number, number]; }
+export interface Rail { readonly seconds: number; pose(t: number, camera: THREE.Camera): void; } // eased CatmullRom through the keys; allocates only when built
+export function createRail(keys: readonly RailKey[], seconds: number): Rail;
+export function orbitKeys(centre: { x: number; y: number; z: number }, radius: number, fromAngle: number, toAngle: number, heights: readonly [number, number], n: number): RailKey[];
+```
+- ORDER becomes `mom → fight → swim → song → kneel → look → orbit → pack → dawn → ride → credits → done`.
+
+- [ ] **Step 1: failing tests.** `camera-rail.test.ts`: the rail starts at the first key and ends at the last; positions change smoothly (no step larger than 3 × the median step over 600 samples); `orbitKeys` keeps the radius within 1 % and always looks at the centre. `farewell-shots.test.ts`: every shot point is on the pebbles (z between `lakeZ + 0.5` and `lakeZ + 6`) or above the water, never inside her body (distance to her centre line > `ANATOMY.halfWidth + 0.4`), and the kneel spot puts both hand targets in front of the camera (dot of view direction and the direction to each target > 0.8).
+- [ ] **Step 2: the scene, beat by beat** (every page is player-paced; Mom and Dras keep animating behind pages; the rails only advance while no page and no menu is open):
+  1. **Swim in** (`swim`): the last zombie dies → `run.cutscene = true; ctx.cinematic(true)`; the camera turns to her over 1.2 s (a short rail from where you look to looking at her), she surfaces far out, blows (pale), swims in with fin and wake (A9), leaps onto the pebbles beside Mom. The cry (`call-cry`). Pages `FAREWELL_PAGES.stranded`.
+  2. **Song** (`song`): Mom kneels at her head (`Kneel`), lantern set down beside her (the lantern prop moves from her hand to the pebbles, the light with it). Pages `song`; then Dras' head lifts a little toward Mom and her jaw parts (`jawAt`-style ease to 0.15) as `call-answer` plays; page `answer`. Cutscene off: you walk.
+  3. **Kneel** (`kneel`): prompt `E: kneel beside her` at her flank. On E: cutscene on; a 2.5 s rail lowers the camera to kneeling eye height (1.05 m) beside her flank, looking along her body to her head; Mom (already kneeling at her head) shuffles to kneel 0.8 m to your right (`Crouch` → `Kneel`). Kartik's arm (`kartik-arm.glb`, a child of the camera) rises from below the frame over 0.8 s and rests on her skin at the flank point (its palm touches the surface: place it by the anatomy point + `halfWidth`); Mom's right hand reaches the skin 0.35 m from yours (`reach` to the point beside your hand). Both hands are in frame (screenshot check). Pages `hand`.
+  4. **She looks at you** (`look`): her head lifts 0.12 rad and turns toward the camera (`fish.lookAtTarget(camera, 1)` over 2 s), the camera pushes in toward her eye (rail 3 s, to 0.9 m from the eye), `ctx.focus(true, distanceToEye)`. Page `'She lifts her head a little and looks at you.'`.
+  5. **Orbit** (`orbit`): the first-person arm hides; Kartik's body appears kneeling where you were, his right hand on her (`reach`), his head turned to her (`lookAt`); the camera pulls back and orbits the three of them (radius 4.5 m, 150° over 12 s, height 1.4 → 2.6, `orbitKeys`), focus on her; no page during the orbit (it is a few seconds of picture); at the end it settles behind Kartik's shoulder.
+  6. **The last fish pack** (`pack`): back to first person (Kartik's body hides), kneeling at the water's edge by her head; the pack in Kartik's arm (the arm now holds the pack); prompt `E: lay your last fish pack on the water`; on E the arm lowers it onto the water (0.8 s), it floats; she breathes out once (pale mist), her head settles, the tail stops. Pages `pack`. `ctx.focus(false)`.
+  7. **Dawn** (`dawn`): Task A14's sunrise; the camera rises to standing over 3 s and turns to the lake and the sun; Mom stands up (`StandUp`), walks to you, `Talk` while `home` is read. Then the ride (A16).
+  `cancel()` (a quit; no death is possible after the fight) and `dispose()` turn the cutscene off, `ctx.cinematic(false)`, `ctx.focus(false)`, hide Kartik's body and arm.
+- [ ] **Step 3:** tests PASS (update `ending.test.ts` for the new ORDER); `pnpm run check`.
+- [ ] **Step 4: Chrome check (as a player, the scene Kartik described):** run Night 3 to the farewell (section 0). Screenshots at: her fin coming in across the lake; the leap; Mom kneeling at her head singing; the kneel view with **both hands on her skin and no weapon, no HUD**; her eye turned to you in close-up with the background soft; three frames of the orbit (Kartik kneeling with his hand on her, Mom kneeling with hers, Dras between them); the pack floating by her head; the sunrise with Mom walking to you. Press Esc during the orbit: the menu opens; Resume: the orbit continues; after the scene the bow and HUD come back exactly once. Quit during the kneel: home, nothing left hidden next run. `?webgl` once through.
+- [ ] **Step 5: commit** `feat: the farewell as a cinematic: both your hands on her, she looks at you, the orbit, the last pack`.
+
+### Task A16: The canoe ride and the ending shot (paddles in the water, a talk with Mom, she really stops, you in the boat, a calm zoom out)
+
+**Files:**
+- Modify: `canoe-scene.ts` (Kartik seated in the bow, the paddle's rest spot), `canoe-ride.ts` (+test: speed profile, page order, beats), `ending.ts` (replay), `index.ts` (`onFinale` plays the ride), `ending.ts` (`REPLAY_PAGES` deleted).
+
+**Interfaces:**
+- Produces: `speedAt(t: number, stopAt: number | null): number` and `travelled` integrated from it (pure); `BEATS: readonly { at: number; pages: readonly string[] }[]`; `playCanoeRide(ctx, sounds, opts?: { replay?: boolean })`.
+
+- [ ] **Step 1: failing tests** (`canoe-ride.test.ts`):
+```ts
+it('glides to a drift after Mom stops rowing (it does not keep her speed)', () => {
+  expect(speedAt(30, null)).toBeCloseTo(RIDE.speed);
+  expect(speedAt(60, 55)).toBeLessThan(RIDE.speed * 0.5);
+  expect(speedAt(70, 55)).toBeCloseTo(RIDE.drift, 1);
+  for (let t = 55; t < 70; t += 0.5) expect(speedAt(t + 0.5, 55)).toBeLessThanOrEqual(speedAt(t, 55) + 1e-9);
+});
+it('the "Mom stops rowing" page only opens after she has stopped', () => {
+  // simulate the ride's frame logic with a fake ctx: record (t, page, rowing)
+  const log = simulateRide(); // helper in the test using the exported frame/step functions
+  const stop = log.find((e) => e.page === CLOSING_PAGES[0]);
+  expect(stop?.rowing).toBe(false);
+  expect(stop && stop.t - stop.stoppedAt).toBeGreaterThanOrEqual(1);
+});
+it('has a few short talks with Mom, in order, before the calf', () => {
+  expect(BEATS.length).toBeGreaterThanOrEqual(3);
+  for (const b of BEATS) expect(b.at).toBeLessThan(RIDE.seconds - RIDE.calfLead);
+  expect(BEATS.flatMap((b) => b.pages).some((p) => p.includes('—'))).toBe(false);
+});
+```
+- [ ] **Step 2: the ride.**
+  - Seats: Mom at the stern rowing (as now), **Kartik in the bow** (`createCharacter(kartik)`, `Sit` clip, facing the bow); in first person his body is hidden (`visible = false`; the camera is at his eye) and shown for the end shot.
+  - Talks (player-paced pages; the canoe keeps moving behind them, ruling; Mom keeps rowing and turns her head to you with `lookAt`; a beat waits if another page is open):
+```ts
+export const BEATS = [
+  { at: 9, pages: ['Mom: "Are you hurt? Anywhere?"', 'You shake your head.', 'Mom: "Good. Good."'] },
+  { at: 24, pages: ['Mom: "The lab is gone. Nobody can make more of it now."', 'Mom: "There is a field hospital past the hills. They need what I know about the virus. I owe them that."'] },
+  { at: 39, pages: ['Mom: "She knew, you know. Every one she took, she kept from us."', 'Mom: "I named her the day she first came to the glass. She heard me singing."'] },
+] as const;
+```
+  - She stops: at `stopAt = RIDE.seconds - RIDE.calfLead + RIDE.surface` she stops rowing (`Sit`), the paddle leaves her hands and lies across the canoe (`SEAT.paddleRest`), the speed eases to `RIDE.drift` (0.35 m/s) over 4 s (`speedAt`), the paddle strokes stop by themselves (A12). 1.2 s later the closing pages open: `'Mom stops rowing. She has seen it too.'`, `'Mom: "Look. She wasn\'t alone."'`, `'She smiles for the first time since the river.'`.
+  - The end shot: after the closing pages, `ctx.cinematic(true)`; Kartik's body shows (sitting in the bow, looking at the calf), a 14 s rail rises from his eye up and back to a high wide view behind and above the canoe (the canoe small on the bright river, Mom and Kartik sitting, the calf beside, the sun ahead), the canoe drifting on; the picture fades to black over the last 2 s; then the credits pages (A2 text); then `ctx.finish()` (home fades in: A1).
+  - Replay: "Watch the ending again" (`index.ts onFinale`) runs `playCanoeRide(ctx, sounds, { replay: true })` (no opening fade from the lake; starts with the push-off page) then the credits, then `finish`. `REPLAY_PAGES` is deleted.
+- [ ] **Step 3:** tests PASS; `pnpm run check`.
+- [ ] **Step 4: Chrome check:** with the fake ctx and then through the real ending: screenshots at each beat (Mom turned to you, still rowing); at the stop (Mom sitting, paddle across the canoe, the shore slowing); at the closing page (she is not rowing); four frames of the end shot (both of them visible in the boat, the calf beside it, nothing floating, no seams in the terrain); the credits; home with the bedroom visible. Quit mid-ride: home, no sound left playing.
+- [ ] **Step 5: commit** `feat: the canoe ride talks, slows when Mom stops, and ends on a wide shot of you and Mom in the boat`.
+
+### Task A17: The whole game as a player, then launch prep (runs last, after Track B)
+
+- [ ] A frozen play-test worktree (`git worktree add --detach .claude/worktrees/playtest9 HEAD`, port 5181). Normal difficulty, a fresh save: cold open → difficulty question → intro → Day 1 (tape 1, the naming) → Night 1 (all three waves: stand still once, die once in wave 2 and resume at the checkpoint) → Day 2 → Night 2 (walk to the water's edge everywhere, the creature takes zombies in its jaws) → Day 3 → Night 3 → the last stand → the farewell → the sunrise → the canoe → the credits → home → "Watch the ending again". Screenshot every beat listed in Tasks A1–A16 and B1–B3 again on this build. Anything a player would call broken is fixed in this task (TDD) before going on.
+- [ ] Story and Hard: Night 1 wave 1 each (stuns, damage, supplies, speed as the table says).
+- [ ] `?webgl`: intro, Night 1 wave 1, the farewell, the canoe.
+- [ ] Frame time on every scene: p95 ≤ 16 ms at the quality step it settles on; log the steps.
+- [ ] Old saves: a v1 save and a v2 save without `eaten`/`difficulty` in `localStorage` load and continue.
+- [ ] Final review: a Sonnet reviewer (Kartik's rule) over the whole branch with the review package (`superpowers:requesting-code-review`), the Review Focus list above given verbatim; Critical/Important fixed with a failing test first, minors ledgered.
+- [ ] Docs: `docs/superpowers/plans/2026-10-07-plan-9-results.md` (what changed, what was checked with which screenshots, what Kartik must check by hand: sound, pointer lock, Safari), `CLAUDE.md` play-test notes (new harness lines, `kdRun`), `public/assets/LICENSES.md` complete, `tools/assets/README.md` complete, memory `resume-state.md`.
+- [ ] `pnpm run check` green on the branch; fast-forward local `main`; the user's :5173 server serves it on reload. NEVER push.
