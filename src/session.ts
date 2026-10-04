@@ -7,8 +7,9 @@ import { showChoice, showPages, showPauseMenu, type PageHooks } from './engine/m
 import { createPlayer, type Player } from './engine/player';
 
 /**
- * Dev-only `?nolock`: play without Pointer Lock so automated browser checks can walk around
- * (browsers refuse pointer lock to automated or unfocused windows). Never active in production.
+ * Dev-only `?nolock`: play on even when the browser refuses Pointer Lock, so automated browser
+ * checks can walk around (browsers refuse it to automated or unfocused windows). The real lock is
+ * still requested. Never active in production.
  */
 const NO_LOCK = import.meta.env.DEV && new URLSearchParams(location.search).has('nolock');
 
@@ -45,6 +46,8 @@ function createGate(app: App, showMenu: () => void): Gate {
     }
   };
   const onLock = (event: LockEvent): void => {
+    // Dev `?nolock` plays on when the browser refuses the lock (automated or unfocused windows).
+    if (NO_LOCK && event === 'lock-error') return;
     setScreen(screenAfter(event, reading));
     // A late 'locked' (requested by a closed reader) while another reader is open: stay paused.
     if (event === 'locked' && reading) player.unlock();
@@ -52,7 +55,12 @@ function createGate(app: App, showMenu: () => void): Gate {
     if (screen === 'pause-menu') showMenu();
   };
   const player = createPlayer(app.stage.camera, app.stage.renderer.domElement, app.keys, onLock);
-  const lock = (): void => (NO_LOCK ? onLock('locked') : player.lock());
+  const lock = (): void => {
+    if (NO_LOCK) onLock('locked');
+    // Always ask for the real lock too: a person's click gets it (endless 360° turning, the cursor
+    // never leaves the window), even on the dev link.
+    player.lock();
+  };
   // Without pointer lock the browser can't report Esc as an unlock, so do it here (dev only).
   const onEscape = (event: KeyboardEvent): void => {
     if (event.code === 'Escape' && screen === 'game') onLock('unlocked');

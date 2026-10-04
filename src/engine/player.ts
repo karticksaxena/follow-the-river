@@ -15,7 +15,7 @@ export interface Player {
   shove(dx: number, dz: number): void;
   /** Must be called from a click or key handler (browsers require a user gesture). */
   lock(): void;
-  /** Dev `?nolock`: turn the view with plain mouse movement (never locked), only while playing. */
+  /** Dev `?nolock`: turn the view with plain mouse movement while playing, locked or not. */
   freeLook(on: boolean): void;
   unlock(): void;
   teleport(x: number, z: number, yaw: number): void;

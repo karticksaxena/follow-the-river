@@ -56,6 +56,17 @@ describe('disposeScene', () => {
     expect(spy).toHaveBeenCalledOnce();
   });
 
+  it('leaves the one geometry three shares between every Sprite', () => {
+    const scene = new THREE.Scene();
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial());
+    scene.add(sprite);
+    const geometry = vi.spyOn(sprite.geometry, 'dispose');
+    const material = vi.spyOn(sprite.material, 'dispose');
+    disposeScene(scene);
+    expect(geometry).not.toHaveBeenCalled();
+    expect(material).toHaveBeenCalledOnce();
+  });
+
   it('frees a material shared by two meshes only once', () => {
     const scene = new THREE.Scene();
     const a = mesh();

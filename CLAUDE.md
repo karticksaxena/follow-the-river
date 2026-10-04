@@ -18,7 +18,7 @@ Vite + TypeScript (strict) + three.js `WebGPURenderer` (WebGL 2 fallback), pnpm 
 
 ```bash
 pnpm install
-pnpm run dev       # http://localhost:5173  (?webgl forces WebGL 2; ?nolock = dev-only play without pointer lock)
+pnpm run dev       # http://localhost:5173  (?webgl forces WebGL 2; ?nolock = dev-only: plays on when pointer lock is refused)
 pnpm run check     # lint + typecheck + format:check + test + build — must pass before every commit
 pnpm run audit
 ```

@@ -42,7 +42,9 @@ export function disposeScene(root: THREE.Object3D): void {
       node.skeleton.dispose();
     }
     if (!isDrawable(node)) return;
-    free(node.geometry);
+    // three builds one geometry for every Sprite: freeing it left the next home screen's sprites
+    // on a destroyed GPU buffer, every frame failed and the last game frame stayed on screen.
+    if (!(node instanceof THREE.Sprite)) free(node.geometry);
     const materials = Array.isArray(node.material) ? node.material : [node.material];
     for (const material of materials) {
       if (!isCached(material)) for (const texture of texturesOf(material)) free(texture);
