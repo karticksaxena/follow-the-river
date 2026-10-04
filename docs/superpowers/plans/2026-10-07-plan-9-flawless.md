@@ -1238,3 +1238,53 @@ export const BEATS = [
 - [ ] Final review: a Sonnet reviewer (Kartik's rule) over the whole branch with the review package (`superpowers:requesting-code-review`), the Review Focus list above given verbatim; Critical/Important fixed with a failing test first, minors ledgered.
 - [ ] Docs: `docs/superpowers/plans/2026-10-07-plan-9-results.md` (what changed, what was checked with which screenshots, what Kartik must check by hand: sound, pointer lock, Safari), `CLAUDE.md` play-test notes (new harness lines, `kdRun`), `public/assets/LICENSES.md` complete, `tools/assets/README.md` complete, memory `resume-state.md`.
 - [ ] `pnpm run check` green on the branch; fast-forward local `main`; the user's :5173 server serves it on reload. NEVER push.
+
+### Task B1: The sky everywhere (moonlit night with stars, overcast clouds by day) and moon and sun shadows
+
+**Files:** `src/engine/sky.ts`, `src/dreams/follow-the-river/lighting.ts` (+test), `assemble.ts` / `world.ts` (key light shadow follows the player), `canoe-scene.ts`.
+- [ ] Night: the painted dome gets a star field (about 1500 points on the dome, sizes 0.5–1.5 px at 1080p, a slow TSL twinkle from `time` and a per-star hash, brightness capped so the night stays dark) and a soft halo around the moon disc; stars fade out in the sunrise (A14) and are hidden by day.
+- [ ] Day and dusk: a slow-drifting overcast layer on the dome (TSL fbm of `mx_noise_float` on the view direction, grey, 60–80 % cover), keeping "never bright" (mean sky luminance within ±10 % of today's dome, screenshot-compared).
+- [ ] Shadows: the key light casts (`castShadow`, 2048², PCF soft, a 50 m × 50 m frustum centred on the player and snapped to texels to stop shimmering); the moon at night, the sun in the canoe. Props, zombies, Mom, Dras, Kartik cast; ground and water receive. Shadow strength follows the preset (weak under overcast).
+- [ ] Test: the shadow frustum snap is pure (`snapToTexel(x, z, size, mapSize)`), preset luminance limits for night/day.
+- [ ] Chrome check: night sky with stars and moon from the city, corn and lake; a day screenshot (clouds, not bright); shadows under zombies at night by the moon and under the canoe at sunrise; p95 ≤ 16 ms.
+- [ ] Commit `feat: a moonlit, starry night sky, overcast clouds by day, and soft moon and sun shadows`.
+
+### Task B2: Quaternius' nature models and wind
+
+**Source (verified this session):** Quaternius "Stylized Nature MegaKit" (Standard, free), **CC0**, https://opengameart.org/content/stylized-nature-megakit (`https://opengameart.org/sites/default/files/stylized_nature_megakitstandard.zip`, 104 MB; downloaded to `scratchpad/plan9-nature/`). glTF in metres (a Pine is 7.3 m tall, a CommonTree 7.3 m, a Bush 1.6 m, Grass_Common_Tall 1.9 m), textured PBR with `alphaMode MASK` double-sided leaves, 900–9600 triangles per model, textures 4–5.5 MB PNG each.
+**Files:** `tools/assets/README.md` (import steps), `public/assets/kits/megakit/*.glb`, `src/dreams/follow-the-river/kits.ts` (`Kit` gains `'megakit'`, scale 1), `areas/forest.ts`, `areas/suburbs.ts` (trees and camp), `canoe-scene.ts` (TREES, bushes, grass, flowers), `src/engine/models.ts` (leaf materials: `alphaTest 0.5`, `side DoubleSide`, `transparent false`), `src/dreams/follow-the-river/wind.ts` (+test).
+- [ ] Import only what is used (Pine_1–5, CommonTree_1–5, TwistedTree_1–2, DeadTree_1–3, Bush_Common, Bush_Common_Flowers, Fern_1, Plant_1, Plant_7, Grass_Common_Short/Tall, Grass_Wispy_Tall, Flower_3/4_Group, Rock_Medium_1–3, Pebble_Round_1–3, Mushroom_Common) with `pnpm dlx @gltf-transform/cli@latest optimize in.gltf out.glb --compress meshopt --texture-compress webp --texture-size 1024` (check the CLI flags with `--help` first; grounded-research), plus a `-far` variant of each tree simplified to about a quarter of its triangles (`--simplify true --simplify-ratio 0.25` or the `simplify` command).
+- [ ] Budget: ≤ 1.5 M triangles drawn per frame in every scene (`renderer.info.render.triangles`); MegaKit models within 35 m of the river (canoe) or the strip (forest, suburbs), the `-far` variants beyond, and Kenney silhouettes past 70 m where only fog shapes show. Counts in the canoe scene cut to fit the budget.
+- [ ] Wind (`wind.ts`): `windNode(strength)` returns a `positionNode` that sways leaves and grass with height (`positionLocal.y` scaled), `time` and a world-position phase so neighbours differ (batched meshes are in world space: use `positionWorld` for the phase); trunks stay still (bark materials get none). Test: the pure amplitude function is 0 at the base and grows with height.
+- [ ] Chrome check: the forest by day and night, the suburbs farm edge, the canoe banks: trees look like trees (no black cut-out cards: alpha test and double-sided right), sway gently, nothing floats (meshY placement from A1 for the canoe; flat ground elsewhere), batching still merges (draw calls logged before/after; ≤ +50 %), p95 ≤ 16 ms.
+- [ ] Commit `feat: Quaternius' nature models with wind in the leaves and grass` (+ LICENSES row).
+
+### Task B3: Splash spray and river mist
+
+**Files:** `src/dreams/follow-the-river/particles.ts` (+test), `fish.ts` (bursts at the breach, the grab's return, a thrown zombie's landing, the pack landing), `canoe-ride.ts` (paddle drips), `play.ts` (night mist near the player).
+- [ ] `createSpray(scene, max = 256)`: one `InstancedMesh` of small quads (or `Sprite`s pooled) with per-particle position, velocity, life; `burst(x, y, z, n, speed)`; pure `stepParticle(p, dt)` (gravity, drag, fade) tested; no allocation per frame.
+- [ ] Mist: 8 large soft quads drifting slowly over the water within 40 m of the player at night (opacity 0.06–0.1), never between the camera and a page's text.
+- [ ] Chrome check: a grab (spray at the breach and the return), a thrown zombie (spray where it lands), the pack (a small splash), night mist over the river; p95 ≤ 16 ms.
+- [ ] Commit `feat: splash spray and river mist`.
+
+### Task B4 (optional, never blocks launch): first-person arms holding the weapons
+
+- [ ] From `kartik.glb`'s arms (A10): one static arms mesh per weapon pose (bow drawn, pistol, shotgun, rifle), parented to each viewmodel so the existing kick, switch and bob move them; recoil and draw read naturally. Chrome check per weapon; commit `feat: your arms hold the weapons`.
+
+---
+
+## 6. Self-review (done while writing)
+
+- Every numbered complaint in section 2 (1–30) maps to a task: 1→A1, 2→A11, 3→A8, 4→A8, 5→A4, 6→A9 (+A7 jaw), 7→A4, 8–11→A6, 12→A5/A6, 13→A5, 14→A5, 15→A9, 16→A9/A15, 17→A3/A15, 18→A12/A15, 19→A14, 20→A12, 21→A16, 22→A1, 23→A16, 24→A16, 25→A1, 26→A1/A13, 27→A13/B1–B3, 28→A13, 29→A1/A6, 30→A7. Answers: Kartik name→A2, difficulty→A5, his model→A10, ammo→A5/A6, Dras/R-7/naming tape→A2, graphics→A13/A14/B1–B3, animation→A10/A11/A15/A16, his look→A10.
+- Interfaces used across tasks: `Run.cutscene`/`ctx.cinematic` (A3 → A9, A15, A16); `DIFFICULTY`/`nightTuning(c, d)` (A5 → A6, A9); `ANATOMY` (A7 → A8, A9, A15); `createCharacter`/`reach`/`lookAt` (A10 → A11, A15, A16); calls and birds (A12 → A15, A16); `ctx.focus` (A13 → A15); `LightPreset.sky`/`mixPresetInto` (A14 → A15, A16, B1). Names match across tasks.
+- Values that are measured during execution (the anatomy constants, the chosen call times, the retuned light intensities) are produced by an explicit step with a test or a screenshot that pins them, not left open.
+
+## 7. Existing facts to reuse
+
+- Mom's clips: `mom.glb` has Sit, Row, Kneel, Throw (`tools/blender/mom_clips.py`, from UAL CC0 at `scratchpad/assets/zombie-candidates/ual1|ual2`). UAL1 clips available: Crouch_Fwd_Loop, Crouch_Idle_Loop, Fixing_Kneeling, Idle_Talking_Loop, Idle_Torch_Loop, Interact, PickUp_Table, Pistol_Aim_Neutral, Sitting_Enter, Sitting_Exit, Sitting_Idle_Loop, Sitting_Talking_Loop, Swim_Fwd_Loop, Swim_Idle_Loop, Walk_Formal_Loop and more. UAL2: Chest_Open, Consume, Idle_FoldArms_Loop, Idle_Lantern_Loop, Idle_No_Loop, Idle_TalkingPhone_Loop, LayToIdle, OverhandThrow, Walk_Carry_Loop, Yes and more.
+- Quaternius men pack (CC0) at `scratchpad/assets/modular-chars/men/`: `kZ3DmIoGip.glb` = Casual2 (materials White, Red_Dark, LightBrown, Skin, Skin_Darker, Eyebrows, Eye, Hair, LightBlue), 24 clips like Mom's.
+- Mom's canoe paddle is pinned between `WristL`/`WristR` (`canoe-ride.ts holdPaddle`).
+- The ending: `ending.ts`, `ending-farewell.ts`, `orca-strand.ts`, `orca-sick.ts`, `orca-grab.ts`, `fish.ts`/`fish-state.ts`/`fish-parts.ts`.
+- Waves: `waves.ts`, the areas' `waves`, `play.ts tickWaves`/`spawnAmbush`, `phases.ts`.
+- Weapons: `gun.ts` (Armory), `weapons.ts` GUNS, `bow.ts`; sounds `public/assets/sounds/weapons/*` (CC0 Free Firearm Sound Library).
+- Downloaded this session: `scratchpad/plan9-sounds/` (`killer_whale.ogg/.wav` NPS public domain, `kayak-hq.mp3/.wav` CC0, `birds.ogg/.wav` CC0, `forest_birds.7z` CC0 by pauliuw), `scratchpad/plan9-nature/` (MegaKit Standard, CC0).
