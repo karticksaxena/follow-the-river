@@ -28,6 +28,8 @@ export function propUrl(name: string): string {
   return assetUrl(`props/${name}.glb`);
 }
 
-export function characterUrl(name: 'mom' | 'zombie-m' | 'zombie-f' | 'orca'): string {
+export function characterUrl(
+  name: 'mom' | 'kartik' | 'kartik-arm' | 'zombie-m' | 'zombie-f' | 'orca',
+): string {
   return assetUrl(`characters/${name}.glb`);
 }

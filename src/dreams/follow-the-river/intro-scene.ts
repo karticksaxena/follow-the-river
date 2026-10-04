@@ -94,37 +94,51 @@ export const OUTSIDE_COLLIDERS: readonly Box[] = [
 
 function findClip(clips: readonly THREE.AnimationClip[], name: string): THREE.AnimationClip {
   const clip = clips.find((c) => c.name === `CharacterArmature|${name}`);
-  if (!clip) throw new Error(`mom.glb has no ${name} clip`);
+  if (!clip) throw new Error(`character has no ${name} clip`);
   return clip;
 }
 
-export interface Mom {
+export interface Character {
   group: THREE.Group;
   pack: THREE.Object3D;
   /** Clip she returns to when a one-shot clip finishes. */
   rest: string;
+  /** A bone by name (GLTFLoader strips '.': Wrist.R is WristR); throws if the rig lacks it. */
+  bone(name: string): THREE.Object3D;
+  /** Parks `prop` in the hand of `bone`, scaled to cancel the rig's x100 and gripped at PACK_GRIP. */
+  attach(prop: THREE.Object3D, bone: string): void;
   play(name: string, once?: boolean): void;
   update(dt: number): void;
   dispose(): void;
 }
 
-/** Mom with cross-faded clips and the fish pack parked in her right hand (hidden until needed). */
-export function createMom(
+/** A rigged character with cross-faded clips and an optional prop parked in a hand (hidden until needed). */
+export function createCharacter(
   asset: { scene: THREE.Object3D; clips: readonly THREE.AnimationClip[] },
-  pack: THREE.Object3D,
-): Mom {
+  prop?: THREE.Object3D,
+  propBone = 'WristR',
+): Character {
+  const pack = prop ?? new THREE.Group();
   const group = new THREE.Group();
   const body = clone(asset.scene);
   body.traverse((n) => (n.frustumCulled = false));
   group.add(body);
-  // GLTFLoader strips '.' from node names, so Wrist.R arrives as WristR.
-  const hand = body.getObjectByName('WristR') ?? body.getObjectByName('Wrist.R') ?? group;
-  hand.add(pack);
+  const bone = (name: string): THREE.Object3D => {
+    const found =
+      body.getObjectByName(name) ?? body.getObjectByName(name.replace(/(?=[LR]$)/, '.'));
+    if (!found) throw new Error(`character has no ${name} bone`);
+    return found;
+  };
+  const attach = (item: THREE.Object3D, name: string): void => {
+    const hand = bone(name);
+    hand.add(item);
+    group.updateMatrixWorld(true);
+    const handScale = hand.getWorldScale(new THREE.Vector3()).x; // the rig is scaled x100
+    item.scale.setScalar(1 / handScale);
+    item.position.y = PACK_GRIP / handScale; // wrist +Y runs down the fingers: grip the item's top edge
+  };
   pack.visible = false;
-  group.updateMatrixWorld(true);
-  const handScale = hand.getWorldScale(new THREE.Vector3()).x; // the rig is scaled x100
-  pack.scale.setScalar(1 / handScale);
-  pack.position.y = PACK_GRIP / handScale; // wrist +Y runs down the fingers: grip the pack's top edge
+  if (prop) attach(prop, propBone);
   const mixer = new THREE.AnimationMixer(body);
   const actions = new Map<string, THREE.AnimationAction>();
   let current: THREE.AnimationAction | null = null;
@@ -145,10 +159,12 @@ export function createMom(
     if (e.action === current) play(mom.rest);
   });
   play('Idle');
-  const mom: Mom = {
+  const mom: Character = {
     group,
     pack,
     rest: 'Idle',
+    bone,
+    attach,
     play,
     update: (dt) => void mixer.update(dt),
     dispose() {
@@ -207,7 +223,7 @@ export interface IntroScene {
   fish: Fish;
   news: ReturnType<typeof createNewsScreen>;
   tvLight: THREE.PointLight;
-  mom: Mom;
+  mom: Character;
   sounds: Sounds;
 }
 
@@ -253,7 +269,7 @@ export async function buildIntroScene(ctx: DreamContext): Promise<IntroScene> {
   const room = new THREE.Group();
   room.position.x = ROOM_X;
   room.add(roomModel, couch, tv, tvLight);
-  const mom = createMom(momAsset, pack);
+  const mom = createCharacter(momAsset, pack);
   mom.group.position.set(AT.momInside.x, 0, AT.momInside.z); // world, not room-local
   scene.add(room, mom.group);
   buildOutside(scene, house, fence);

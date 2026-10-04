@@ -67,6 +67,7 @@ function teardown(sys: Systems, stop: () => void): void {
   if (import.meta.env.DEV) {
     Reflect.deleteProperty(window, 'kdRiver');
     Reflect.deleteProperty(window, 'kdRun');
+    Reflect.deleteProperty(window, 'kdRig');
   }
   sys.ambience.dispose();
   sys.horde.dispose();
@@ -132,7 +133,15 @@ export async function startChapter(
     ending: () => ending.start(),
     checkpoint: (cleared) => checkpoint(f, cleared),
   };
-  if (import.meta.env.DEV) Object.assign(window, { kdRiver: sys, kdRun: run });
+  let devRig: { dispose(): void } | undefined; // DEV: window.kdRig, see dev-rig.ts
+  if (import.meta.env.DEV) {
+    Object.assign(window, { kdRiver: sys, kdRun: run });
+    void import('./dev-rig').then((m) => {
+      if (f.disposed) return;
+      devRig = m.createDevRig(sys.world.scene, sys.ctx.stage.camera);
+      Object.assign(window, { kdRig: devRig });
+    });
+  }
   const play = createPlay(sys, run, events);
   f.onReset = () => {
     ending.cancel(); // a death mid-wave restarts the night
@@ -158,6 +167,7 @@ export async function startChapter(
     freeze: () => void (run.frozen = true),
     dispose() {
       f.disposed = true;
+      devRig?.dispose();
       ending.dispose();
       teardown(sys, stop);
     },

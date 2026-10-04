@@ -4,7 +4,7 @@ import { disposeScene } from '../../engine/dispose';
 import { loadModel, loadSkinned, type SkinnedAsset } from '../../engine/models';
 import type { DreamContext } from '../types';
 import { findClip, smooth } from './fish-parts';
-import { createMom, type Mom } from './intro-scene';
+import { createCharacter, type Character } from './intro-scene';
 import { characterUrl, propUrl } from './kits';
 import { applyLighting, createWorldLights, LIGHTING } from './lighting';
 import { createWaterMesh, RIVER_FLOW } from './water';
@@ -189,7 +189,7 @@ function darkRoom(scene: THREE.Scene, fog: { color: number; near: number; far: n
   scene.fog = new THREE.Fog(fog.color, fog.near, fog.far);
 }
 
-function placeMom(mom: Mom, x: number, z: number, yaw: number, rest: string): void {
+function placeMom(mom: Character, x: number, z: number, yaw: number, rest: string): void {
   mom.group.position.set(x, 0, z);
   mom.group.rotation.y = yaw;
   mom.rest = rest;
@@ -273,7 +273,7 @@ async function buildLab(): Promise<Flashback> {
   const lamp = restyle(lab, 'Lamp', (m) => (m.emissiveIntensity = LAB_LIGHT.pulse.min));
   restyle(lab, 'Screen', (m) => (m.emissiveIntensity = LAB_LIGHT.screenGlow));
   cage.position.set(1.8, 0.94, -2.45);
-  const mom = createMom(momAsset, new THREE.Group());
+  const mom = createCharacter(momAsset, new THREE.Group());
   placeMom(mom, -0.6, -1.75, Math.PI, 'Idle_Neutral');
   scene.add(lab, cage, mom.group);
   const { camera, move } = makeCamera(SHOTS[2]);
@@ -311,7 +311,7 @@ async function buildTank(): Promise<Flashback> {
     new THREE.MeshLambertMaterial({ color: 0x0c0d10 }),
   );
   floor.rotation.x = -Math.PI / 2;
-  const mom = createMom(momAsset, new THREE.Group());
+  const mom = createCharacter(momAsset, new THREE.Group());
   placeMom(mom, 0, 2.2, Math.PI, 'Idle_Neutral');
   const orca = youngOrca(orcaAsset, TANK_SWIM.scale);
   orca.pivot.position.y = TANK_SWIM.centreY;
@@ -386,7 +386,7 @@ async function buildSpillway(): Promise<Flashback> {
   addSpillwayGround(scene);
   dam.position.set(...SPILLWAY.dam.at);
   dam.rotation.y = SPILLWAY.dam.yaw;
-  const mom = createMom(momAsset, makeLantern());
+  const mom = createCharacter(momAsset, makeLantern());
   mom.pack.visible = true;
   placeMom(mom, 1.2, 0, -Math.PI / 2, 'Idle_Neutral');
   const orca = youngOrca(orcaAsset, 1);

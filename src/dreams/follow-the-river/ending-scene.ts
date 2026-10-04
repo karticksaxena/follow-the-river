@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { loadSkinned } from '../../engine/models';
 import { TORCH_EXPOSURE, WATCH } from './flashlight';
-import { createMom, type Mom } from './intro-scene';
+import { createCharacter, type Character } from './intro-scene';
 import { characterUrl } from './kits';
 import { createMomActor, type MomActor, type Pt } from './mom-actor';
 import { EDGE_X, shoreY } from './river';
@@ -68,7 +68,7 @@ export function stopShort(from: Pt, to: Pt, gap: number): Pt {
 }
 
 export interface EndingScene {
-  mom: Mom;
+  mom: Character;
   actor: MomActor;
   /** Per frame: Mom's walk/idle, her animation, and the lantern in her hand. */
   update(dt: number): void;
@@ -91,7 +91,7 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
   const spot = sys.area.meetAt;
   if (!spot) throw new Error('the ending needs a meeting spot (meetAt)');
   const lakeZ = sys.area.lake?.z ?? null;
-  const mom = createMom(await loadSkinned(characterUrl('mom')), makeLantern());
+  const mom = createCharacter(await loadSkinned(characterUrl('mom')), makeLantern());
   mom.group.visible = false;
   sys.world.scene.add(mom.group);
   const home = new THREE.Vector3();

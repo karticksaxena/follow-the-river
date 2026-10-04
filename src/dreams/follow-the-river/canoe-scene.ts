@@ -7,7 +7,7 @@ import { attachKeyShadows } from '../../engine/shadows';
 import { surfaceMaterial, texturesReady } from '../../engine/surfaces';
 import { canoePlants } from './canoe-vegetation';
 import { DAWN_BANK } from './ground';
-import { createMom, type Mom } from './intro-scene';
+import { createCharacter, type Character } from './intro-scene';
 import { characterUrl, KIT_SCALE, kitUrl } from './kits';
 import { applyLighting, createWorldLights, LIGHTING, SKY_NAME } from './lighting';
 import { addVegetation } from './nature';
@@ -79,7 +79,7 @@ const COLORS = {
 export interface CanoeScene {
   scene: THREE.Scene;
   canoe: THREE.Group;
-  mom: Mom;
+  mom: Character;
   paddle: THREE.Group;
   calf: Calf;
   sky: THREE.Object3D;
@@ -281,7 +281,7 @@ export async function buildCanoeScene(length: number, stage: CanoeStage): Promis
     addBanks(scene, zNear, zFar, stage),
     texturesReady(),
   ]);
-  const mom = createMom(momAsset, new THREE.Group());
+  const mom = createCharacter(momAsset, new THREE.Group());
   mom.rest = 'Row';
   mom.play('Row'); // paddling (tools/blender/mom_clips.py); the ride switches her to Sit at the end
   const paddle = makePaddle();
