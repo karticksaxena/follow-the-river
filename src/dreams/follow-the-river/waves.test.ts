@@ -169,29 +169,45 @@ describe('waves', () => {
 
 describe('spawn spots', () => {
   const zone = { startZ: -134, gateZ: -239, minX: -17, maxX: 2.5 };
+  const FOG = 45;
+  const cos = Math.cos((75 * Math.PI) / 180);
 
-  it('spawns out of your face: never within 12 m, always on the bank, never past the gate', () => {
-    const r = rng(9);
+  /** 2000 draws: on the bank, short of the gate, 12 m off, and never seen popping in. */
+  function check(p: { x: number; z: number }, lookZ: number, seed: number): string[] {
+    const bad: string[] = [];
+    const r = rng(seed);
+    const view = { lookX: 0, lookZ, fogFar: FOG };
     for (let i = 0; i < 2000; i++) {
-      const p = { x: -2, z: -180 };
-      const s = spawnSpot(p, zone, r);
-      expect(Math.hypot(s.x - p.x, s.z - p.z)).toBeGreaterThanOrEqual(12 - 1e-9);
-      expect(s.x).toBeGreaterThanOrEqual(zone.minX);
-      expect(s.x).toBeLessThanOrEqual(zone.maxX);
-      expect(s.z).toBeGreaterThanOrEqual(zone.gateZ + 2);
+      const s = spawnSpot(p, zone, view, r);
+      const dist = Math.hypot(s.x - p.x, s.z - p.z);
+      const inView = ((s.z - p.z) * lookZ) / dist > cos;
+      if (dist < 12 - 1e-9) bad.push(`too close ${dist}`);
+      if (s.x < zone.minX || s.x > zone.maxX) bad.push(`off the bank ${s.x}`);
+      if (s.z < zone.gateZ + 2 || s.z > zone.startZ + 10) bad.push(`out of the zone ${s.z}`);
+      if (inView && dist < FOG - 3 - 1e-9) bad.push(`pops in at ${dist}`);
     }
-  });
+    return bad;
+  }
 
-  it('still keeps its distance when you stand at the gate or at the start', () => {
-    const r = rng(4);
-    for (const z of [-237, -135]) {
-      for (let i = 0; i < 500; i++) {
-        const s = spawnSpot({ x: -5, z }, zone, r);
-        expect(Math.hypot(s.x + 5, s.z - z)).toBeGreaterThanOrEqual(12 - 1e-9);
-        expect(s.z).toBeGreaterThanOrEqual(zone.gateZ + 2);
-        expect(s.z).toBeLessThanOrEqual(zone.startZ + 10);
-      }
-    }
+  it('never pops in view inside the fog when you face downstream', () => {
+    expect(check({ x: -2, z: -180 }, -1, 9)).toEqual([]);
+  });
+  it('and when you backtrack facing upstream', () => {
+    expect(check({ x: -2, z: -180 }, 1, 10)).toEqual([]);
+  });
+  it('and against the gate, where ahead is impossible', () => {
+    expect(check({ x: -5, z: -237 }, -1, 4)).toEqual([]);
+  });
+  it('and at the start of the zone facing upstream', () => {
+    expect(check({ x: -5, z: -135 }, 1, 6)).toEqual([]);
+  });
+  it('mostly spawns behind or beside you, not ahead', () => {
+    const r = rng(2);
+    const view = { lookX: 0, lookZ: -1, fogFar: FOG };
+    let ahead = 0;
+    for (let i = 0; i < 1000; i++)
+      if (spawnSpot({ x: -2, z: -180 }, zone, view, r).z < -180) ahead++;
+    expect(ahead).toBeLessThan(300);
   });
 });
 
@@ -217,6 +233,21 @@ describe('edge supplies and the objective', () => {
     expect(objective({ ...o, night: false })).toMatch(/Search for supplies/);
     expect(objective({ ...o, lake: true, wave: 3 })).toMatch(/Mom is waiting/);
     expect(objective({ ...o, ending: true })).toBe('');
+    expect(objective({ ...o, fighting: true, waiting: true })).toBe(
+      'They are waiting further on. Keep moving downstream.',
+    );
+  });
+
+  it('never shows a count: no digits in any goal line', () => {
+    for (const night of [true, false])
+      for (const fighting of [true, false])
+        for (const waiting of [true, false])
+          for (const lake of [true, false])
+            for (const wave of [0, 2, 3])
+              for (const ending of [true, false])
+                expect(
+                  objective({ night, fighting, waiting, lake, wave, waves: 3, ending }),
+                ).not.toMatch(/\d/);
   });
 });
 

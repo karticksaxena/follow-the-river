@@ -56,7 +56,7 @@ export const waveTotal = (def: WaveDef): number => def.ambushes.reduce((n, a) =>
 export const quotaOf = (def: WaveDef, k: number): number =>
   Math.max(waveTotal(def), Math.round(def.quota * k));
 
-const reservedFrom = (def: WaveDef, fired: number): number =>
+export const reservedFrom = (def: WaveDef, fired: number): number =>
   def.ambushes.slice(fired).reduce((n, a) => n + a.count, 0);
 
 const ONE: WaveEvent = { kind: 'one' };
@@ -112,6 +112,10 @@ export const SPAWN = {
   keepAway: 12,
   land: 14,
   behindMax: 10,
+  /** Half the view cone (rad, 75 degrees) and how far inside the fog's end a spawn still counts as seen (m). */
+  halfView: (75 * Math.PI) / 180,
+  fogMargin: 3,
+  tries: 10,
 } as const;
 
 /** A z `keepAway` from the player for a spawn `dx` across: on the side asked, else the other. */
@@ -123,21 +127,44 @@ function pushedZ(pz: number, dx: number, sign: number, lo: number, hi: number): 
   return b >= lo && b <= hi ? b : Math.max(lo, Math.min(hi, a));
 }
 
-/**
- * Pure: where one continuous zombie appears. 45 % ahead (downstream), 25 % behind, 30 % from the
- * land side; always on the bank, short of the gate, and at least `keepAway` from the player.
- */
-export function spawnSpot(
-  player: { x: number; z: number },
-  zone: { startZ: number; gateZ: number; minX: number; maxX: number },
+/** What the player can see: the horizontal look direction and how far the fog lets them see. */
+export interface SpawnView {
+  lookX: number;
+  lookZ: number;
+  fogFar: number;
+}
+type Zone = { startZ: number; gateZ: number; minX: number; maxX: number };
+type Spot = { x: number; z: number };
+
+/** True when the spot is inside the view cone and close enough to be seen through the fog. */
+function seen(player: Spot, s: Spot, v: SpawnView, facing: number): boolean {
+  const dx = s.x - player.x;
+  const dz = s.z - player.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist >= v.fogFar - SPAWN.fogMargin) return false;
+  const len = Math.hypot(v.lookX, v.lookZ);
+  const [lx, lz] = len < 1e-3 ? [0, facing] : [v.lookX / len, v.lookZ / len];
+  return dx * lx + dz * lz > Math.cos(SPAWN.halfView) * dist;
+}
+
+/** One candidate: forward 25 %, behind 45 %, land side 30 %; at least `keepAway` from the player. */
+function candidate(
+  player: Spot,
+  zone: Zone,
+  v: SpawnView,
+  facing: number,
   rand: () => number,
-): { x: number; z: number } {
+): Spot {
   const roll = rand();
-  const d = SPAWN.near + rand() * (SPAWN.far - SPAWN.near);
   const lo = zone.gateZ + 2;
   const hi = zone.startZ + SPAWN.behindMax;
   const land = roll >= 0.7;
-  const sign = roll < 0.45 ? -1 : roll < 0.7 ? 1 : rand() < 0.5 ? -1 : 1;
+  const sign = roll < 0.25 ? facing : roll < 0.7 ? -facing : rand() < 0.5 ? -1 : 1;
+  // forward spawns only make sense past the fog
+  const d =
+    sign === facing && !land
+      ? v.fogFar - SPAWN.fogMargin + rand() * SPAWN.far
+      : SPAWN.near + rand() * (SPAWN.far - SPAWN.near);
   const span = land ? SPAWN.flank : zone.maxX - zone.minX;
   const x = zone.minX + rand() * span;
   let z = Math.max(lo, Math.min(hi, player.z + sign * (land ? SPAWN.land : d)));
@@ -145,6 +172,24 @@ export function spawnSpot(
     z = pushedZ(player.z, x - player.x, z >= player.z ? 1 : -1, lo, hi);
   }
   return { x, z };
+}
+
+/**
+ * Pure: where one continuous zombie appears: on the bank, short of the gate, at least `keepAway`
+ * from the player, and never where the player can see it pop in (inside the view cone and inside
+ * the fog). Mostly behind and to the sides; ahead only beyond the fog.
+ */
+export function spawnSpot(player: Spot, zone: Zone, view: SpawnView, rand: () => number): Spot {
+  const facing = view.lookZ > 0 ? 1 : -1;
+  for (let tries = 0; tries < SPAWN.tries; tries++) {
+    const s = candidate(player, zone, view, facing, rand);
+    if (!seen(player, s, view, facing)) return s;
+  }
+  // nothing unseen: straight behind you, as far as the zone allows
+  const lo = zone.gateZ + 2;
+  const hi = zone.startZ + SPAWN.behindMax;
+  const z = Math.max(lo, Math.min(hi, player.z - facing * (SPAWN.keepAway + 2)));
+  return { x: player.x, z };
 }
 
 /** Pure: where one zombie of an ambush goes, on the bank within [minX, maxX], never past the gate. */
@@ -200,10 +245,13 @@ export function objective(o: {
   wave: number;
   waves: number;
   ending: boolean;
+  /** Nothing of this wave is alive and only ambushes not yet sprung remain. */
+  waiting?: boolean;
   lake: boolean;
 }): string {
   if (o.ending) return '';
   if (!o.night) return 'Search for supplies. Rest by the campfire when you are ready.';
+  if (o.fighting && o.waiting) return 'They are waiting further on. Keep moving downstream.';
   if (o.fighting) return 'Kill them all. The barricade falls when the wave is dead.';
   if (o.lake && o.wave >= o.waves) return 'Follow the river to the lake. Mom is waiting.';
   return 'Follow the river. Keep moving downstream.';

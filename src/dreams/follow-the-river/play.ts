@@ -10,7 +10,7 @@ import { applyDim, LIGHTING } from './lighting';
 import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
 import { addSupply, AMMO_OF, chapterOf, isNight } from './state';
-import { ambushSpot, objective, spawnSpot, stepWaves } from './waves';
+import { ambushSpot, objective, reservedFrom, spawnSpot, stepWaves, type SpawnView } from './waves';
 import type { Tuning } from './zombies/brain';
 import type { PlayerSense } from './zombies/horde';
 
@@ -26,6 +26,8 @@ const HURT_GRACE = 1;
 const NIGHT_STRIP_MARGIN = 0.5;
 /** A running ambush is told where you are, this far around its spot (m): they hunt, they don't wander. */
 const AMBUSH_ALERT = 6;
+/** A spawn whose every try was blocked is retried after this many seconds. */
+const RETRY_SPAWN = 0.5;
 
 export interface Play {
   update(dt: number): void;
@@ -45,6 +47,7 @@ interface State {
   /** The night's zombie tuning plus the wave's `faster`, built once per wave. */
   waveTuning: Tuning;
   zone: { startZ: number; gateZ: number; minX: number; maxX: number };
+  view: SpawnView;
   controls: Controls;
   look: THREE.Vector3;
   /** Seconds the torch has been off (it recharges after a moment). */
@@ -88,6 +91,7 @@ function createState(sys: Systems, run: Run, events: Events): State {
     waveD: DIFFICULTY[sys.ctx.difficulty()],
     waveTuning: nightTuning(chapter, sys.ctx.difficulty()),
     zone: { startZ: 0, gateZ: 0, minX: area.landX + 1, maxX: EDGE_X - NIGHT_STRIP_MARGIN },
+    view: { lookX: 0, lookZ: -1, fogFar: 55 },
     controls: createControls(sys, run, events, sense),
     look: new THREE.Vector3(),
     offFor: 0,
@@ -179,14 +183,20 @@ function startWave(p: State, wave: number): void {
 
 /** One zombie that keeps the wave coming, on a free spot out of your face, hunting at once. */
 function spawnOne(p: State): void {
-  const { sys, sense, zone } = p;
+  const { sys, sense, zone, view, run } = p;
+  const fog = sys.world.lights.scene.fog;
+  view.lookX = sense.look.x;
+  view.lookZ = sense.look.z;
+  view.fogFar = fog instanceof THREE.Fog ? fog.far : (sys.area.nightFog ?? view.fogFar);
   for (let tries = 0; tries < 6; tries++) {
-    const at = spawnSpot(sense, zone, Math.random);
+    const at = spawnSpot(sense, zone, view, Math.random);
     if (p.blocked(at.x, at.z)) continue;
     sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), p.waveTuning, false);
     sys.horde.alert(at.x, at.z, 2);
     return;
   }
+  run.waves.toSpawn++; // every spot was blocked: the zombie is owed, try again shortly
+  run.waves.nextIn = RETRY_SPAWN;
 }
 
 /** The night's waves: start when you pass one, keep sending zombies, spring its ambushes, open the barricade when it's dead. */
@@ -259,6 +269,13 @@ function syncCutscene(p: State): void {
   } else sys.flashlight.on = p.torchBefore;
 }
 
+/** Nothing of the wave is alive and only ambushes not yet sprung are left to come. */
+function isWaiting(p: State): boolean {
+  const def = p.sys.area.waves[p.run.waves.cleared];
+  const w = p.run.waves;
+  return !!def && p.sys.horde.aliveCount() === 0 && w.toSpawn <= reservedFrom(def, w.fired);
+}
+
 function tickView(p: State, dt: number): void {
   const { sys, run, sense, hudState } = p;
   const s = run.live.supplies;
@@ -289,6 +306,7 @@ function tickView(p: State, dt: number): void {
     wave: run.waves.cleared,
     waves: hudState.waves,
     ending: run.ending !== 'no',
+    waiting: fighting && isWaiting(p),
     lake: sys.area.lake !== undefined,
   });
   sys.hud.set(hudState);
