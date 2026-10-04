@@ -77,11 +77,14 @@ const clamp = THREE.MathUtils.clamp;
  * Turns her `head` bone (the chain's root, its pivot at her nose, her body toward -z in its parent's
  * frame) to look at `target` (world), by `share`, and lifts it at least `END.head.lift`. Her `trunk`
  * (the head's child, the first spine bone) is put back where the animation had it, so only the head
- * moves, not the whole 7 m body round her nose. Call after `mixer.update`.
+ * moves, not the whole 7 m body round her nose. Call after `mixer.update`. The clips animate the
+ * bones' rotations only, never their positions, so the trunk's position is set from `trunkRest`
+ * (its position as loaded) every call: turning it in place would add up frame after frame.
  */
 export function turnHead(
   head: THREE.Object3D,
   trunk: THREE.Object3D,
+  trunkRest: THREE.Vector3,
   target: THREE.Vector3,
   share: number,
 ): void {
@@ -99,7 +102,7 @@ export function turnHead(
   head.quaternion.premultiply(delta);
   // The trunk's world transform stays: undo = own^-1 * delta^-1 * own (the head's turn in its own frame).
   undo.copy(own).invert().multiply(delta.invert()).multiply(own);
-  trunk.position.applyQuaternion(undo);
+  trunk.position.copy(trunkRest).applyQuaternion(undo);
   trunk.quaternion.premultiply(undo);
 }
 
@@ -133,7 +136,10 @@ function pose(f: FishState, dt: number): void {
   const e = f.end;
   e.look += (e.lookGoal - e.look) * ease(END.ease.head, dt);
   e.jaw += (e.jawGoal - e.jaw) * ease(END.ease.jaw, dt);
-  if (f.head && f.trunk && e.target && e.look > 0.001) turnHead(f.head, f.trunk, e.target, e.look);
+  f.trunk?.position.copy(f.trunkRest); // un-turned unless the head turns below
+  if (f.head && f.trunk && e.target && e.look > 0.001) {
+    turnHead(f.head, f.trunk, f.trunkRest, e.target, e.look);
+  }
   if (e.jaw > 0.001) openJaw(f, e.jaw);
 }
 
@@ -169,7 +175,15 @@ export function stepFarewell(f: FishState, dt: number): void {
   pose(f, dt);
   if (e.exhaled < 0) return;
   e.exhaled += dt;
-  if (f.eye) f.eye.roughness = eyeRoughness(Math.min(1, e.exhaled / END.fade.exhaleSeconds));
+  dimEye(f, Math.min(1, e.exhaled / END.fade.exhaleSeconds));
+}
+
+/** Her eye at `k` (0 bright .. 1 dull): no glint (rough, no sheen) and no emissive. */
+function dimEye(f: FishState, k: number): void {
+  if (!f.eye) return;
+  f.eye.roughness = eyeRoughness(k);
+  f.eye.emissiveIntensity = 1 - k;
+  f.eye.envMapIntensity = 1 - k;
 }
 
 /** Back to her living eye and a fresh farewell. */
@@ -177,5 +191,5 @@ export function resetFarewell(f: FishState): void {
   Object.assign(f.end, newFarewell());
   f.lift.stop();
   f.exhale.stop();
-  if (f.eye) f.eye.roughness = WET.eye;
+  dimEye(f, 0);
 }

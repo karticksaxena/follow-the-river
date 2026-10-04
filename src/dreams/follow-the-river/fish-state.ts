@@ -67,6 +67,8 @@ export interface FishState {
   /** Her head bone and its child the trunk (what her head turns on), and her eye's material. */
   readonly head: THREE.Object3D | null;
   readonly trunk: THREE.Object3D | null;
+  /** The trunk's position as loaded (the clips never move it, so the head turn works from this). */
+  readonly trunkRest: THREE.Vector3;
   readonly eye: THREE.MeshStandardNodeMaterial | null;
   readonly sagBones: readonly THREE.Object3D[];
   /** Where the zombie she struck last was (read-only for the ending), or null. */
@@ -222,6 +224,7 @@ export function createState(
     end: newFarewell(),
     head: body.getObjectByName('Head') ?? null,
     trunk: body.getObjectByName('Spine1') ?? null,
+    trunkRest: (body.getObjectByName('Spine1')?.position ?? new THREE.Vector3()).clone(),
     eye: eyeOf(body),
     sagBones: STRAND.bend.bones.flatMap((n) => body.getObjectByName(n) ?? []),
     lastStrike: null,

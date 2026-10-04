@@ -150,21 +150,31 @@ export async function swim(s: Script, at: Shore): Promise<void> {
   s.run.cutscene = true; // no HUD, bow or torch from here to the ride
   ctx.cinematic(true);
   s.cast.follow(true);
+  s.scene.lightFarewell(true, { x: s.shots.eye[0], y: s.shots.eye[1], z: s.shots.eye[2] });
   fish.strand(at.noseX, at.noseZ, (z) => shoreY(z - at.lakeZ), horde);
-  await s.until(() => fish.beached);
+  // You go down to the pebbles (below the bank that hides the lake) while the camera keeps her in view.
+  const camera = ctx.stage.camera;
+  const rail = rails.watch(keyFrom(camera), s.shots);
+  let t = 0;
+  await s.until((dt) => {
+    t = Math.min(rail.seconds, t + dt);
+    rail.pose(t, camera); // its turn is overridden by the follow
+    return fish.beached;
+  });
+  s.cast.hold = rail;
   if (s.cancelled) return;
   callAt(s, at, sounds.cry, FAREWELL.cryVolume);
 }
 
-/** Mom goes to her head, sets the lantern down beside her and kneels. */
+/** Mom goes round to the front of her face, sets the lantern down beside her and kneels facing her. */
 export async function goToIt(s: Script): Promise<void> {
   const { actor, mom } = s.scene;
-  const { momHead, lantern, eye } = s.shots;
+  const { mom: spot, lantern, eye } = s.shots;
   actor.stop(); // no more tense glances and gestures: she only has eyes for her now
   mom.rest = 'Kneel'; // she kneels where the walk ends
-  await actor.walkTo([momHead]);
+  await actor.walkTo([spot]);
   if (s.cancelled) return;
-  actor.faceTo(eye[0], eye[2]);
+  actor.faceTo(s.shots.eye[0], s.shots.eye[2] - 3); // down at her face, which is straight ahead of her
   s.scene.setDown({ x: lantern[0], y: lantern[1], z: lantern[2] });
   s.scene.aim.momGaze = v3(eye);
 }
@@ -172,12 +182,11 @@ export async function goToIt(s: Script): Promise<void> {
 /** The song from the lab, and her answer: her head lifts to Mom, her jaw parts, a soft cry. Then you may walk. */
 export async function song(s: Script, at: Shore): Promise<void> {
   const { fish } = s.sys;
-  const { momHead } = s.shots;
-  s.cast.follow(false);
+  const { mom } = s.shots;
   await s.read(FAREWELL_PAGES.song);
   if (s.cancelled) return;
   fish.lookAtTarget(
-    new THREE.Vector3(momHead.x, s.shots.ground(momHead.z) + 0.9, momHead.z),
+    new THREE.Vector3(mom.x, s.shots.ground(mom.z) + 0.9, mom.z),
     FAREWELL.answerLook,
   );
   fish.setJaw(FAREWELL.answerJaw);
@@ -186,6 +195,8 @@ export async function song(s: Script, at: Shore): Promise<void> {
   fish.lookAtTarget(null, 0);
   fish.setJaw(0);
   fish.setLiftsRare(true); // weaker now: her tail lifts come far apart
+  s.cast.follow(false);
+  s.cast.hold = null;
   s.sys.ctx.cinematic(false); // you walk to her
 }
 
@@ -209,20 +220,11 @@ function waitForE(
   });
 }
 
-/** Mom shuffles along the pebbles (crouching) to kneel by you, and reaches her hand to her skin. */
-function momBesideYou(s: Script): void {
-  const { mom, actor, aim } = s.scene;
-  const { momFlank, momHand, eye } = s.shots;
-  mom.play('Crouch');
-  actor.faceTo(momFlank.x + 5, momFlank.z);
-  s.cast.slide = {
-    to: momFlank,
-    done: () => {
-      mom.play('Kneel');
-      aim.momHand = v3(momHand);
-      aim.momGaze = v3(eye);
-    },
-  };
+/** Mom's hand reaches out and rests on her nose, her eyes on hers. */
+function momReaches(s: Script): void {
+  const { aim } = s.scene;
+  aim.momHand = v3(s.shots.momHand);
+  aim.momGaze = v3(s.shots.eye);
 }
 
 /** Kartik's arm comes up from below the frame and rests on her skin. */
@@ -253,7 +255,7 @@ export async function kneel(s: Script): Promise<void> {
   await waitForE(s, { x: at.at[0], z: at.at[2] }, FAREWELL.kneelRadius, FAREWELL_PROMPTS.kneel);
   if (s.cancelled) return;
   ctx.cinematic(true);
-  momBesideYou(s);
+  momReaches(s);
   await playRail(s, rails.kneel(keyFrom(ctx.stage.camera), s.shots));
   if (s.cancelled) return;
   const job = armOnHer(s);
@@ -265,6 +267,7 @@ export async function kneel(s: Script): Promise<void> {
 export async function look(s: Script): Promise<void> {
   const { fish, ctx } = s.sys;
   const eye = v3(s.shots.eye);
+  if (s.cast.arm) s.cast.arm.goal = 0; // your arm lowers away: it must not float as the camera moves
   fish.lookAtTarget(ctx.stage.camera.position, 1);
   await playRail(s, rails.look(keyFrom(ctx.stage.camera), s.shots), focusOn(s, eye));
   if (!s.cancelled) await s.read(FAREWELL_PAGES.look);
@@ -339,9 +342,14 @@ export async function lastPack(s: Script, pack: THREE.Object3D): Promise<void> {
   if (s.cancelled) return;
   const left = spend(s.run.live.supplies, 'fishPacks', 1);
   if (left) s.run.live.supplies = left; // with none left, it is the one Mom brought
-  await s.until(
-    (dt) => ((held.lower.t = Math.min(1, held.lower.t + dt / SHOTS.pack.lower)), held.lower.t >= 1),
-  );
+  const lean = rails.lean(s.shots); // you dip toward the water as the hand goes down
+  s.cast.hold = null;
+  await s.until((dt) => {
+    held.lower.t = Math.min(1, held.lower.t + dt / SHOTS.pack.lower);
+    lean.pose(held.lower.t * lean.seconds, ctx.stage.camera);
+    return held.lower.t >= 1;
+  });
+  s.cast.hold = lean;
   s.sys.world.scene.attach(pack); // off your hand, onto the water
   pack.position.set(float[0], WATER_Y + 0.05, float[2]);
   pack.rotation.set(0, 0.6, 0);

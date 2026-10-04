@@ -4,6 +4,7 @@ import { loadModel, loadSkinned } from '../../engine/models';
 import type { Vec3 } from '../../engine/ray';
 import { waterlineX } from './banks';
 import { afterLift, resetFarewell, startExhale, stepFarewell } from './fish-farewell';
+import { feedFish, stepPack } from './fish-pack';
 import {
   cruiseHeading,
   cruiseTargetX,
@@ -42,9 +43,6 @@ const WAKE_HIDE_Y = WATER_Y + 0.35; // the orca is airborne above this: no shado
 const TAKE_TIME = 2.6;
 const FADE = 0.25;
 const LAG_Z = 6;
-const PACK_DISTANCE = 4;
-const PACK_TIME = 1;
-const PACK_ARC = 1.2;
 const SURFACE_DRIFT = 1.5; // metres downstream while surfacing
 
 export interface Fish {
@@ -237,19 +235,6 @@ function endGrab(f: FishState): void {
   f.root.rotation.x = 0;
 }
 
-function stepPack(f: FishState, dt: number): void {
-  f.packT += dt;
-  const s = Math.min(1, f.packT / PACK_TIME);
-  f.packModel.position.lerpVectors(f.packFrom, f.packTo, s);
-  f.packModel.position.y += PACK_ARC * 4 * s * (1 - s);
-  f.packModel.rotation.y += 6 * dt;
-  if (s < 1) return;
-  f.packT = -1;
-  f.packModel.visible = false;
-  playSplash(f, f.packTo.x, f.packTo.z);
-  f.takePending = true;
-}
-
 function placeWake(f: FishState): void {
   // The V's tip sits by the fin and opens out behind the orca (its back is +z turned by yaw).
   const behind = WAKE_SIZE.length / 2 - 1;
@@ -307,7 +292,7 @@ function startStrand(
   f.strand = newStrand(
     { x, y, z, yaw: f.yaw, pitch: 0 },
     strandRest(noseX, noseZ, ground),
-    f.cruiseY,
+    f.surfaceY, // she comes in with her back and fin out, the wake on
   );
 }
 
@@ -352,14 +337,6 @@ function updateFish(
   }
   f.root.rotation.y = f.yaw;
   placeWake(f);
-}
-
-function feedFish(f: FishState, from: Vec3): void {
-  f.packFrom.set(from.x, from.y, from.z);
-  f.packTo.set(EDGE_X + PACK_DISTANCE, WATER_Y, from.z);
-  f.packT = 0;
-  f.packModel.visible = true;
-  f.packModel.position.copy(f.packFrom);
 }
 
 function resetFish(f: FishState): void {

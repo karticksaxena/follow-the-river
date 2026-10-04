@@ -138,6 +138,19 @@ export function setWaterGlint(light: THREE.Vector3, tint: THREE.Color): void {
   glintColor.value.copy(tint);
 }
 
+/**
+ * The most light (linear, before the fresnel share) the reflection may bring. Unlimited by default.
+ * The farewell caps it (`setWaterReflectionCeiling`): from the orbit and the water's edge the mirror
+ * shows the sky and clouds in the reflection pass, which reads as a pale grey sheet, much brighter
+ * than the same sky in the main view (the pass renders the sky unfogged and un-graded), while the
+ * night lake must stay dark with soft highlights. The glint is separate and stays.
+ */
+const reflectionCeiling = uniform(1e3);
+
+export function setWaterReflectionCeiling(max: number): void {
+  reflectionCeiling.value = max;
+}
+
 /** The two cross-fading phases (0..1 sawtooth, half a period apart) and their weights. */
 const phase0 = fract(time.div(FLOW.period));
 const phase1 = fract(time.div(FLOW.period).add(0.5));
@@ -325,7 +338,9 @@ function buildNodes(
   const strength = fresnelNode(toEye.dot(worldNormal), still);
 
   // The default reflector UV (ReflectorNode._defaultUV) wobbled by the ripples.
-  const reflected = reflection.sample(screenUV.flipX().add(slope.mul(REFLECTION.distortion)));
+  const reflected = reflection
+    .sample(screenUV.flipX().add(slope.mul(REFLECTION.distortion)))
+    .rgb.min(vec3(reflectionCeiling));
 
   const streaks = slope.y.mul(2).add(0.5).clamp(0, 1).pow(2).toVar();
   // Foam: a band along the waterline, broken up by the fine noise that drifts with the current.
@@ -355,7 +370,7 @@ function buildNodes(
   material.roughnessNode = float(0.45).sub(streaks.mul(0.35)).add(foam.mul(0.5));
   material.emissiveNode = color(look.glow)
     .mul(streaks)
-    .add((waterTier === 'low' ? color(REFLECTION.lowColor) : reflected.rgb).mul(strength))
+    .add((waterTier === 'low' ? color(REFLECTION.lowColor) : reflected).mul(strength))
     .add(color(FOAM.color).mul(foam.mul(FOAM.glow)))
     .add(color(SPECKS.color).mul(specks.mul(SPECKS.glow)))
     .add(glintColor.mul(glint));

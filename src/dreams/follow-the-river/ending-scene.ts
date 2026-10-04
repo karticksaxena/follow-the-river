@@ -8,6 +8,7 @@ import { createMomActor, type MomActor, type Pt } from './mom-actor';
 import { lookAt, reach } from './rig';
 import { EDGE_X, shoreY } from './river';
 import type { Systems } from './run';
+import { setWaterReflectionCeiling } from './water';
 
 /** Tuning knobs. Mom's lantern is the chapter's lantern, beside her on the pebbles. */
 export const MOM_LANTERN = { intensity: 1.6, distance: 14, height: 1.3 } as const;
@@ -118,6 +119,8 @@ export interface EndingScene {
   aim: Aim;
   /** Sets Mom's lantern down at `at` (world): the mesh leaves her hand and the light stays with it. */
   setDown(at: { x: number; y: number; z: number }): void;
+  /** The farewell's light (on) while she dies, aimed at `at` (her head): the lantern a real warm key, a cool moon from the far side. */
+  lightFarewell(on: boolean, at?: { x: number; y: number; z: number }): void;
   /** Per frame: Mom's walk/idle, her animation, and the lantern in her hand. */
   update(dt: number): void;
   /** Puts Mom on the shore facing `(toX, toZ)` and lights the lantern in her hand. */
@@ -127,6 +130,21 @@ export interface EndingScene {
   dispose(): void;
 }
 
+/**
+ * The farewell light: still a sad night, but you can see her. The lantern Mom sets down becomes a warm
+ * key held `lift` m above the pebbles (its light never touches her dress), a cool moon comes from
+ * the far side (+x, behind her back) so her black body separates from the shore, and a softer cool
+ * fill from the near side lights her flank. Tuning knobs.
+ */
+export const FAREWELL_LIGHT = {
+  lantern: { intensity: 10, distance: 12, lift: 0.9 },
+  /** The rim from the far side (+x, behind her back), and a softer cool fill on the near side so her black flank and your hands read. */
+  moon: { color: 0x8fa8d0, intensity: 2.5, offset: [8, 6, 3] },
+  fill: { color: 0x9db4dc, intensity: 1.3, offset: [-7.5, 4.8, -3] },
+  /** The most the lake's reflection may add while it lasts (linear). */
+  waterCeiling: 0.1,
+} as const;
+
 function makeLantern(): THREE.Mesh {
   return new THREE.Mesh(
     new THREE.BoxGeometry(LANTERN_SIZE.width, LANTERN_SIZE.height, LANTERN_SIZE.width),
@@ -134,11 +152,10 @@ function makeLantern(): THREE.Mesh {
   );
 }
 
-/** Mom (loaded now, while the screen is black) with the lantern beside her, parked until `place`. */
-export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
-  const spot = sys.area.meetAt;
-  if (!spot) throw new Error('the ending needs a meeting spot (meetAt)');
-  const lakeZ = sys.area.lake?.z ?? null;
+/** Mom with the lantern, Kartik's body and his first-person arm, all hidden and in the world (the arm on the camera). */
+async function loadPlayers(
+  sys: Systems,
+): Promise<{ mom: Character; kartik: Character; arm: THREE.Object3D }> {
   const [momAsset, kartikAsset, arm] = await Promise.all([
     loadSkinned(characterUrl('mom')),
     loadSkinned(characterUrl('kartik')),
@@ -151,6 +168,21 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
   kartik.rest = 'Kneel';
   sys.world.scene.add(mom.group, kartik.group);
   sys.ctx.stage.camera.add(arm);
+  return { mom, kartik, arm };
+}
+
+/** Mom (loaded now, while the screen is black) with the lantern beside her, parked until `place`. */
+export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
+  const spot = sys.area.meetAt;
+  if (!spot) throw new Error('the ending needs a meeting spot (meetAt)');
+  const lakeZ = sys.area.lake?.z ?? null;
+  const { mom, kartik, arm } = await loadPlayers(sys);
+  const moon = new THREE.DirectionalLight(FAREWELL_LIGHT.moon.color, 0);
+  const fill = new THREE.DirectionalLight(FAREWELL_LIGHT.fill.color, 0);
+  // Both stay in the scene at intensity 0 (never `visible = false`): a light that appears mid-scene recompiles every material, which is a hitch; here it compiles behind the black fade.
+  sys.world.scene.add(moon, moon.target, fill, fill.target);
+  let farewell = false; // the farewell light is on
+  let down = false; // the lantern is on the pebbles
   const aim: Aim = { momHand: null, kartikHand: null, momGaze: null, kartikGaze: null };
   const eyes = { mom: { share: 0, last: null } as Gaze, kartik: { share: 0, last: null } as Gaze };
   const heads = { mom: mom.bone('Head'), kartik: kartik.bone('Head') };
@@ -170,6 +202,21 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
       can.position.set(at.x, at.y, at.z);
       can.visible = true;
       sys.world.scene.add(can);
+      down = true;
+    },
+    lightFarewell(on, at) {
+      farewell = on;
+      setWaterReflectionCeiling(on ? FAREWELL_LIGHT.waterCeiling : 1e3); // the lake stays dark (see water.ts)
+      moon.intensity = on ? FAREWELL_LIGHT.moon.intensity : 0;
+      fill.intensity = on ? FAREWELL_LIGHT.fill.intensity : 0;
+      if (!on || !at) return;
+      for (const [light, o] of [
+        [moon, FAREWELL_LIGHT.moon.offset],
+        [fill, FAREWELL_LIGHT.fill.offset],
+      ] as const) {
+        light.target.position.set(at.x, at.y, at.z);
+        light.position.set(at.x + o[0], at.y + o[1], at.z + o[2]);
+      }
     },
     update(dt) {
       actor.update(dt);
@@ -177,13 +224,17 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
       kartik.update(dt);
       gaze(heads.mom, aim.momGaze, eyes.mom, dt);
       gaze(heads.kartik, aim.kartikGaze, eyes.kartik, dt);
-      if (aim.momHand) armTo(mom, 'L', aim.momHand);
+      if (aim.momHand) armTo(mom, 'R', aim.momHand);
       if (aim.kartikHand && kartik.group.visible) armTo(kartik, 'R', aim.kartikHand);
       // Her feet follow the pebble shore where it slopes toward the water.
       if (lakeZ !== null) mom.group.position.y = shoreY(mom.group.position.z - lakeZ);
       if (held) {
         mom.pack.getWorldPosition(lamp); // the lantern mesh rides her right hand
         lanternSpot(lamp, mom.group.position, sys.ctx.stage.camera.position, held.position);
+        const key = farewell && down; // only once it is on the pebbles: in her hand it would glare on her dress
+        held.intensity = key ? FAREWELL_LIGHT.lantern.intensity : MOM_LANTERN.intensity;
+        held.distance = key ? FAREWELL_LIGHT.lantern.distance : MOM_LANTERN.distance;
+        if (key) held.position.y += FAREWELL_LIGHT.lantern.lift;
       }
       sys.flashlight.clearWatch(WATCH.mom);
       if (mom.group.visible) {
@@ -219,10 +270,17 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
       sys.flashlight.clearWatch(WATCH.mom);
       mom.group.visible = false;
       lantern.position.copy(home);
+      lantern.intensity = MOM_LANTERN.intensity;
+      lantern.distance = MOM_LANTERN.distance;
+      farewell = down = false;
+      setWaterReflectionCeiling(1e3);
+      moon.intensity = fill.intensity = 0;
     },
     dispose() {
       sys.flashlight.clearWatch(WATCH.mom);
       arm.removeFromParent();
+      moon.removeFromParent();
+      fill.removeFromParent();
       mom.dispose();
       kartik.dispose();
     },

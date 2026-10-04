@@ -313,6 +313,7 @@ const dawning = (h: EndingHost, st: State): Dawning => ({
 /** Dawn comes up while you stand, Mom stands and comes to you: time to go home. */
 async function dawnAndHome(h: EndingHost, st: State, s: Script): Promise<void> {
   h.sys.flashlight.on = false;
+  st.scene?.lightFarewell(false); // the sun is coming: the night light goes
   const stand = standUp(s);
   let standing = false;
   const d = dawning(h, st);
@@ -345,6 +346,8 @@ async function runStep(h: EndingHost, st: State, step: EndingStep, at: Shore): P
   else if (step === 'dawn') await dawnAndHome(h, st, s);
   else if (step === 'ride') {
     h.run.frozen = true; // the chapter stops: the ride is its own scene
+    st.cast?.release(); // and its camera is the ride's, not the farewell's
+    h.sys.ctx.cinematic(false); // and your mouse look is the ride's too (it brings its own end shot)
     await playCanoeRide(h.sys.ctx, h.sys.sounds);
   } else if (step === 'credits') await read(h, st, ENDING_PAGES.credits);
 }
@@ -401,9 +404,13 @@ function endCinema(h: EndingHost, st: State): void {
   const cast = st.cast;
   if (cast) {
     cast.follow(false);
-    cast.hold = cast.arm = cast.slide = cast.float = null;
+    cast.hold = cast.arm = cast.float = null;
   }
-  if (st.pack) st.pack.visible = false;
+  if (st.pack) {
+    h.sys.world.scene.attach(st.pack); // a quit while it is in your hand must not leave it on the arm
+    st.pack.visible = false;
+  }
+  st.scene?.lightFarewell(false);
 }
 
 export function createEnding(h: EndingHost): Ending {
@@ -430,7 +437,7 @@ export function createEnding(h: EndingHost): Ending {
         st.wait = null;
         resolve();
       }
-      st.cast?.update(dt);
+      st.cast?.update(paused ? 0 : dt); // a page or the menu freezes the shuffle, the arm and the bob; the camera stays put
       // The world is frozen behind a page, but she keeps breathing, and the camera and your arm stay put.
       if (paused && st.reading && h.sys.fish.beached)
         h.sys.fish.update(dt, h.sys.ctx.stage.camera.position, null, false);

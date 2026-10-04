@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createRail } from './camera-rail';
 import { CAST, createCast, type ArmJob, type Cast } from './farewell-cast';
 
@@ -78,18 +78,34 @@ describe('the cast', () => {
     expect(arm.visible).toBe(false);
   });
 
-  it('slides Mom to her spot at the shuffle speed, then says so once', () => {
-    const { mom, cast } = setup();
-    const done = vi.fn<() => void>();
-    cast.slide = { to: { x: 0.6, z: 0 }, done };
+  it('lets go of everything on release (the ride owns the camera)', () => {
+    const { camera, cast } = setup();
+    cast.hold = createRail(
+      [
+        { at: [0, 1.6, 0], look: [0, 1.6, -5] },
+        { at: [2, 0.4, -3], look: [4, 0.2, -3] },
+      ],
+      2,
+    );
+    cast.arm = job();
+    cast.float = new THREE.Group();
+    cast.follow(true);
+    cast.release();
+    camera.position.set(9, 9, 9);
     cast.update(0.5);
-    expect(mom.group.position.x).toBeCloseTo(CAST.shuffle * 0.5);
-    expect(done).not.toHaveBeenCalled();
-    cast.update(1);
-    expect(mom.group.position.x).toBe(0.6);
-    expect(done).toHaveBeenCalledTimes(1);
-    cast.update(1);
-    expect(done).toHaveBeenCalledTimes(1);
+    expect(camera.position.toArray()).toEqual([9, 9, 9]);
+    expect([cast.hold, cast.arm, cast.float]).toEqual([null, null, null]);
+  });
+
+  it('never turns faster than CAST.maxTurn, however far round she is', () => {
+    const { camera, cast, eye } = setup();
+    eye.x = 0;
+    eye.z = 10; // behind the camera, which looks along -z
+    cast.follow(true);
+    const before = camera.getWorldDirection(new THREE.Vector3());
+    cast.update(1 / 60);
+    const after = camera.getWorldDirection(new THREE.Vector3());
+    expect(after.angleTo(before)).toBeLessThanOrEqual(CAST.maxTurn / 60 + 1e-6);
   });
 
   it('bobs a floating pack around where it was put', () => {

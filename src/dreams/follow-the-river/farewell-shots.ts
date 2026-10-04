@@ -12,35 +12,59 @@ import { shoreY, WATER_Y } from './river';
  * Tuning knobs (m, s, radians).
  */
 export const SHOTS = {
-  /** Kartik's hand on her flank, this far ahead of her centre; Mom's is `momGap` further toward her head; hands press this far into the skin. */
-  flank: { ahead: 1.8, momGap: 0.35, press: 0.06 },
-  /** The kneel: eye height, out from her skin and back from the hand, and how far ahead of the hand the camera looks. */
-  kneel: { eye: 1.05, out: 0.5, back: 0.25, lookAhead: 0.5, lookDown: 0.45, seconds: 2.5 },
-  /** Mom kneels here by her head (ahead of her centre, out from her skin), and here beside you. */
-  momHead: { ahead: 3.1, out: 0.8 },
-  momFlank: { ahead: 2.4, out: 0.45 },
-  /** Her eye: the look rail stops this far from it (out to her side, `angle` rad back toward her tail) and this much above it; seconds. */
-  look: { stop: 0.9, up: 0.25, angle: (37 * Math.PI) / 180, seconds: 3 },
+  /** Kartik's hand on her flank, this far ahead of her centre; hands press this far into the skin. */
+  flank: { ahead: 2.2, press: 0.06 },
+  /** The kneel: eye height, out from her skin, how far ahead of her centre the camera kneels, and what it looks at (her head, `side` m in from her centre line, `ahead` of her centre, `down` below the eye). */
+  kneel: {
+    eye: 1.05,
+    out: 0.55,
+    ahead: 1.45,
+    seconds: 2.5,
+    look: { side: 0.2, ahead: 3.0, down: 0.35 },
+  },
+  /** Mom kneels in front of her face, facing her (never between you and her eye): `side` m out from her centre line, `beyond` her nose; her hand rests on her nose (`nose` ahead of her centre, `up` above the line). */
+  mom: { side: 0.25, beyond: 0.6, nose: 3.45, up: 0.12 },
+  /** After she lands the camera goes to watch from the pebbles: `side` m out from her centre line, `beyond` her nose, at this eye height, looking at her eye. */
+  watch: { side: 4.2, beyond: 2.3, eye: 1.55, seconds: 2.5 },
+  /** Her eye: the look rail stops this far from it (out to her side, `angle` rad back toward her tail, negative: ahead) and this much above it; the look point is `shift` m toward the camera (her head turns to you, so her eye comes toward you); seconds. */
+  look: { stop: 1.5, up: 0.3, shift: 0.3, angle: (-10 * Math.PI) / 180, seconds: 3 },
   /** The camera backs away from her eye to the start of the orbit. */
   pullBack: { seconds: 2.5 },
   /** The orbit round the three of them (see `orbitKeys`): the sweep goes round her tail, over the lake. */
-  orbit: { radius: 4.5, sweep: -(150 * Math.PI) / 180, heights: [1.4, 2.6], keys: 9, seconds: 12 },
-  /** The last pack: you kneel at the water's edge, it floats this far out; the camera gets there over this long. */
+  orbit: {
+    centreAhead: 2.8,
+    radius: 4.5,
+    sweep: -(150 * Math.PI) / 180,
+    heights: [1.4, 2.6],
+    keys: 9,
+    seconds: 12,
+  },
+  /**
+   * The last pack: you kneel at the water's edge `out` m west of her centre line, looking east along
+   * the shore: the water and your arm on the left, her head and Mom on the right. The pack floats
+   * `floatInto` m ahead of you and `floatOut` m into the lake; the camera looks at a point `lookX`
+   * m from her centre line and `lookAhead` m up the shore from the water line. `lean`: as you
+   * lower the pack the camera dips this far toward it (m) and `leanDown` lower; seconds.
+   */
   pack: {
-    out: 1.6,
-    edge: 0.35,
-    floatOut: 0.5,
-    floatInto: 0.5,
+    out: 3.2,
+    edge: 0.2,
+    floatOut: 0.2,
+    floatInto: 0.9,
     seconds: 3.5,
-    eye: 1.05,
+    eye: 1.3,
     lower: 0.8,
+    lookX: -0.6,
+    lookAhead: 1.4,
+    lean: 0.35,
+    leanDown: 0.2,
   },
   /** The camera swings over the lake on its way from the orbit to the water's edge. */
   swing: { out: 2.2, up: 2.6, into: 2 },
   /** Standing again for the dawn. */
   stand: { eye: 1.6, seconds: 3, look: 40 },
-  /** Where Mom sets her lantern down: out from her knees, so its light stays off her dress. */
-  lantern: { out: 0.7, up: 0.12 },
+  /** Where Mom sets her lantern down: beside her knees on the camera's side, so its light stays off her dress. */
+  lantern: { side: 0.95, beyond: 0.45, up: 0.12 },
 } as const;
 
 export type V3 = readonly [number, number, number];
@@ -56,15 +80,18 @@ export interface Shots {
   /** The camera kneeling beside her, and Kartik's body (a little behind it). */
   kneel: RailKey;
   kartik: { x: number; z: number };
-  /** Mom's two kneeling places and her lantern's. */
-  momHead: { x: number; z: number };
-  momFlank: { x: number; z: number };
+  /** Mom's kneeling place (facing her nose) and her lantern's. */
+  mom: { x: number; z: number };
   lantern: V3;
+  /** Watching her from the pebbles, just after she lands. */
+  watch: RailKey;
   /** The camera close to her eye, the orbit, the swing to the water's edge, the pack's camera and its float spot. */
   eyeClose: RailKey;
   orbit: RailKey[];
   swing: RailKey;
   packCam: RailKey;
+  /** Leaning toward the water as the pack goes down. */
+  lean: RailKey;
   float: V3;
   /** Standing again at the water's edge, looking out over the lake. */
   stand: RailKey;
@@ -72,76 +99,128 @@ export interface Shots {
   centre: V3;
 }
 
-export function shotsFor(at: Shore): Shots {
+/** Her rest pose on the shore and the frame everything is measured in. */
+interface Frame {
+  at: Shore;
+  ground(z: number): number;
+  /** A point on her centre line `ahead` m from her centre, `side` m out to her -x and `up` above it. */
+  on(ahead: number, side?: number, up?: number): V3;
+}
+
+function frameOf(at: Shore): Frame {
   const ground = (z: number): number => shoreY(z - at.lakeZ);
   const rest = strandRest(at.noseX, at.noseZ, ground);
   const cp = Math.cos(rest.pitch);
   const sp = Math.sin(rest.pitch);
-  /** A point on her centre line `ahead` m from her centre, and `side` m out to her -x. */
-  const on = (ahead: number, side = 0, up = 0): V3 => [
-    at.noseX - side,
-    rest.y + ahead * sp + up * cp,
-    rest.z + ahead * cp - up * sp,
-  ];
-  const skin = ANATOMY.halfWidth - SHOTS.flank.press;
-  const hand = on(SHOTS.flank.ahead, skin);
-  const momHand = on(SHOTS.flank.ahead + SHOTS.flank.momGap, skin);
-  const eye = on(ANATOMY.eye.ahead, ANATOMY.eye.side, ANATOMY.eye.up);
-  const k = SHOTS.kneel;
-  const camX = at.noseX - ANATOMY.halfWidth - k.out;
-  const camZ = hand[2] - k.back;
-  const eyeY = ground(camZ) + k.eye;
-  const kneel: RailKey = {
-    at: [camX, eyeY, camZ],
-    look: [at.noseX - 0.2, eyeY - k.lookDown, hand[2] + k.lookAhead],
-  };
-  const spot = (ahead: number, out: number): { x: number; z: number } => ({
-    x: at.noseX - ANATOMY.halfWidth - out,
-    z: on(ahead)[2],
-  });
-  const centre: V3 = [at.noseX - 0.65, ground(on(2.2)[2]) + 0.7, on(2.2)[2]];
-  const orbitFrom = Math.atan2(camX - centre[0], camZ - centre[2]);
-  const o = SHOTS.orbit;
-  const p = SHOTS.pack;
-  const packX = at.noseX - p.out;
-  const packZ = at.lakeZ + p.edge;
-  const packEye = ground(packZ) + p.eye;
-  const float: V3 = [packX + p.floatInto, WATER_Y + 0.05, at.lakeZ - p.floatOut];
-  const L = SHOTS.look;
-  const lantern = spot(SHOTS.momHead.ahead, SHOTS.momHead.out + SHOTS.lantern.out);
   return {
+    at,
     ground,
-    eye,
-    hand,
-    momHand,
-    kneel,
-    kartik: { x: camX, z: camZ },
-    momHead: spot(SHOTS.momHead.ahead, SHOTS.momHead.out),
-    momFlank: spot(SHOTS.momFlank.ahead, SHOTS.momFlank.out),
-    lantern: [lantern.x, ground(lantern.z) + SHOTS.lantern.up, lantern.z],
-    eyeClose: {
-      at: [eye[0] - Math.cos(L.angle) * L.stop, eye[1] + L.up, eye[2] - Math.sin(L.angle) * L.stop],
-      look: eye,
+    on: (ahead, side = 0, up = 0) => [
+      at.noseX - side,
+      rest.y + ahead * sp + up * cp,
+      rest.z + ahead * cp - up * sp,
+    ],
+  };
+}
+
+interface Spot {
+  x: number;
+  z: number;
+}
+
+/** A kneeling place `out` m from her skin, `ahead` of her centre. */
+const spotAt = (f: Frame, ahead: number, out: number): Spot => ({
+  x: f.at.noseX - ANATOMY.halfWidth - out,
+  z: f.on(ahead)[2],
+});
+
+/** The camera kneeling beside her flank, and Kartik's body (a little ahead of it, so his hand reaches her). */
+function kneelKey(f: Frame, hand: V3): { key: RailKey; spot: Spot; body: Spot } {
+  const k = SHOTS.kneel;
+  const spot = spotAt(f, k.ahead, k.out);
+  const y = f.ground(spot.z) + k.eye;
+  const look: V3 = [f.at.noseX - k.look.side, y - k.look.down, f.on(k.look.ahead)[2]];
+  return { key: { at: [spot.x, y, spot.z], look }, spot, body: { x: spot.x, z: hand[2] - 0.25 } };
+}
+
+/** The orbit round the three of them, starting where the camera backs away to. */
+function orbitOf(f: Frame, from: Spot): { keys: RailKey[]; centre: V3 } {
+  const z = f.on(SHOTS.orbit.centreAhead)[2];
+  const centre: V3 = [f.at.noseX - 0.65, f.ground(z) + 0.7, z];
+  const o = SHOTS.orbit;
+  const a = Math.atan2(from.x - centre[0], from.z - centre[2]);
+  const c = { x: centre[0], y: centre[1], z: centre[2] };
+  return { keys: orbitKeys(c, o.radius, a, a + o.sweep, o.heights, o.keys), centre };
+}
+
+/** The pack step: kneeling at the water's edge, the float spot, the swing over the lake, standing again. */
+function packOf(
+  f: Frame,
+  centre: V3,
+): Pick<Shots, 'packCam' | 'lean' | 'float' | 'swing' | 'stand'> {
+  const { at } = f;
+  const p = SHOTS.pack;
+  const x = at.noseX - p.out;
+  const z = at.lakeZ + p.edge;
+  const float: V3 = [x + p.floatInto, WATER_Y + 0.05, at.lakeZ - p.floatOut];
+  const y = f.ground(z) + p.eye;
+  const look: V3 = [at.noseX + p.lookX, y - 0.35, at.lakeZ + p.lookAhead];
+  const toFloat = Math.hypot(float[0] - x, float[2] - z);
+  return {
+    float,
+    packCam: { at: [x, y, z], look },
+    lean: {
+      at: [
+        x + ((float[0] - x) / toFloat) * p.lean,
+        y - p.leanDown,
+        z + ((float[2] - z) / toFloat) * p.lean,
+      ],
+      look,
     },
-    orbit: orbitKeys(
-      { x: centre[0], y: centre[1], z: centre[2] },
-      o.radius,
-      orbitFrom,
-      orbitFrom + o.sweep,
-      o.heights,
-      o.keys,
-    ),
     swing: {
       at: [at.noseX - SHOTS.swing.out, SHOTS.swing.up, at.lakeZ - SHOTS.swing.into],
       look: centre,
     },
-    packCam: { at: [packX, packEye, packZ], look: float },
-    float,
     stand: {
-      at: [packX, ground(packZ) + SHOTS.stand.eye, packZ],
-      look: [packX + 6, 2.2, at.lakeZ - SHOTS.stand.look],
+      at: [x, f.ground(z) + SHOTS.stand.eye, z],
+      look: [x + 6, 2.2, at.lakeZ - SHOTS.stand.look],
     },
-    centre,
+  };
+}
+
+export function shotsFor(at: Shore): Shots {
+  const f = frameOf(at);
+  const skin = ANATOMY.halfWidth - SHOTS.flank.press;
+  const hand = f.on(SHOTS.flank.ahead, skin);
+  const eye = f.on(ANATOMY.eye.ahead, ANATOMY.eye.side, ANATOMY.eye.up);
+  const kneel = kneelKey(f, hand);
+  const orbit = orbitOf(f, kneel.spot);
+  const L = SHOTS.look;
+  const lamp = { x: f.at.noseX - SHOTS.lantern.side, z: f.at.noseZ + SHOTS.lantern.beyond };
+  return {
+    ground: (z) => f.ground(z),
+    eye,
+    hand,
+    momHand: f.on(SHOTS.mom.nose, 0, SHOTS.mom.up),
+    kneel: kneel.key,
+    kartik: kneel.body,
+    mom: { x: at.noseX - SHOTS.mom.side, z: at.noseZ + SHOTS.mom.beyond },
+    lantern: [lamp.x, f.ground(lamp.z) + SHOTS.lantern.up, lamp.z],
+    eyeClose: {
+      at: [eye[0] - Math.cos(L.angle) * L.stop, eye[1] + L.up, eye[2] - Math.sin(L.angle) * L.stop],
+      look: [
+        eye[0] - Math.cos(L.angle) * L.shift,
+        eye[1] + 0.1,
+        eye[2] - Math.sin(L.angle) * L.shift,
+      ],
+    },
+    watch: {
+      at: [at.noseX - SHOTS.watch.side, SHOTS.watch.eye, at.noseZ + SHOTS.watch.beyond],
+      look: eye,
+    },
+    orbit: orbit.keys,
+    centre: orbit.centre,
+    ...packOf(f, orbit.centre),
   };
 }
 
@@ -156,9 +235,8 @@ export function keyFrom(camera: THREE.Camera, ahead = 3): RailKey {
 
 /** The rails between the shots. `from` is where the camera is when each starts. */
 export const rails = {
-  /** Turn on the spot to look at `to`. */
-  turn: (from: RailKey, to: V3, seconds: number): Rail =>
-    createRail([from, { at: from.at, look: to }], seconds),
+  /** From where you stood to the pebbles, to watch her. */
+  watch: (from: RailKey, s: Shots): Rail => createRail([from, s.watch], SHOTS.watch.seconds),
   /** Lower to the kneeling camera. */
   kneel: (from: RailKey, s: Shots): Rail => createRail([from, s.kneel], SHOTS.kneel.seconds),
   /** Push in toward her eye. */
@@ -171,6 +249,8 @@ export const rails = {
   /** From the end of the orbit, swinging over the lake, to kneeling at the water's edge. */
   toPack: (from: RailKey, s: Shots): Rail =>
     createRail([from, s.swing, s.packCam], SHOTS.pack.seconds),
+  /** Dip toward the water as the pack is lowered. */
+  lean: (s: Shots): Rail => createRail([s.packCam, s.lean], SHOTS.pack.lower),
   /** Up to standing, turning to the lake. */
   stand: (from: RailKey, s: Shots): Rail => createRail([from, s.stand], SHOTS.stand.seconds),
 };

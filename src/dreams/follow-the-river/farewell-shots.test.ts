@@ -9,6 +9,8 @@ import { shoreY, WATER_Y } from './river';
 const LAKE_Z = -392;
 const at = shoreFor({ x: -3, z: -387.5 }, LAKE_Z);
 const shots = shotsFor(at);
+/** Everywhere Mom is in the farewell: where she starts (her meeting spot), and kneeling at her face. */
+const MOMS = [{ x: -3, z: -387.5 }, shots.mom];
 
 /** Every camera point of the farewell (keys of every rail, and the kneeling spots). */
 const POINTS: [string, V3][] = [
@@ -55,6 +57,7 @@ describe('the farewell shots', () => {
   it('keeps the rails clear of her too, along their whole way', () => {
     const cam = new THREE.PerspectiveCamera();
     const all = [
+      rails.watch({ at: [-4, 1.6, LAKE_Z + 12], look: [0, 1, LAKE_Z + 5] }, shots),
       rails.kneel({ at: [-2, 1.6, LAKE_Z + 3], look: [0, 1, LAKE_Z + 5] }, shots),
       rails.look(shots.kneel, shots),
       rails.pullBack(shots.eyeClose, shots),
@@ -72,12 +75,47 @@ describe('the farewell shots', () => {
   });
 
   it('puts both hands on her skin on the kneeling side, outside the body', () => {
-    for (const [x] of [shots.hand, shots.momHand]) {
-      expect(x).toBeLessThan(at.noseX);
-      expect(at.noseX - x).toBeLessThan(ANATOMY.halfWidth);
-      expect(at.noseX - x).toBeGreaterThan(ANATOMY.halfWidth - 0.2);
+    const [x] = shots.hand;
+    expect(at.noseX - x).toBeLessThan(ANATOMY.halfWidth);
+    expect(at.noseX - x).toBeGreaterThan(ANATOMY.halfWidth * 0.8);
+    expect(shots.momHand[0]).toBeCloseTo(at.noseX); // Mom's rests on her nose, in front of her face
+    expect(shots.momHand[2]).toBeGreaterThan(shots.hand[2]);
+  });
+
+  it('keeps every rail 0.6 m from Mom (wherever she kneels) at every one of 1000 samples', () => {
+    const cam = new THREE.PerspectiveCamera();
+    const far = { at: [-2, 1.6, LAKE_Z + 3] as V3, look: [0, 1, LAKE_Z + 5] as V3 };
+    const all = [
+      rails.watch(far, shots),
+      rails.kneel(shots.watch, shots),
+      rails.kneel(far, shots),
+      rails.look(shots.kneel, shots),
+      rails.pullBack(shots.eyeClose, shots),
+      rails.orbit(shots),
+      rails.toPack(shots.orbit[shots.orbit.length - 1], shots),
+      rails.stand(shots.packCam, shots),
+    ];
+    for (const rail of all) {
+      for (let i = 0; i <= 1000; i++) {
+        rail.pose((i / 1000) * rail.seconds, cam);
+        for (const mom of MOMS) {
+          expect(Math.hypot(cam.position.x - mom.x, cam.position.z - mom.z)).toBeGreaterThan(0.6);
+        }
+      }
     }
-    expect(shots.momHand[2] - shots.hand[2]).toBeCloseTo(SHOTS.flank.momGap, 1);
+  });
+
+  it('never has Mom between the camera and her eye, at the kneel and at the look', () => {
+    for (const key of [shots.kneel, shots.eyeClose]) {
+      const [cx, , cz] = key.at;
+      const [ex, , ez] = shots.eye;
+      const len = Math.hypot(ex - cx, ez - cz);
+      for (const mom of MOMS) {
+        const along = ((mom.x - cx) * (ex - cx) + (mom.z - cz) * (ez - cz)) / len;
+        const across = Math.abs(((mom.x - cx) * (ez - cz) - (mom.z - cz) * (ex - cx)) / len);
+        expect(along > len || along < 0 || across > 0.5).toBe(true);
+      }
+    }
   });
 
   it('puts both hand targets in front of the kneeling camera', () => {
@@ -95,13 +133,11 @@ describe('the farewell shots', () => {
     expect(shots.eye[2]).toBeGreaterThan(shots.hand[2]);
   });
 
-  it('keeps Mom and her lantern outside her body, Mom ahead of you at her head', () => {
-    const spots = [shots.momHead, shots.momFlank, { x: shots.lantern[0], z: shots.lantern[2] }];
-    for (const { x, z } of spots) {
-      expect(toCentreLine(x, z)).toBeGreaterThan(ANATOMY.halfWidth + 0.4);
-    }
-    expect(shots.momHead.z).toBeGreaterThan(shots.momFlank.z);
-    expect(shots.momFlank.z).toBeGreaterThan(shots.kartik.z);
+  it('keeps Mom and her lantern outside her body, Mom in front of her face', () => {
+    const spots = [shots.mom, { x: shots.lantern[0], z: shots.lantern[2] }];
+    for (const { x, z } of spots) expect(toCentreLine(x, z)).toBeGreaterThan(0.45); // knees clear of her nose
+    expect(shots.mom.z).toBeGreaterThan(at.noseZ); // in front of her face
+    expect(shots.kartik.z).toBeLessThan(shots.eye[2]);
   });
 
   it('floats the pack on the water, within reach of the kneeling camera', () => {
