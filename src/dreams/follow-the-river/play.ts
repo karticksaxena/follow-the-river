@@ -4,7 +4,7 @@ import { nightTuning } from './difficulty';
 import { nightEnd } from './ending';
 import { BEAM, chargeBattery } from './flashlight';
 import { nearSpot, takeDamage } from './flow';
-import type { HudState } from './hud';
+import { gunBits, type HudState } from './hud';
 import { applyDim, LIGHTING } from './lighting';
 import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
@@ -216,7 +216,7 @@ function tickView(p: State, dt: number): void {
   hudState.arrows = s.arrows;
   hudState.fishPacks = s.fishPacks;
   hudState.ammo = weapon === 'bow' ? 0 : s[AMMO_OF[weapon]];
-  hudState.guns = run.live.guns.length;
+  hudState.guns = gunBits(run.live.guns);
   hudState.weapon = weapon;
   hudState.health = run.health;
   const fighting = isNight(run.phase) && run.waves.fighting;

@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
-import type { AreaDef, PickupDef, WaveDef } from './areas/types';
+import type { AreaDef, GatePiece, PickupDef, WaveDef } from './areas/types';
 import { KIT_SCALE, kitUrl } from './kits';
 import { EDGE_X } from './river';
 
@@ -18,8 +18,7 @@ export const WAVE = {
   far: 28,
   /** Share of groups that come from downstream (between you and the barricade). */
   ahead: 0.6,
-  /** Pieces across the bank in a barricade, and how long one takes to fall (s). */
-  pieces: 7,
+  /** How long a barricade takes to fall (s). */
   fallSeconds: 0.7,
 } as const;
 
@@ -128,22 +127,44 @@ function moveBox(box: Box, to: Box): void {
   box.maxZ = to.maxZ;
 }
 
+/** A piece of a barricade, scaled and turned, and its width across the bank (m). */
+async function loadPiece(p: GatePiece): Promise<{ model: THREE.Object3D; width: number }> {
+  const model = await loadModel(kitUrl(p.kit, p.model));
+  model.scale.setScalar(KIT_SCALE[p.kit] * (p.scale ?? 1));
+  model.rotation.y = p.yaw;
+  const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+  return { model, width: Math.max(0.3, size.x) };
+}
+
+/** One barricade: a solid row across the bank (pieces overlap a little), a few extras in front. */
+function buildGate(
+  row: { model: THREE.Object3D; width: number },
+  extra: { model: THREE.Object3D; width: number },
+  fromX: number,
+  toX: number,
+): THREE.Group {
+  const group = new THREE.Group();
+  const count = Math.ceil((toX - fromX) / (row.width * 0.9));
+  const step = (toX - fromX) / count;
+  for (let i = 0; i <= count; i++) {
+    const p = row.model.clone(true);
+    p.position.set(fromX + i * step, 0, (i % 2) * 0.15);
+    p.rotation.y += (i % 3) * 0.05;
+    group.add(p);
+    if (i % 3 !== 1) continue;
+    const e = extra.model.clone(true);
+    e.position.set(fromX + i * step + step / 2, 0, 1.1);
+    group.add(e);
+  }
+  return group;
+}
+
 /** The barricades, one across the bank at each wave's gate, built from the area's gate pieces. */
 export async function createGates(scene: THREE.Scene, area: AreaDef): Promise<Gates> {
-  const piece = await loadModel(kitUrl(area.gate.kit, area.gate.model));
-  const scale = KIT_SCALE[area.gate.kit] * (area.gate.scale ?? 1);
-  const first = area.landX + 1.1;
-  const step = (EDGE_X - 0.8 - first) / (WAVE.pieces - 1);
+  const [row, extra] = await Promise.all([loadPiece(area.gate.row), loadPiece(area.gate.extra)]);
   const width = EDGE_X - area.landX;
   const groups = area.waves.map((w) => {
-    const group = new THREE.Group();
-    for (let i = 0; i < WAVE.pieces; i++) {
-      const p = piece.clone(true);
-      p.scale.setScalar(scale);
-      p.position.set(first + i * step, 0, 0);
-      p.rotation.y = area.gate.yaw + (i % 2) * 0.1;
-      group.add(p);
-    }
+    const group = buildGate(row, extra, area.landX + 0.5, EDGE_X - 0.3);
     group.position.z = w.gateZ;
     scene.add(group);
     return group;

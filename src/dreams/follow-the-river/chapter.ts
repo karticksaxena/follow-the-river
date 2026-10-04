@@ -133,7 +133,7 @@ export async function startChapter(
   };
   beginPhase(f);
   ctx.stage.scene = sys.world.scene;
-  const phaseOf = (): RunSave['phase'] => f.save.phase;
+  const checkpointOf = (): { phase: RunSave['phase']; wave: number } => f.save;
   const again = (): void => restart(f);
   const stop = ctx.stage.addUpdater((dt) => {
     if (run.dying === 'no') {
@@ -141,7 +141,7 @@ export async function startChapter(
       ending.update(dt);
     } else {
       if (!ctx.isPaused()) sys.ambience.hush(dt);
-      death.step(dt, phaseOf, again);
+      death.step(dt, checkpointOf, again);
     }
   });
   return {

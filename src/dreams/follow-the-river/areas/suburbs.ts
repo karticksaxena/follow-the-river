@@ -203,7 +203,10 @@ export const SUBURBS: AreaDef = {
     { z: -212, gateZ: -244, count: 10, crate: { x: -1, gun: 'rifle' } },
     { z: -276, gateZ: -308, count: 12, crate: { x: -1 } },
   ],
-  gate: { kit: 'nature', model: 'fence_planks', yaw: 0, scale: 0.6 },
+  gate: {
+    row: { kit: 'nature', model: 'fence_planks', yaw: 0, scale: 0.6 },
+    extra: { kit: 'survival', model: 'box-large', yaw: 0.4 },
+  },
   daySpawn: { x: 0, z: 6, yaw: 0 },
   waitSpot: { x: 0.5, z: -113, yaw: Math.PI },
   barricadeZ: BARRICADE_Z,

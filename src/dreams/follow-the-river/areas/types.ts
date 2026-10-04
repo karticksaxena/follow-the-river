@@ -57,12 +57,18 @@ export interface WaveDef {
   crate: { x: number; gun?: GunKind };
 }
 
-/** What the wave barricades are built from (kit pieces laid across the bank). */
-export interface GateStyle {
+/** A kit piece for a barricade. */
+export interface GatePiece {
   kit: Kit;
   model: string;
   yaw: number;
   scale?: number;
+}
+
+/** What the wave barricades are built from: a solid row across the bank, and a few extras in front. */
+export interface GateStyle {
+  row: GatePiece;
+  extra: GatePiece;
 }
 
 export interface AreaDef {

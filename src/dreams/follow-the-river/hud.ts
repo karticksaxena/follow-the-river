@@ -1,5 +1,6 @@
 import { el } from '../../engine/ui';
 import { MAX_HEALTH } from './flow';
+import type { GunKind } from './state';
 import { SLOTS, type Weapon } from './weapons';
 import { ATTACK } from './zombies/brain';
 
@@ -12,7 +13,7 @@ export interface HudState {
   /** Rounds for the gun in hand (hidden with the bow). */
   ammo: number;
   health: number;
-  /** Guns owned (how many: they are found in order, pistol → shotgun → rifle). */
+  /** Guns owned, as bits (see `gunBits`): crates are optional, so any mix is possible. */
   guns: number;
   weapon: Weapon;
   /** The wave being fought (1-based; 0 = none), of how many, and zombies left in it. */
@@ -27,6 +28,15 @@ const NAMES: Readonly<Record<Weapon, string>> = {
   shotgun: 'Shotgun',
   rifle: 'Rifle',
 };
+
+const BIT: Readonly<Record<Weapon, number>> = { bow: 0, pistol: 1, shotgun: 2, rifle: 4 };
+
+/** The guns owned as bits, for the HUD's change check (no array compare per frame). */
+export function gunBits(guns: readonly GunKind[]): number {
+  let bits = 0;
+  for (const g of guns) bits |= BIT[g];
+  return bits;
+}
 
 /** "Wave 2/3 · 5 left", or '' between waves. */
 export function waveText(wave: number, waves: number, left: number): string {
@@ -137,7 +147,7 @@ function writeWeapons(h: HudEls, s: HudState): void {
   const { last, fresh } = h;
   if (fresh || last.guns !== s.guns) {
     h.weaponRow.hidden = s.guns === 0;
-    SLOTS.forEach((w, i) => (h.weapons[w].hidden = i > s.guns));
+    for (const w of SLOTS) h.weapons[w].hidden = w !== 'bow' && (s.guns & BIT[w]) === 0;
   }
   if (fresh || last.weapon !== s.weapon) {
     for (const w of SLOTS) h.weapons[w].style.opacity = w === s.weapon ? '1' : '0.4';

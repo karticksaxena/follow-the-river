@@ -227,7 +227,10 @@ export const FOREST: AreaDef = {
     { z: -150, gateZ: -190, count: 10, crate: { x: -1 } },
     { z: -232, gateZ: -272, count: 12, crate: { x: -1 } },
   ],
-  gate: { kit: 'nature', model: 'log_large', yaw: 0 },
+  gate: {
+    row: { kit: 'nature', model: 'log_large', yaw: 0 },
+    extra: { kit: 'nature', model: 'log_stack', yaw: 0.3, scale: 0.6 },
+  },
   daySpawn: { x: 0, z: 6, yaw: 0 },
   waitSpot: { x: 0.5, z: -113, yaw: Math.PI },
   barricadeZ: BARRICADE_Z,

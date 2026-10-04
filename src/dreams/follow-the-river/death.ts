@@ -10,7 +10,13 @@ const DEATH = { seconds: 1.2, pitch: -1.1, roll: 0.3, height: 0.4 } as const;
 export interface Death {
   start(): void;
   /** Advances the fall; when it ends, shows the "You died." pages and calls `restart`. */
-  step(dt: number, phase: () => Phase, restart: () => void): void;
+  step(dt: number, checkpoint: () => { phase: Phase; wave: number }, restart: () => void): void;
+}
+
+/** Where you'll be when the pages close: the day's start, the night's, or the last barricade down. */
+export function againText({ phase, wave }: { phase: Phase; wave: number }): string {
+  if (!isNight(phase)) return 'The day starts again.';
+  return wave > 0 ? 'You are back at the last barricade.' : 'The night starts again.';
 }
 
 /** The camera pitches down, rolls and sinks while the screen goes red (the HUD vignette is already full). */
@@ -29,7 +35,7 @@ export function createDeath(ctx: DreamContext, run: Run, flashlight: Flashlight)
       x = camera.position.x;
       z = camera.position.z;
     },
-    step(dt, phase, restart) {
+    step(dt, checkpoint, restart) {
       if (run.dying !== 'anim' || ctx.isPaused()) return;
       run.dyingTime += dt;
       const k = Math.min(1, run.dyingTime / DEATH.seconds);
@@ -41,8 +47,7 @@ export function createDeath(ctx: DreamContext, run: Run, flashlight: Flashlight)
       camera.position.y = EYE_HEIGHT + (DEATH.height - EYE_HEIGHT) * k;
       if (k < 1) return;
       run.dying = 'wait';
-      const again = isNight(phase()) ? 'The night starts again.' : 'The day starts again.';
-      ctx.read(['You died.', again], restart);
+      ctx.read(['You died.', againText(checkpoint())], restart);
     },
   };
 }
