@@ -30,6 +30,8 @@ export interface Stage {
   grade(preset: GradePreset, seconds?: number): GradePreset;
   /** Depth of field for cutscenes (first `on` compiles: do it behind a black fade). */
   focus(on: boolean, distance?: number): void;
+  /** Compiles the depth-of-field graph for one frame; call behind a black fade before a cutscene. */
+  warmFocus(): void;
   /** The scene being drawn; home and dreams swap it. */
   scene: THREE.Scene;
   /** Run `fn(dt)` every frame; call the returned function to stop. */
@@ -57,6 +59,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.05, 200);
   const quality = newQuality();
   let auto = true;
+  let setting: Graphics = 'auto';
   let tier: Tier = 'high';
   const post = createPost(renderer, camera, tier);
   tier = post.setTier(tier);
@@ -76,12 +79,15 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
       return tier;
     },
     setGraphics(graphics) {
+      if (graphics === setting) return; // a volume slider save must not reset a tier Auto stepped down
+      setting = graphics;
       auto = graphics === 'auto';
       tier = post.setTier(graphics === 'auto' ? 'high' : graphics);
       quality.since = 0;
     },
     grade: (preset, seconds) => post.grade(preset, seconds),
     focus: (on, distance) => post.focus(on, distance),
+    warmFocus: () => post.warm(),
     addUpdater(fn) {
       updaters.add(fn);
       return () => {

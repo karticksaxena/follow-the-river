@@ -1,6 +1,6 @@
 import { toggleFullscreen } from './fullscreen';
 import { pagerActionForKeyEvent, startPager, stepPager, type PagerAction } from './pager';
-import { GRAPHICS, type Graphics } from './quality';
+import { GRAPHICS, type Graphics, type Tier } from './quality';
 import { DIFFICULTIES, SENSITIVITY_RANGE, type Difficulty, type Settings } from './settings';
 import { button, el, type Overlay } from './ui';
 
@@ -116,6 +116,8 @@ export interface PauseMenuOptions {
   title: string;
   howToPlay: readonly string[];
   settings: Settings;
+  /** The graphics tier in use right now (WebGL 2 caps High to Medium). */
+  tier: Tier;
   onResume: () => void;
   onSettings: (settings: Settings) => void;
   onQuit: () => void;
@@ -218,7 +220,7 @@ export function showPauseMenu(overlay: Overlay, options: PauseMenuOptions): void
         GRAPHICS_LABEL,
         settings.graphics,
         (graphics) => change({ graphics }),
-        'Auto starts at High and lowers itself if the game runs slow.',
+        `In use: ${GRAPHICS_LABEL[options.tier]}. Auto starts at High and lowers itself if the game runs slow.`,
       ),
       button('Quit to dreams', options.onQuit, 'btn quiet'),
     );

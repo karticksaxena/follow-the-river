@@ -51,4 +51,9 @@ describe('grades', () => {
     const out = mixGrade(GRADES.night, GRADES.day, 0.3);
     expect(mixGrade(GRADES.night, GRADES.day, 0.6, out)).toBe(out);
   });
+
+  it('mixGrade clamps t', () => {
+    expect(mixGrade(GRADES.night, GRADES.day, 5).saturation).toBeCloseTo(GRADES.day.saturation);
+    expect(mixGrade(GRADES.night, GRADES.day, -2).saturation).toBeCloseTo(GRADES.night.saturation);
+  });
 });

@@ -39,6 +39,8 @@ export interface DreamContext {
   cinematic: (on: boolean) => void;
   /** Depth of field for cutscenes: on at `distance` metres, off. The first `on` compiles it, so warm it behind a black fade. */
   focus: (on: boolean, distance?: number) => void;
+  /** Compiles the depth-of-field graph for a frame; call once behind a black fade, before the first `focus(true)`. */
+  warmFocus: () => void;
   /** Colour grade for the scene, blended over `seconds` (0 = cut); returns the preset it left. */
   grade: (preset: GradePreset, seconds?: number) => GradePreset;
   /** The player's difficulty (read it when a wave or phase starts; the pause menu can change it). */

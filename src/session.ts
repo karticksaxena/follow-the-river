@@ -100,6 +100,7 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
       title: info.title,
       howToPlay: info.howToPlay,
       settings: app.settings,
+      tier: app.stage.tier,
       onResume: gate.lock,
       onSettings: (settings) => {
         app.saveSettings(settings);
@@ -173,6 +174,7 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
         hold,
         cinematic,
         focus: (on, distance) => stage.focus(on, distance),
+        warmFocus: () => stage.warmFocus(),
         grade: (preset, seconds) => stage.grade(preset, seconds),
         difficulty: () => app.settings.difficulty,
         setDifficulty: (difficulty) => app.saveSettings({ ...app.settings, difficulty }),

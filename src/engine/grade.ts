@@ -96,6 +96,7 @@ export function mixGrade(
   t: number,
   out: GradeParams = blank(),
 ): GradeParams {
+  t = Math.min(1, Math.max(0, t));
   mixVec(a.lift, b.lift, t, out.lift);
   mixVec(a.gain, b.gain, t, out.gain);
   mixVec(a.shadows, b.shadows, t, out.shadows);

@@ -3,16 +3,12 @@ import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import { film } from 'three/addons/tsl/display/FilmNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
-import { ssgi } from 'three/addons/tsl/display/SSGINode.js';
 import { traa } from 'three/addons/tsl/display/TRAANode.js';
 import {
-  add,
   builtinAOContext,
-  diffuseColor,
   float,
   mrt,
   normalView,
-  output,
   packNormalToRGB,
   pass,
   renderOutput,
@@ -41,11 +37,9 @@ export const POST = {
   vignette: 0.55,
   /** Film grain amount. */
   grain: 0.08,
-  /** Ambient occlusion: resolution scale and radius in metres (Medium). */
-  aoScale: 0.5,
+  /** GTAO: radius in metres; Medium runs half resolution, High full resolution with more samples. */
   aoRadius: 0.6,
-  /** Screen-space GI (High). */
-  gi: { slices: 2, steps: 8, radius: 5, intensity: 6, aoIntensity: 1.5 },
+  ao: { medium: { scale: 0.5, samples: 16 }, high: { scale: 1, samples: 32 } },
   /** Depth of field in cutscenes. */
   focalLength: 4,
   bokeh: 3,
@@ -56,6 +50,8 @@ export interface Post {
   render(scene: THREE.Scene): void;
   /** Advances grade blends. */
   update(dt: number): void;
+  /** Builds and compiles the depth-of-field graph for one frame, then goes back (call behind a black fade). */
+  warm(): void;
   /** Switches the graph (rebuilds once, never per frame); returns the tier in effect. */
   setTier(tier: Tier): Tier;
   /** Depth of field on/off for cutscenes; the first `on` compiles it (call behind a black fade). */
@@ -65,8 +61,13 @@ export interface Post {
   dispose(): void;
 }
 
-interface Disposable {
+export interface Disposable {
   dispose(): void;
+}
+
+/** Frees everything a built graph owned, once. */
+export function disposeOwned(owned: Disposable[]): void {
+  for (const n of owned.splice(0)) n.dispose();
 }
 
 /** One tier's passes and the HDR colour they resolve to, before bloom and the output transform. */
@@ -81,6 +82,8 @@ interface Graph {
 
 interface Built {
   graph: Graph;
+  /** Everything that owns GPU targets: the graph's nodes plus bloom, SMAA and DOF. */
+  owned: Disposable[];
   gameplay: THREE.Node;
   cinematic: THREE.Node | null;
 }
@@ -101,15 +104,19 @@ function lowGraph(camera: THREE.PerspectiveCamera): Graph {
 }
 
 /** GTAO from a normal/velocity pre-pass feeds the scene's ambient term; TRAA resolves it. */
-function mediumGraph(camera: THREE.PerspectiveCamera): Graph {
+function aoGraph(
+  camera: THREE.PerspectiveCamera,
+  knobs: { scale: number; samples: number },
+): Graph {
   const prePass = pass(new THREE.Scene(), camera);
-  prePass.transparent = false;
+  prePass.transparent = false; // mist, glow discs and sprites never write normals or velocity
   prePass.setMRT(mrt({ output: packNormalToRGB(normalView), velocity }));
   asByte(prePass, 'output');
   const normal = sample((uv) => unpackRGBToNormal(prePass.getTextureNode().sample(uv)));
   const depth = prePass.getTextureNode('depth');
   const occlusion = ao(depth, normal, camera);
-  occlusion.resolutionScale = POST.aoScale;
+  occlusion.resolutionScale = knobs.scale;
+  occlusion.samples.value = knobs.samples;
   occlusion.radius.value = POST.aoRadius;
   const scenePass = pass(new THREE.Scene(), camera);
   scenePass.contextNode = builtinAOContext(occlusion.getTextureNode().sample(screenUV).r);
@@ -124,42 +131,10 @@ function mediumGraph(camera: THREE.PerspectiveCamera): Graph {
   };
 }
 
-/** SSGI (AO + one bounce) from one MRT pass, then TRAA. */
-function highGraph(camera: THREE.PerspectiveCamera): Graph {
-  const scenePass = pass(new THREE.Scene(), camera);
-  scenePass.setMRT(mrt({ output, diffuseColor, normal: packNormalToRGB(normalView), velocity }));
-  asByte(scenePass, 'diffuseColor');
-  asByte(scenePass, 'normal');
-  const color = scenePass.getTextureNode('output');
-  const depth = scenePass.getTextureNode('depth');
-  const normal = sample((uv) => unpackRGBToNormal(scenePass.getTextureNode('normal').sample(uv)));
-  const gi = ssgi(color, depth, normal, camera);
-  gi.sliceCount.value = POST.gi.slices;
-  gi.stepCount.value = POST.gi.steps;
-  gi.radius.value = POST.gi.radius;
-  gi.giIntensity.value = POST.gi.intensity;
-  gi.aoIntensity.value = POST.gi.aoIntensity;
-  const lit = vec4(
-    add(
-      color.rgb.mul(gi.getAONode()),
-      scenePass.getTextureNode('diffuseColor').rgb.mul(gi.getGINode().rgb),
-    ),
-    color.a,
-  );
-  const resolved = traa(lit, depth, scenePass.getTextureNode('velocity'), camera);
-  return {
-    passes: [scenePass],
-    color: resolved,
-    viewZ: scenePass.getViewZNode(),
-    smaa: false,
-    owned: [scenePass, gi, resolved],
-  };
-}
-
 const BUILD: Record<Tier, (camera: THREE.PerspectiveCamera) => Graph> = {
   low: lowGraph,
-  medium: mediumGraph,
-  high: highGraph,
+  medium: (camera) => aoGraph(camera, POST.ao.medium),
+  high: (camera) => aoGraph(camera, POST.ao.high),
 };
 
 /** Screen-space effects at full resolution. Works on WebGPU and WebGL 2 (TSL). */
@@ -177,18 +152,28 @@ export function createPost(
   const dark = float(1).sub(float(POST.vignette).mul(float(1).sub(edge)));
   const grain = uniform(POST.grain);
 
-  /** bloom, vignette, (depth of field), tone map, (SMAA), grade, grain. */
-  const finish = (g: Graph, withDof: boolean): THREE.Node => {
+  /** bloom, vignette, (depth of field), tone map, (SMAA), grade, grain. Nodes with targets go to `owned`. */
+  const finish = (g: Graph, withDof: boolean, owned: Disposable[]): THREE.Node => {
     const glow = bloom(g.color, POST.bloomStrength, POST.bloomRadius, POST.bloomThreshold);
+    owned.push(glow);
     const lit = g.color.add(glow).mul(dark);
-    const seen = withDof
-      ? dof(lit, g.viewZ, focusAt, uniform(POST.focalLength), uniform(POST.bokeh))
-      : lit;
+    let seen: THREE.Node = lit;
+    if (withDof) {
+      const blur = dof(lit, g.viewZ, focusAt, uniform(POST.focalLength), uniform(POST.bokeh));
+      owned.push(blur);
+      seen = blur;
+    }
     const display = renderOutput(seen);
-    return film(grading.node(vec4(g.smaa ? smaa(display).getTextureNode() : display)), grain);
+    let shown = vec4(display);
+    if (g.smaa) {
+      const edges = smaa(display);
+      owned.push(edges);
+      shown = vec4(edges.getTextureNode());
+    }
+    return film(grading.node(shown), grain);
   };
 
-  // SSGI is only trusted on WebGPU: the WebGL 2 backend gets the Medium graph instead.
+  // High is only trusted on WebGPU: the WebGL 2 backend gets the Medium graph instead.
   const allowed = (t: Tier): Tier => (!webgpu && t === 'high' ? 'medium' : t);
   let tier = allowed(start);
   let cinematic = false;
@@ -197,25 +182,36 @@ export function createPost(
     let b = built.get(tier);
     if (!b) {
       const graph = BUILD[tier](camera);
-      b = { graph, gameplay: finish(graph, false), cinematic: null };
+      const owned = [...graph.owned];
+      b = { graph, owned, gameplay: finish(graph, false, owned), cinematic: null };
       built.set(tier, b);
     }
     return b;
   };
   const apply = (): void => {
     const b = current();
-    pipeline.outputNode = cinematic ? (b.cinematic ??= finish(b.graph, true)) : b.gameplay;
+    pipeline.outputNode = cinematic ? (b.cinematic ??= finish(b.graph, true, b.owned)) : b.gameplay;
     pipeline.needsUpdate = true;
   };
   const release = (old: Built | undefined): void => {
-    for (const n of old?.graph.owned ?? []) n.dispose();
+    if (old) disposeOwned(old.owned);
   };
+  let warming = 0;
   apply();
 
   return {
     render(scene) {
       for (const p of current().graph.passes) p.scene = scene;
       pipeline.render();
+      if (warming > 0 && --warming === 0) {
+        cinematic = false;
+        apply();
+      }
+    },
+    warm() {
+      cinematic = true;
+      warming = 2;
+      apply();
     },
     update: (dt) => grading.update(dt),
     setTier(next) {
