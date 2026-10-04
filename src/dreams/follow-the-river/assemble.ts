@@ -10,6 +10,7 @@ import type { AreaDef } from './areas/types';
 import { createAtmosphere } from './atmosphere';
 import { groundAt, waterlineX } from './banks';
 import { createBow, type Bow } from './bow';
+import { damNightLights } from './dam-lights';
 import { DIFFICULTY, HORDE_CAPACITY } from './difficulty';
 import { MOM_LANTERN } from './ending-scene';
 import { createFish, type Fish } from './fish';
@@ -149,6 +150,7 @@ export async function assemble(
   if (safe) {
     boathouse.position.set(safe.x, 0, safe.z);
     boathouse.rotation.y = safe.yaw;
+    if (safe.prop === 'dam') boathouse.add(damNightLights());
   }
   const lantern = new THREE.PointLight(0xffb060, 0, 30, 2);
   if (area.meetAt) lantern.position.set(area.meetAt.x + 0.5, MOM_LANTERN.height, area.meetAt.z);

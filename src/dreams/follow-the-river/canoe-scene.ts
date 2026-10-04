@@ -71,7 +71,7 @@ const WATER_LOOK: WaterLook = { speed: 1.6, deep: 0x2b5750, streak: 0x9cc2b0, gl
  * the water. Retuned (A16 round 4) once the terrain faced up and was really lit; saturation stays
  * near 1 because boosting the reddish mud texture made the earth red. Tuning knobs.
  */
-const CANOE_BANK = { gain: 0.5, saturation: 1.1 } as const;
+const CANOE_BANK = { gain: 0.75, saturation: 1.1 } as const;
 
 /** Canoe, wood and ground colours (sRGB hex). Tuning knobs. */
 const COLORS = {
