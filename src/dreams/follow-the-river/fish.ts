@@ -1,17 +1,12 @@
-import { clone } from 'three/addons/utils/SkeletonUtils.js';
-import * as THREE from 'three/webgpu';
+import type * as THREE from 'three/webgpu';
 import type { AudioBus } from '../../engine/audio';
-import { loadModel, loadSkinned, type SkinnedAsset } from '../../engine/models';
+import { loadModel, loadSkinned } from '../../engine/models';
 import type { Vec3 } from '../../engine/ray';
 import {
   cruiseHeading,
   cruiseTargetX,
-  cruiseYFor,
-  findClip,
   FISH,
   inWaterX,
-  makeWake,
-  makeWet,
   nearestTo,
   nextSurfacing,
   pickStrike,
@@ -20,17 +15,17 @@ import {
   smooth,
   SURFACE_TIME,
   surfaceRoll,
-  surfaceYFor,
-  topOf,
   turnToward,
   WAKE_SIZE,
 } from './fish-parts';
+import { createState, type Finale, type FishState, type Rise } from './fish-state';
 import { characterUrl, propUrl } from './kits';
+import { newGrab, stepGrab, type GrabHooks } from './orca-grab';
 import { EDGE_X, WATER_Y } from './river';
 import type { Sounds } from './sounds';
 import type { Horde } from './zombies/horde';
-import { SPAWNER } from './zombies/spawner';
 export { canThrow, cruiseHeading, FISH, pickStrike, strikesFor } from './fish-parts';
+export type { Finale } from './fish-state';
 
 // Tuning knobs (metres, seconds); heights are relative to the river's WATER_Y.
 const STRIKE_PEAK_Y = WATER_Y + 0.55;
@@ -43,15 +38,11 @@ const LAG_Z = 6;
 const PACK_DISTANCE = 4;
 const PACK_TIME = 1;
 const PACK_ARC = 1.2;
-const CAPACITY = Math.max(32, SPAWNER.cap);
 // The ending: the last lunge takes this many at once, then the orca rolls over and sinks.
 const FINALE_TAKES = 3;
 const SINK_Y = WATER_Y - 3.85;
 const SURFACE_DRIFT = 1.5; // metres downstream while surfacing
 const SINK_DRIFT = 0.3; // m/s downstream while sinking
-
-/** Where the ending has the orca: cruising/striking as usual, the last lunge, sinking, or gone. */
-export type Finale = 'no' | 'lunge' | 'sink' | 'gone';
 
 export interface Fish {
   /** The ending's state (read it each frame; it only moves forward). */
@@ -60,67 +51,17 @@ export interface Fish {
   lastLunge(horde: Horde, player: { x: number; z: number }): void;
   /** Night: strikes left this phase. */
   readonly strikes: number;
-  /** Arms `strikes` for the night; `cooldown` (s) between them and `reach` (m) from the water (the finale goes further). */
-  arm(strikes: number, cooldown?: number, reach?: number): void;
+  /**
+   * Arms `strikes` for the night; `cooldown` (s) between them, `reach` (m) from the water and the
+   * grab's `pace` (1 normal, below 1 faster): the finale goes further and faster.
+   */
+  arm(strikes: number, cooldown?: number, reach?: number, pace?: number): void;
   /** Throw a pack: arc into the water, splash, the orca surfaces once to take it. */
   feed(from: Vec3): void;
   /** Swims alongside the player (fin just breaking the surface); strikes zombies at night. */
   update(dt: number, player: { x: number; z: number }, horde: Horde | null, night: boolean): void;
   reset(): void;
   dispose(): void;
-}
-
-interface Rise {
-  t: number;
-  dur: number;
-  peak: number;
-  fromX: number;
-  fromZ: number;
-  toX: number;
-  toZ: number;
-  lunge: boolean;
-  victim: number; // horde id, or -1 when taking a pack
-  done: boolean; // the mid-rise effect has fired
-  surface: boolean; // a surfacing: blow at the top, slow roll
-}
-
-/** All mutable orca state; the functions below operate on it (keeps each under 50 lines). */
-interface FishState {
-  readonly scene: THREE.Scene;
-  readonly root: THREE.Group;
-  readonly body: THREE.Object3D;
-  readonly wake: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
-  readonly packModel: THREE.Object3D;
-  readonly splashAt: THREE.Object3D;
-  readonly splash: THREE.PositionalAudio;
-  readonly blow: THREE.PositionalAudio;
-  readonly cruiseY: number;
-  readonly surfaceY: number;
-  readonly mixer: THREE.AnimationMixer;
-  readonly swim: THREE.AnimationAction;
-  readonly lunge: THREE.AnimationAction;
-  readonly buffer: Float32Array;
-  readonly packFrom: THREE.Vector3;
-  readonly packTo: THREE.Vector3;
-  readonly collect: (id: number, x: number, z: number) => void;
-  count: number;
-  time: number;
-  surfaceIn: number; // seconds until the next surfacing
-  strikes: number;
-  cooldown: number;
-  /** Seconds between strikes while armed, and how far from the water (m) it can take one. */
-  strikeCooldown: number;
-  strikeReach: number;
-  placed: boolean;
-  yaw: number;
-  rise: Rise | null;
-  packT: number; // <0: no pack in flight
-  takePending: boolean;
-  finale: Finale;
-  sinkT: number;
-  sinkFromY: number;
-  /** Zombies the last lunge takes when it breaks the surface. */
-  victims: number[];
 }
 
 function playSplash(f: FishState, x: number, z: number): void {
@@ -216,14 +157,46 @@ function tryStrike(f: FishState, player: { x: number; z: number }, horde: Horde)
   }
   f.strikes--;
   f.cooldown = f.strikeCooldown;
-  startRise(f, {
-    toX: Math.max(zx, EDGE_X + 1),
-    toZ: zz,
-    dur: STRIKE_TIME,
-    peak: STRIKE_PEAK_Y,
-    lunge: true,
-    victim: id,
-  });
+  const { x, y, z } = f.root.position;
+  const from = { x, y, z, yaw: f.yaw, pitch: 0 };
+  f.grab = newGrab(from, id, zx, zz, f.cruiseY, f.strikeReach, f.strikePace);
+}
+
+/** Bursting out at z: the railing there breaks and the water explodes. */
+function grabHooks(f: FishState): GrabHooks {
+  return {
+    breach: (z) => {
+      f.onBreach(z);
+      playSplash(f, EDGE_X + 0.5, z);
+    },
+    splash: (x, z) => playSplash(f, x, z),
+  };
+}
+
+/** One frame of a grab: pose the orca from it; the Lunge clip plays from the burst. */
+function stepOrcaGrab(f: FishState, dt: number, horde: Horde | null): void {
+  const g = f.grab;
+  if (!g) return;
+  const before = g.t;
+  const going = stepGrab(g, dt, horde, f.ground, f.hooks, f.pose);
+  const { pose } = f;
+  f.root.position.set(pose.x, pose.y, pose.z);
+  f.root.rotation.x = pose.pitch;
+  f.yaw = pose.yaw;
+  if (before < g.approach && g.t >= g.approach) {
+    f.lunge.reset().play();
+    f.lunge.crossFadeFrom(f.swim, FADE, false);
+  }
+  if (!going) endGrab(f);
+}
+
+function endGrab(f: FishState): void {
+  if (f.grab && f.grab.t >= f.grab.approach) {
+    f.swim.enabled = true;
+    f.swim.crossFadeFrom(f.lunge, FADE, false);
+  }
+  f.grab = null;
+  f.root.rotation.x = 0;
 }
 
 function stepPack(f: FishState, dt: number): void {
@@ -282,6 +255,10 @@ function startFinale(f: FishState, horde: Horde, player: { x: number; z: number 
     toZ = f.buffer[i * 3 + 2];
   }
   if (f.rise) endRise(f);
+  if (f.grab) {
+    if (f.grab.bitten && f.grab.victim >= 0) horde.drown(f.grab.victim);
+    endGrab(f);
+  }
   f.strikes = 0;
   f.takePending = false;
   f.finale = 'lunge';
@@ -324,7 +301,8 @@ function updateFish(
     return;
   }
   if (f.packT >= 0) stepPack(f, dt);
-  if (f.rise) stepRise(f, f.rise, dt, horde);
+  if (f.grab) stepOrcaGrab(f, dt, horde);
+  else if (f.rise) stepRise(f, f.rise, dt, horde);
   else if (f.finale === 'lunge') {
     f.finale = 'sink'; // the lunge is over: it goes under for good
     f.sinkT = 0;
@@ -332,7 +310,7 @@ function updateFish(
   } else {
     if (f.takePending) startTake(f);
     else if (night && f.strikes > 0 && f.cooldown === 0 && horde) tryStrike(f, player, horde);
-    if (!f.rise) {
+    if (!f.rise && !f.grab) {
       f.surfaceIn -= dt;
       if (f.surfaceIn <= 0 && f.finale === 'no') startSurface(f);
       else cruise(f, dt, player);
@@ -359,11 +337,13 @@ function resetFish(f: FishState): void {
   f.takePending = false;
   f.packModel.visible = false;
   if (f.splash.isPlaying) f.splash.stop();
-  if (f.rise?.lunge) {
+  if (f.rise?.lunge || f.grab) {
     f.lunge.stop();
     f.swim.reset().play();
   }
   f.rise = null;
+  f.grab = null; // horde.reset parks a zombie still in the jaws
+  f.root.rotation.x = 0;
   f.root.rotation.z = 0;
   f.finale = 'no';
   f.surfaceIn = nextSurfacing(Math.random());
@@ -384,104 +364,21 @@ function disposeFish(f: FishState): void {
   f.wake.material.dispose();
 }
 
-function makeClips(
-  body: THREE.Object3D,
-  asset: SkinnedAsset,
-): Pick<FishState, 'mixer' | 'swim' | 'lunge'> {
-  const mixer = new THREE.AnimationMixer(body);
-  const swim = mixer.clipAction(findClip(asset.clips, 'Swim'));
-  const lunge = mixer.clipAction(findClip(asset.clips, 'Lunge'));
-  lunge.setLoop(THREE.LoopOnce, 1);
-  lunge.clampWhenFinished = true;
-  swim.play();
-  return { mixer, swim, lunge };
-}
-
-function collectZombie(f: FishState, id: number, x: number, z: number): void {
-  if (f.count >= CAPACITY) return;
-  f.buffer[f.count * 3] = id;
-  f.buffer[f.count * 3 + 1] = x;
-  f.buffer[f.count * 3 + 2] = z;
-  f.count++;
-}
-
-function createState(
-  scene: THREE.Scene,
-  audio: AudioBus,
-  sounds: Sounds,
-  asset: SkinnedAsset,
-  packModel: THREE.Object3D,
-): FishState {
-  const root = new THREE.Group();
-  root.visible = false; // until the first update places it beside the player
-  const body = clone(asset.scene);
-  body.traverse((n) => (n.frustumCulled = false));
-  makeWet(body);
-  const finTop = topOf(body);
-  const cruiseY = cruiseYFor(finTop);
-  root.add(body);
-  const wake = makeWake();
-  scene.add(root, wake);
-  packModel.visible = false;
-  scene.add(packModel);
-  const splashAt = new THREE.Object3D();
-  scene.add(splashAt);
-  const splash = audio.positional(splashAt, 4);
-  splash.setBuffer(sounds.splash);
-  splash.setVolume(1);
-  const blow = audio.positional(splashAt, 4);
-  blow.setBuffer(sounds.blow);
-  blow.setVolume(1);
-  const { mixer, swim, lunge } = makeClips(body, asset);
-  const buffer = new Float32Array(CAPACITY * 3);
-  const f: FishState = {
-    scene,
-    root,
-    body,
-    wake,
-    packModel,
-    splashAt,
-    splash,
-    blow,
-    cruiseY,
-    surfaceY: surfaceYFor(finTop),
-    mixer,
-    swim,
-    lunge,
-    buffer,
-    packFrom: new THREE.Vector3(),
-    packTo: new THREE.Vector3(),
-    collect: (id, x, z) => collectZombie(f, id, x, z),
-    count: 0,
-    time: 0,
-    surfaceIn: nextSurfacing(Math.random()),
-    strikes: 0,
-    cooldown: 0,
-    strikeCooldown: FISH.cooldown,
-    strikeReach: FISH.reach,
-    placed: false,
-    yaw: 0,
-    rise: null,
-    packT: -1,
-    takePending: false,
-    finale: 'no',
-    sinkT: 0,
-    sinkFromY: cruiseY,
-    victims: [],
-  };
-  return f;
-}
+const NO_BANK = { ground: (): number => WATER_Y, onBreach: (): void => undefined };
 
 export async function createFish(
   scene: THREE.Scene,
   audio: AudioBus,
   sounds: Sounds,
+  // Without a bank (the intro), the orca never takes anyone.
+  bank: { ground: (x: number) => number; onBreach: (z: number) => void } = NO_BANK,
 ): Promise<Fish> {
   const [asset, packModel] = await Promise.all([
     loadSkinned(characterUrl('orca')),
     loadModel(propUrl('fishpack')),
   ]);
-  const f = createState(scene, audio, sounds, asset, packModel);
+  const f = createState(scene, audio, sounds, asset, packModel, bank);
+  f.hooks = grabHooks(f);
   return {
     get finale() {
       return f.finale;
@@ -490,10 +387,11 @@ export async function createFish(
     get strikes() {
       return f.strikes;
     },
-    arm(n, cooldown = FISH.cooldown, reach = FISH.reach) {
+    arm(n, cooldown = FISH.cooldown, reach = FISH.reach, pace = 1) {
       f.strikes = n;
       f.strikeCooldown = cooldown;
       f.strikeReach = reach;
+      f.strikePace = pace;
     },
     // A second feed() before the first pack lands replaces it (one pack in flight at a time).
     feed: (from) => feedFish(f, from),

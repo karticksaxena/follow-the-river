@@ -1,6 +1,7 @@
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as THREE from 'three/webgpu';
-import { EDGE_X, KERB_WIDTH, OVERRUN, RIVER_X, riverSpan } from './river';
+import { createRailing, type Railing } from './railing';
+import { EDGE_X, KERB_WIDTH, OVERRUN, RIVER_X, riverSpan, WATER_Y } from './river';
 
 export type BankKind = 'embankment' | 'natural';
 
@@ -116,9 +117,15 @@ function railGeometry(x: number, z0: number, z1: number): THREE.BufferGeometry {
   return mergeGeometries(parts);
 }
 
+/** Pure: what's under x on the near side, land or water (the orca lies on it when it beaches). */
+export function groundAt(kind: BankKind, x: number): number {
+  return Math.max(bankY(kind, x), WATER_Y);
+}
+
 /**
  * Both banks and the riverbed over the river's span (see `riverSpan`); the grass colours tint
  * the bank tops so they melt into the land. `endOverrun` is 0 where a lake takes over.
+ * Returns the near railing (embankments only), which the orca can break.
  */
 export function addBanks(
   scene: THREE.Scene,
@@ -126,7 +133,7 @@ export function addBanks(
   [fromZ, toZ]: readonly [number, number],
   [nearGrass, farGrass]: readonly [number, number],
   endOverrun = OVERRUN,
-): void {
+): Railing | null {
   const { z0, z1 } = riverSpan(fromZ, toZ, endOverrun);
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   const near = bankProfile(kind, nearGrass);
@@ -143,10 +150,9 @@ export function addBanks(
   bed.rotation.x = -Math.PI / 2;
   bed.position.set(RIVER_X, BED_Y, (z0 + z1) / 2);
   scene.add(bed);
-  if (kind !== 'embankment') return;
+  if (kind !== 'embankment') return null;
   const rail = new THREE.MeshLambertMaterial({ color: BANK.rail });
-  scene.add(
-    new THREE.Mesh(railGeometry(BANK.railX, z0, z1), rail),
-    new THREE.Mesh(railGeometry(mirrorX(BANK.railX), z0, z1), rail),
-  );
+  scene.add(new THREE.Mesh(railGeometry(mirrorX(BANK.railX), z0, z1), rail));
+  const style = { x: BANK.railX, postHeight: BANK.postHeight, spacing: BANK.postSpacing };
+  return createRailing(scene, style, z0, z1, rail);
 }

@@ -102,6 +102,7 @@ export function park(b: Body): void {
   b.active = false;
   b.root.visible = false;
   b.root.position.set(0, PARK_Y, 0);
+  b.root.rotation.set(0, 0, 0); // a body the orca shook ends tilted
   b.mixer.stopAllAction();
   b.action = null;
   b.intent = null;
@@ -164,6 +165,8 @@ export function move(
     if (s.dir.x !== 0 || s.dir.z !== 0) face = Math.atan2(s.dir.x, s.dir.z);
   } else if (intent === 'strike') {
     face = Math.atan2(player.x - b.x, player.z - b.z);
+  } else if (intent === 'struggle') {
+    return; // the orca poses it (Horde.hold)
   } else if (intent === 'dragged') {
     b.x += DRAG_SPEED * dt;
     b.y -= SINK_SPEED * dt;

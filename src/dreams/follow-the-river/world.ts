@@ -7,6 +7,7 @@ import { addBanks, groundEndX } from './banks';
 import { addCampfire } from './campfire';
 import { KIT_SCALE, kitUrl } from './kits';
 import { createWorldLights, type WorldLights } from './lighting';
+import type { Railing } from './railing';
 import { addLake, addRiver, EDGE_X, LAKE, OVERRUN, plane, RIVER_WIDTH } from './river';
 import { addShack, shackBounds, shackColliders } from './shack';
 import { addSkyline } from './skyline';
@@ -14,6 +15,8 @@ import { addSkyline } from './skyline';
 export interface World {
   scene: THREE.Scene;
   colliders: Box[];
+  /** The city's near railing (the orca breaks it); null on natural banks. */
+  railing: Railing | null;
   lights: WorldLights;
   insideShack(x: number, z: number): boolean;
 }
@@ -74,19 +77,21 @@ function addGround(scene: THREE.Scene, area: AreaDef): void {
 }
 
 /** The river (stopping at a lake's shore, where the lake begins) and its skyline. */
-function addWaters(scene: THREE.Scene, area: AreaDef): Promise<void> {
+async function addWaters(scene: THREE.Scene, area: AreaDef): Promise<Railing | null> {
   const { lake } = area;
   const embankment = area.bank === 'embankment';
   const grass = [area.ground, area.farBank] as const;
   if (!lake) {
     addRiver(scene, area.startZ, area.endZ, { farBankColor: area.farBank, embankment });
-    addBanks(scene, area.bank, [area.startZ, area.endZ], grass);
-    return addSkyline(scene, area.skyline, area.startZ, area.endZ);
+    const railing = addBanks(scene, area.bank, [area.startZ, area.endZ], grass);
+    await addSkyline(scene, area.skyline, area.startZ, area.endZ);
+    return railing;
   }
   addRiver(scene, area.startZ, lake.z, { farBankColor: area.farBank, endOverrun: 0, embankment });
-  addBanks(scene, area.bank, [area.startZ, lake.z], grass, 0);
+  const railing = addBanks(scene, area.bank, [area.startZ, lake.z], grass, 0);
   addLake(scene, lake.z, area.ground, area.farBank);
-  return addSkyline(scene, area.skyline, area.startZ, lake.z, 0);
+  await addSkyline(scene, area.skyline, area.startZ, lake.z, 0);
+  return railing;
 }
 
 /** Builds an area: lights, ground, river, skyline, props, shacks and every blocker. */
@@ -95,7 +100,7 @@ export async function buildWorld(area: AreaDef): Promise<World> {
   const lights = createWorldLights(scene);
   addGround(scene, area);
   const colliders = stripBlockers(area);
-  const [props, fire] = await Promise.all([
+  const [props, fire, railing] = await Promise.all([
     Promise.all(area.props.map(loadProp)),
     addCampfire(scene, area.waitSpot.x, area.waitSpot.z),
     addWaters(scene, area),
@@ -112,6 +117,7 @@ export async function buildWorld(area: AreaDef): Promise<World> {
   return {
     scene,
     colliders,
+    railing,
     lights,
     insideShack(x, z) {
       for (const b of bounds) {

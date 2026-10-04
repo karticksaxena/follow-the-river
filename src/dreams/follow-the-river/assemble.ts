@@ -5,6 +5,7 @@ import { loadModel } from '../../engine/models';
 import type { DreamContext } from '../types';
 import { createAmbience } from './ambience';
 import type { AreaDef } from './areas/types';
+import { groundAt } from './banks';
 import { createBow, type Bow } from './bow';
 import { HORDE_CAPACITY } from './difficulty';
 import { MOM_LANTERN } from './ending-scene';
@@ -50,7 +51,10 @@ function loadBodies(
     createHorde(scene, ctx.audio, grid, sounds.groans, HORDE_CAPACITY),
     createBow(ctx.stage.camera, scene, ctx.audio, sounds),
     createGun(ctx.stage.camera, scene, ctx.audio, sounds),
-    createFish(scene, ctx.audio, sounds),
+    createFish(scene, ctx.audio, sounds, {
+      ground: (x) => groundAt(area.bank, x),
+      onBreach: (z) => world.railing?.break(z),
+    }),
     createPickupMeshes(scene),
     // The night's safe-spot building (the city's boathouse, the forest-edge camp…); Night 3 has none.
     area.safeProp ? loadModel(propUrl(area.safeProp.prop)) : Promise.resolve(new THREE.Group()),

@@ -66,6 +66,8 @@ export const WAVE = {
   /** Its last stand: seconds between strikes (a normal night 1.1) and reach from the water (4.5). */
   orcaCooldown: 0.6,
   orcaReach: 7,
+  /** Its grabs in the frenzy: a shorter thrash and a quicker slide back (a normal night 1). */
+  orcaPace: 0.6,
   /** Upstream of the player (+z), and the spread between lanes along the bank (m). */
   upstream: 34,
   laneGap: 1.5,
@@ -208,7 +210,7 @@ async function fight(h: EndingHost, st: State): Promise<void> {
   let t = 0;
   let left: number = WAVE.strikes;
   backOff(h, st);
-  fish.arm(WAVE.strikes, WAVE.orcaCooldown, WAVE.orcaReach);
+  fish.arm(WAVE.strikes, WAVE.orcaCooldown, WAVE.orcaReach, WAVE.orcaPace);
   await until(st, (dt) => {
     t += dt;
     if (fish.strikes < left) {

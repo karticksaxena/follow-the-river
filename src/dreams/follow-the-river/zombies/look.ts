@@ -43,6 +43,8 @@ export const CLIP_FOR: Readonly<Record<Intent, string>> = {
   stagger: 'Idle',
   fall: 'Death',
   dragged: 'Hit',
+  // Kicking in the orca's jaws (the body is tipped sideways, so running legs read as flailing).
+  struggle: 'Run',
 };
 
 export const LOOPING: ReadonlySet<string> = new Set(['Idle', 'Walk', 'Run']);

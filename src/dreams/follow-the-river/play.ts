@@ -153,6 +153,7 @@ function tickWorld(p: State, dt: number): void {
   const recovered = sys.bow.update(dt, sys.horde, sys.grid, sense);
   if (recovered > 0) run.live.supplies = addSupply(run.live.supplies, 'arrows', recovered);
   sys.fish.update(dt, sense, night ? sys.horde : null, night);
+  sys.world.railing?.update(dt);
   sys.pickups.update(dt);
 }
 

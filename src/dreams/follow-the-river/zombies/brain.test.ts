@@ -8,6 +8,7 @@ import {
   newMind,
   NIGHT_TUNING,
   RISE_SECONDS,
+  seize,
   STUN,
   takeByFish,
   think,
@@ -109,6 +110,22 @@ describe('zombie brain', () => {
     kill(mind);
     expect(mind.state).toBe('taken');
     expect(run(mind, touching, 0.1).last.intent).toBe('dragged');
+  });
+
+  it("struggles in the orca's jaws, never hits, and can't be seized twice or shot", () => {
+    const mind = newMind();
+    expect(seize(mind)).toBe(true);
+    expect(seize(mind)).toBe(false);
+    kill(mind);
+    expect([mind.state, isAlive(mind)]).toEqual(['held', false]);
+    const held = run(mind, touching, 10);
+    expect([held.last.intent, held.hits, mind.state]).toEqual(['struggle', 0, 'held']);
+  });
+
+  it('is not seized once dead (shot while the orca came in)', () => {
+    const mind = newMind();
+    kill(mind);
+    expect(seize(mind)).toBe(false);
   });
 
   it('lies still until the player comes close, then gets up before chasing', () => {

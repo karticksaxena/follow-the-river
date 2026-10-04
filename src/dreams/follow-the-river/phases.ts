@@ -72,6 +72,7 @@ export function beginPhase(f: Flow): void {
   horde.reset();
   bow.reset();
   fish.reset();
+  sys.world.railing?.reset();
   sys.scares.reset();
   if (night) fish.arm(strikesFor(run.live.fed));
   pickups.place(night ? [] : area.pickups, run.taken);

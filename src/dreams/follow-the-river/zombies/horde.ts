@@ -10,6 +10,7 @@ import {
   isAlive,
   kill as killMind,
   newMind,
+  seize as seizeMind,
   takeByFish as takeMind,
   think,
   type Tuning,
@@ -34,6 +35,14 @@ export interface Horde {
   rayHit(origin: Vec3, dir: Vec3, maxDistance: number): { id: number; distance: number } | null;
   kill(id: number): void;
   takeByFish(id: number): void;
+  /** The orca bites `id`: false if it is no longer alive. Pose it with hold(), end with drown(). */
+  seize(id: number): boolean;
+  /** Puts a held zombie in the orca's jaws: position, facing and sideways tilt (radians). */
+  hold(id: number, x: number, y: number, z: number, yaw: number, tilt: number): void;
+  /** Under the water with the orca: gone. */
+  drown(id: number): void;
+  /** Where `id` is (into `out`); false unless it is alive. */
+  locate(id: number, out: { x: number; z: number }): boolean;
   alert(x: number, z: number, radius: number): void;
   /** Alive zombies (not dying, taken or dead). */
   forEachAlive(fn: (id: number, x: number, z: number) => void): void;
@@ -226,6 +235,31 @@ function alertHorde(bodies: readonly Body[], x: number, z: number, radius: numbe
   }
 }
 
+function seizeBody(h: HordeState, id: number): boolean {
+  const b = h.bodies[id];
+  if (!b.active || !seizeMind(b.mind)) return false;
+  h.voices.say(id, 1, true);
+  return true;
+}
+
+function holdBody(b: Body, x: number, y: number, z: number, yaw: number, tilt: number): void {
+  if (b.mind.state !== 'held') return;
+  b.x = x;
+  b.y = y;
+  b.z = z;
+  b.yaw = yaw;
+  b.root.position.set(x, y, z);
+  b.root.rotation.set(0, yaw, tilt);
+}
+
+function drownBody(h: HordeState, id: number): void {
+  const b = h.bodies[id];
+  if (b.mind.state !== 'held') return;
+  b.mind.state = 'dead';
+  h.voices.release(id);
+  park(b);
+}
+
 function aliveCount(bodies: readonly Body[]): number {
   let n = 0;
   for (const b of bodies) if (b.active && isAlive(b.mind)) n++;
@@ -296,6 +330,16 @@ export async function createHorde(
     rayHit: (origin, dir, maxDistance) => rayHitHorde(bodies, origin, dir, maxDistance),
     kill: (id) => killMind(bodies[id].mind),
     takeByFish: (id) => takeMind(bodies[id].mind),
+    seize: (id) => seizeBody(h, id),
+    hold: (id, x, y, z, yaw, tilt) => holdBody(bodies[id], x, y, z, yaw, tilt),
+    drown: (id) => drownBody(h, id),
+    locate(id, out) {
+      const b = bodies[id];
+      if (!b?.active || !isAlive(b.mind)) return false;
+      out.x = b.x;
+      out.z = b.z;
+      return true;
+    },
     alert: (x, z, radius) => alertHorde(bodies, x, z, radius),
     forEachAlive(fn) {
       for (let id = 0; id < bodies.length; id++) {

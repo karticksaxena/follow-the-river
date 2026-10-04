@@ -8,9 +8,20 @@ export type ZombieState =
   | 'stunned'
   | 'dying'
   | 'taken'
+  /** In the orca's jaws: posed by the orca, not by the brain, until it drowns. */
+  | 'held'
   | 'dead';
 export type Intent =
-  'lie' | 'rise' | 'stand' | 'walk' | 'run' | 'strike' | 'stagger' | 'fall' | 'dragged';
+  | 'lie'
+  | 'rise'
+  | 'stand'
+  | 'walk'
+  | 'run'
+  | 'strike'
+  | 'stagger'
+  | 'fall'
+  | 'dragged'
+  | 'struggle';
 
 export interface Tuning {
   /** Notices the player within this many metres. */
@@ -62,7 +73,12 @@ export const newMind = (lying = false): Mind => ({
 });
 
 export function isAlive(mind: Mind): boolean {
-  return mind.state !== 'dying' && mind.state !== 'taken' && mind.state !== 'dead';
+  return (
+    mind.state !== 'dying' &&
+    mind.state !== 'taken' &&
+    mind.state !== 'held' &&
+    mind.state !== 'dead'
+  );
 }
 
 export function kill(mind: Mind): void {
@@ -75,6 +91,13 @@ export function takeByFish(mind: Mind): void {
   if (!isAlive(mind)) return;
   mind.state = 'taken';
   mind.timer = TAKEN_SECONDS;
+}
+
+/** The orca has it: returns false if it was already dead (killed while the orca came in). */
+export function seize(mind: Mind): boolean {
+  if (!isAlive(mind)) return false;
+  mind.state = 'held';
+  return true;
 }
 
 function set(out: Thought, intent: Intent, hit = false): Thought {
@@ -156,6 +179,8 @@ export function think(
   switch (mind.state) {
     case 'dead':
       return set(out, 'fall');
+    case 'held':
+      return set(out, 'struggle');
     case 'lying':
       return wake(mind, senses, out);
     case 'rising':
