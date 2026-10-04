@@ -2,6 +2,7 @@ import type * as THREE from 'three/webgpu';
 import type { AudioBus } from '../../engine/audio';
 import { loadModel, loadSkinned } from '../../engine/models';
 import type { Vec3 } from '../../engine/ray';
+import { waterlineX } from './banks';
 import {
   cruiseHeading,
   cruiseTargetX,
@@ -146,7 +147,7 @@ function stepRise(f: FishState, r: Rise, dt: number): void {
   const dz = z - f.root.position.z;
   if (dx * dx + dz * dz > 1e-6) f.yaw = turnToward(f.yaw, Math.atan2(-dx, -dz), 6 * dt);
   const y = f.cruiseY + (r.peak - f.cruiseY) * Math.sin(Math.PI * s);
-  f.root.position.set(inWaterX(x, f.yaw, EDGE_X), y, z);
+  f.root.position.set(inWaterX(x, f.yaw, f.waterline), y, z);
   if (r.surface) f.root.rotation.z = surfaceRoll(s);
   if (!r.done && s >= 0.5) {
     r.done = true;
@@ -159,7 +160,7 @@ function stepRise(f: FishState, r: Rise, dt: number): void {
 function cruise(f: FishState, dt: number, player: { x: number; z: number }): void {
   const pos = f.root.position;
   const targetZ = player.z - LAG_Z;
-  const targetX = cruiseTargetX(EDGE_X, f.time);
+  const targetX = cruiseTargetX(f.waterline, f.time);
   const dz = targetZ - pos.z;
   const follow = FISH.follow * (1 - SICK.slow * f.sickness);
   const stepZ = Math.sign(dz) * Math.min(Math.abs(dz), follow * dt);
@@ -167,7 +168,7 @@ function cruise(f: FishState, dt: number, player: { x: number; z: number }): voi
   const dx = x - pos.x;
   f.yaw = turnToward(f.yaw, cruiseHeading(dx / dt, stepZ / dt), 3 * dt);
   const y = pos.y + (f.cruiseY - pos.y) * Math.min(1, 3 * dt);
-  pos.set(inWaterX(x, f.yaw, EDGE_X), y, pos.z + stepZ);
+  pos.set(inWaterX(x, f.yaw, f.waterline), y, pos.z + stepZ);
 }
 
 function tryStrike(f: FishState, player: { x: number; z: number }, horde: Horde): void {
@@ -187,7 +188,7 @@ function tryStrike(f: FishState, player: { x: number; z: number }, horde: Horde)
   f.cooldown = f.style.cooldown;
   const { x, y, z } = f.root.position;
   const from = { x, y, z, yaw: f.yaw, pitch: 0 };
-  f.grab = newGrab(from, id, zx, zz, f.cruiseY, f.style);
+  f.grab = newGrab(from, id, zx, zz, f.cruiseY, f.style, f.waterline);
 }
 
 /** Bursting out at z: the railing there breaks and the water explodes. */
@@ -321,7 +322,7 @@ function updateFish(
   if (!f.placed) {
     f.placed = true;
     f.root.visible = true; // hidden until placed, so it never flashes at the origin
-    f.root.position.set(cruiseTargetX(EDGE_X, 0), f.cruiseY, player.z - LAG_Z);
+    f.root.position.set(cruiseTargetX(f.waterline, 0), f.cruiseY, player.z - LAG_Z);
     f.surfaceIn = nextSurfacing(Math.random());
   }
   f.cooldown = Math.max(0, f.cooldown - dt);
@@ -394,14 +395,23 @@ function disposeFish(f: FishState): void {
   f.wake.material.dispose();
 }
 
-const NO_BANK = { ground: (): number => WATER_Y, onBreach: (): void => undefined };
+// The intro's river has natural banks.
+const NO_BANK = {
+  ground: (): number => WATER_Y,
+  onBreach: (): void => undefined,
+  waterline: waterlineX('natural'),
+};
 
 export async function createFish(
   scene: THREE.Scene,
   audio: AudioBus,
   sounds: Sounds,
   // Without a bank (the intro), the orca never takes anyone.
-  bank: { ground: (x: number) => number; onBreach: (z: number) => void } = NO_BANK,
+  bank: {
+    ground: (x: number) => number;
+    onBreach: (z: number) => void;
+    waterline: number;
+  } = NO_BANK,
 ): Promise<Fish> {
   const [asset, packModel] = await Promise.all([
     loadSkinned(characterUrl('orca')),

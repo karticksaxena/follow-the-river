@@ -79,6 +79,8 @@ export interface Grab {
   fromZ: number;
   fromYaw: number;
   cruiseY: number;
+  /** Where the water starts (x): the rush launches from `water + GRAB.launchOut`. */
+  water: number;
   reach: number;
   sweep: number;
   /** Seconds of the leap, the thrash and the slide back (all shorter in the ending's frenzy). */
@@ -111,9 +113,10 @@ export function newGrab(
   vz: number,
   cruiseY: number,
   style: StrikeStyle,
+  water: number,
 ): Grab {
   const { reach, pace, sweep } = style;
-  const distance = Math.hypot(EDGE_X + GRAB.launchOut - from.x, vz - from.z);
+  const distance = Math.hypot(water + GRAB.launchOut - from.x, vz - from.z);
   const approach = Math.min(
     GRAB.approachMax,
     Math.max(GRAB.approachMin, distance / GRAB.rushSpeed),
@@ -129,6 +132,7 @@ export function newGrab(
     fromZ: from.z,
     fromYaw: from.yaw,
     cruiseY,
+    water,
     reach,
     sweep,
     burst: GRAB.burst * pace,
@@ -181,7 +185,7 @@ function crawlBack(
   const s = smooth((u - GRAB.crawlShare) / (1 - GRAB.crawlShare));
   const from = Math.max(edge, land);
   beached(from, ground, out);
-  out.x = lerp(from, EDGE_X + GRAB.launchOut, s);
+  out.x = lerp(from, g.water + GRAB.launchOut, s);
   out.y = lerp(out.y, g.cruiseY - GRAB.sink, s);
   out.pitch = lerp(out.pitch, -0.35, s);
 }
@@ -189,7 +193,7 @@ function crawlBack(
 /** Pure: the orca's pose `g.t` seconds into a grab. `ground(x)` is the bank or water height. */
 export function grabPose(g: Grab, ground: (x: number) => number, out: GrabPose): GrabPose {
   const land = landX(g.vx, g.reach);
-  const launch = EDGE_X + GRAB.launchOut;
+  const launch = g.water + GRAB.launchOut;
   const deep = g.cruiseY - GRAB.dive;
   const t1 = g.approach;
   const t2 = t1 + g.burst;

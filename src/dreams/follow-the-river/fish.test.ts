@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { waterlineX } from './banks';
 import { canThrow, cruiseHeading, FISH, pickStrike, strikesFor } from './fish';
 import {
+  BODY_HALF_WIDTH,
   cruiseTargetX,
   cruiseYFor,
   inWaterX,
@@ -59,13 +61,26 @@ describe('fish', () => {
     expect(SURFACE_MAX).toBe(30);
   });
 
+  it('cruising never puts any of the body over the bank', () => {
+    // 10 minutes of a player wandering the strip, 30 fps
+    let worst = Infinity;
+    const water = waterlineX('natural');
+    for (let t = 0; t < 600; t += 1 / 30) {
+      for (const yaw of [0, 0.3, -0.3, Math.PI, Math.PI / 2]) {
+        const x = inWaterX(cruiseTargetX(water, t), yaw, water);
+        worst = Math.min(worst, x - Math.abs(Math.sin(yaw)) * 3.5 - BODY_HALF_WIDTH - water);
+      }
+    }
+    expect(worst).toBeGreaterThanOrEqual(0.5);
+  });
+
   it('keeps the whole 7 m orca in the river, even turned toward the bank', () => {
     const edge = 3;
     for (const yaw of [0, 0.4, Math.PI / 2, -Math.PI / 2, Math.PI, 2.5]) {
       const x = inWaterX(edge + 0.5, yaw, edge);
       const nose = x - Math.sin(yaw) * 3.5;
       const tail = x + Math.sin(yaw) * 3.5;
-      expect(Math.min(nose, tail)).toBeGreaterThan(edge);
+      expect(Math.min(nose, tail)).toBeGreaterThan(edge + BODY_HALF_WIDTH);
     }
     expect(inWaterX(9, 0, edge)).toBe(9); // already well out: unchanged
   });

@@ -57,7 +57,7 @@ export const SURFACE_MIN = 18;
 export const SURFACE_MAX = 30;
 export const SURFACE_TIME = 2.5;
 const SURFACE_ROLL = 0.35;
-/** The cruise lane: this far out from the bank edge, weaving by `WEAVE_X`. */
+/** The cruise lane: this far out from the waterline, weaving by `WEAVE_X`. */
 export const LANE_OFFSET = 4;
 export const WEAVE_X = 1.5;
 
@@ -72,9 +72,9 @@ export const surfaceYFor = (finTop: number): number =>
 export const nextSurfacing = (rand: number): number =>
   SURFACE_MIN + rand * (SURFACE_MAX - SURFACE_MIN);
 
-/** Cruise lane x at `time`: beside the player's bank, weaving. */
-export const cruiseTargetX = (edgeX: number, time: number): number =>
-  edgeX + LANE_OFFSET + Math.sin(time * 0.4) * WEAVE_X;
+/** Cruise lane x at `time`: `water` m (the waterline) plus the lane, weaving. */
+export const cruiseTargetX = (water: number, time: number): number =>
+  water + LANE_OFFSET + Math.sin(time * 0.4) * WEAVE_X;
 
 /** Slow roll while surfacing, s in 0..1. */
 export const surfaceRoll = (s: number): number => Math.sin(Math.PI * s) * SURFACE_ROLL;
@@ -173,13 +173,15 @@ export const smooth = (s: number): number => s * s * (3 - 2 * s);
 /** orca.py LENGTH 7: half the body, and how far its nose and tail must stay from the bank (m). */
 const HALF_LENGTH = 3.5;
 const BANK_MARGIN = 0.6;
+/** Half the body's width (m): placeholder until measured from the model (Task A7). */
+export const BODY_HALF_WIDTH = 0.9;
 
 /**
  * The smallest x that keeps the whole orca (nose and tail) in the river when it faces `yaw`:
  * turned toward the bank, its 7 m body reaches sideways and the nose used to end up on land.
  */
-export function inWaterX(x: number, yaw: number, edgeX: number): number {
-  return Math.max(x, edgeX + BANK_MARGIN + Math.abs(Math.sin(yaw)) * HALF_LENGTH);
+export function inWaterX(x: number, yaw: number, water: number): number {
+  return Math.max(x, water + BANK_MARGIN + BODY_HALF_WIDTH + Math.abs(Math.sin(yaw)) * HALF_LENGTH);
 }
 
 export function turnToward(current: number, target: number, amount: number): number {

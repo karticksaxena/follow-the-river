@@ -81,6 +81,8 @@ export interface FishState {
   readonly pose: GrabPose;
   /** Bank (or water) height at x, and what to break where the orca bursts out at z. */
   readonly ground: (x: number) => number;
+  /** Where the water starts (x): the cruise lane and the swim limit are measured from it. */
+  readonly waterline: number;
   readonly onBreach: (z: number) => void;
   /** Set once by createFish (they play the orca's sounds). */
   hooks: GrabHooks;
@@ -113,7 +115,7 @@ export function createState(
   sounds: Sounds,
   asset: SkinnedAsset,
   packModel: THREE.Object3D,
-  bank: Pick<FishState, 'ground' | 'onBreach'>,
+  bank: Pick<FishState, 'ground' | 'onBreach' | 'waterline'>,
 ): FishState {
   const root = new THREE.Group();
   root.rotation.order = 'YXZ'; // pitch (x) about the body's own axis, after the heading
@@ -182,6 +184,7 @@ export function createState(
     grab: null,
     pose: { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 },
     ground: bank.ground,
+    waterline: bank.waterline,
     onBreach: bank.onBreach,
     hooks: { breach: () => undefined, splash: () => undefined },
   };

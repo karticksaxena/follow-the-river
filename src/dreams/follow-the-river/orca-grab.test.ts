@@ -25,6 +25,7 @@ const start = (vx: number, vz = -40): ReturnType<typeof newGrab> =>
     vz,
     CRUISE_Y,
     NIGHT_STRIKE,
+    EDGE_X,
   );
 
 interface FakePrey extends Prey {
@@ -138,6 +139,7 @@ describe('the orca grab', () => {
       -40,
       CRUISE_Y,
       { ...NIGHT_STRIKE, sweep: 2.5 },
+      EDGE_X,
     );
     const hooks = { breach: (): void => undefined, splash: (): void => undefined };
     const out = pose();
@@ -161,6 +163,7 @@ describe('the orca grab', () => {
       -40,
       CRUISE_Y,
       NIGHT_STRIKE,
+      EDGE_X,
     );
     expect(near.approach).toBe(GRAB.approachMin);
   });

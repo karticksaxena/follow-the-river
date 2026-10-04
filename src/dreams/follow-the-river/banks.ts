@@ -40,11 +40,23 @@ export function bankProfile(kind: BankKind, grass: number = BANK.mud): readonly 
   }
   return [
     { x: 3.0, y: 0, color: grass },
-    { x: 4.2, y: -0.35, color: BANK.mud },
-    { x: 6.0, y: -0.85, color: BANK.mud },
-    { x: 7.0, y: -1.05, color: BANK.sand },
-    { x: 10, y: BED_Y, color: BANK.sand },
+    { x: 3.12, y: -0.45, color: BANK.mud },
+    { x: 3.32, y: -0.9, color: BANK.mud },
+    { x: 3.6, y: -1.15, color: BANK.sand },
+    { x: 8, y: BED_Y, color: BANK.sand },
   ];
+}
+
+/** Pure: x where the near bank meets the water (the embankment wall: EDGE_X). */
+export function waterlineX(kind: BankKind): number {
+  if (kind === 'embankment') return EDGE_X;
+  const pts = bankProfile(kind);
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    if (a.y >= WATER_Y && b.y < WATER_Y) return a.x + ((a.y - WATER_Y) / (a.y - b.y)) * (b.x - a.x);
+  }
+  return pts[0].x;
 }
 
 /** Pure: the bank's height at x (near side), linear between profile points. */
