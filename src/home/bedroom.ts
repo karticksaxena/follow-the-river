@@ -19,7 +19,9 @@ const LAMP_SHADOW_SIZE = 1024;
 const CEILING_COLOR = 0x6a6258;
 const CEILING_ROUGHNESS = 0.95;
 /** A very dim warm glow aimed up from the lampshade so the ceiling reads; it never touches the room below. */
-const GLOW = { color: 0xffc58a, intensity: 0.9, distance: 4.5, angle: 0.9, penumbra: 1 } as const;
+const GLOW = { color: 0xffc58a, intensity: 2.2, distance: 5.5, angle: 0.6, penumbra: 1 } as const;
+/** The glow aims at the ceiling between the lamp and the fan, so the light pools around the fan. */
+const GLOW_AIM = { x: 2.4, z: -2.8 } as const;
 
 /** [file, x, y, z, rotationY]. Kenney origins sit at a model corner (x ≥ 0, z ≤ 0). */
 type Placement = readonly [string, number, number, number, number];
@@ -106,7 +108,7 @@ function lights(scene: THREE.Scene, head: THREE.Vector3): void {
     GLOW.penumbra,
   );
   glow.position.copy(lamp.position);
-  glow.target.position.set(lamp.position.x, CEILING_Y, lamp.position.z);
+  glow.target.position.set(GLOW_AIM.x, CEILING_Y, GLOW_AIM.z);
   scene.add(moon, moon.target, lamp, glow, glow.target);
 }
 
