@@ -215,3 +215,7 @@ h1.title {
   transform: translateX(-50%);
   text-shadow: 0 0 6px #000;
 }
+/* Cutscenes (tape flashbacks, the cold open) own the screen: no HUD over them. */
+.cinematic .hud {
+  visibility: hidden;
+}

@@ -1,4 +1,5 @@
 import type { DreamContext } from '../types';
+import { playFlashback } from './flashback';
 import { stopVoice, voiceFor, voiceHooks } from './voice';
 
 export const TAPES: Readonly<Record<number, readonly string[]>> = {
@@ -32,11 +33,14 @@ export const TAPES: Readonly<Record<number, readonly string[]>> = {
 /** Stops the tape voice (also called when the chapter is torn down mid-read). */
 export const stopTape = stopVoice;
 
-/** Reads the transcript pages; each quoted line is voiced as Mom on the tape. */
+/**
+ * Plays a tape: its transcript pages over an animated flashback of what Mom describes (the lab,
+ * the orca in its tank, the night she set it free); each quoted line is voiced as Mom on tape.
+ */
 export function playTape(ctx: DreamContext, tape: number, onDone: () => void): void {
-  ctx.read(
-    TAPES[tape] ?? [],
-    onDone,
-    voiceHooks(ctx.audio, (page) => voiceFor(page, 'tape')),
-  );
+  const pages = TAPES[tape] ?? [];
+  const hooks = voiceHooks(ctx.audio, (page) => voiceFor(page, 'tape'));
+  if (tape === 1 || tape === 2 || tape === 3)
+    void playFlashback(ctx, tape, pages, hooks).then(onDone);
+  else ctx.read(pages, onDone, hooks);
 }
