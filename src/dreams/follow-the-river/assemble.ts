@@ -21,6 +21,7 @@ import { createPickupMeshes, type PickupMeshes } from './pickups';
 import type { Systems } from './run';
 import { createScares } from './scares';
 import { loadSounds, type Sounds } from './sounds';
+import { setWaterTier } from './water';
 import { createGates } from './waves';
 import { buildWorld, type World } from './world';
 import { DAY_TUNING } from './zombies/brain';
@@ -121,6 +122,7 @@ export async function assemble(
   isCancelled: () => boolean,
 ): Promise<Assembled | null> {
   const camera = ctx.stage.camera;
+  setWaterTier(ctx.stage.tier); // before the first build, so Medium/Low never builds High first
   const [world, sounds] = await Promise.all([buildWorld(area), loadSounds(ctx.audio)]);
   const scene = world.scene;
   if (isCancelled()) {

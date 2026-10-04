@@ -93,11 +93,32 @@ export interface SkinnedAsset {
 }
 const skinnedCache = new Map<string, Promise<SkinnedAsset>>();
 
+/**
+ * Quaternius characters export as roughness 0.27 / metalness 0.4: half-metal that streaks white
+ * under every light. People are matte; skin and hair a touch smoother. Tuning knobs.
+ */
+export const MATTE = { skin: 0.65, hair: 0.75, other: 0.85 } as const;
+
+/** Makes a human character's standard material matte (by name); `orca-*` (Dras) is left alone. */
+export function matteHuman(material: THREE.Material): void {
+  if (!(material instanceof THREE.MeshStandardMaterial) || material.name.startsWith('orca-'))
+    return;
+  material.metalness = 0;
+  material.roughness = /skin/i.test(material.name)
+    ? MATTE.skin
+    : /hair/i.test(material.name)
+      ? MATTE.hair
+      : MATTE.other;
+}
+
 /** Loads a skinned GLB once (marked cached); clone `scene` with SkeletonUtils.clone per character. */
 export function loadSkinned(url: string): Promise<SkinnedAsset> {
   let pending = skinnedCache.get(url);
   if (!pending) {
     pending = loader.loadAsync(url).then((gltf) => {
+      gltf.scene.traverse((node) => {
+        if (isMesh(node)) [node.material].flat().forEach(matteHuman);
+      });
       enableShadows(gltf.scene); // Mom, Dras and Kartik cast; the horde picks its own nearest casters
       markCached(gltf.scene);
       return { scene: gltf.scene, clips: gltf.animations };

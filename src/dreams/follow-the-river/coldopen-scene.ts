@@ -9,6 +9,7 @@ import { TV_LIGHT } from './intro-scene';
 import { KIT_SCALE, kitUrl } from './kits';
 import { applyLighting, LIGHTING, type WorldLights } from './lighting';
 import { loadSounds, type Sounds } from './sounds';
+import { setWaterTier } from './water';
 import { buildWorld } from './world';
 import { createHorde, type Horde } from './zombies/horde';
 
@@ -120,6 +121,7 @@ function addLamp(scene: THREE.Scene): THREE.PointLight {
  */
 export async function buildColdOpenScene(ctx: DreamContext): Promise<ColdOpenScene> {
   const area = { ...CITY, props: CITY.props.filter((p) => p.z > CUT_Z), shacks: [] };
+  setWaterTier(ctx.stage.tier);
   const [world, sounds, house] = await Promise.all([
     buildWorld(area),
     loadSounds(ctx.audio),

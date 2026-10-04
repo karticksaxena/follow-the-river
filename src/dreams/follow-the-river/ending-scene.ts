@@ -135,9 +135,13 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
     remove(lantern) {
       actor.stop();
       held = null;
+      sys.flashlight.clearWatch(WATCH.mom);
       mom.group.visible = false;
       lantern.position.copy(home);
     },
-    dispose: () => mom.dispose(),
+    dispose() {
+      sys.flashlight.clearWatch(WATCH.mom);
+      mom.dispose();
+    },
   };
 }

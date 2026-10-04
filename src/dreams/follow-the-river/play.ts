@@ -182,6 +182,15 @@ function updateSense(p: State): void {
   sense.beamOn = sys.flashlight.on && run.live.supplies.battery > 0;
 }
 
+/** Every rendered frame, pages and cutscenes included: the torch's eye adjustment and the water's tier. */
+function lightTorch(p: State, dt: number): void {
+  const { sys, run } = p;
+  setWaterTier(sys.ctx.stage.tier);
+  sys.flashlight.clearWatch(WATCH.horde);
+  sys.horde.forEachAlive(p.watchZombie);
+  sys.flashlight.apply(run.live.supplies.battery, run.time, dt);
+}
+
 function tickWorld(p: State, dt: number): void {
   const { sys, run, sense } = p;
   const night = isNight(run.phase);
@@ -189,10 +198,7 @@ function tickWorld(p: State, dt: number): void {
   p.offFor = sys.flashlight.on ? 0 : p.offFor + dt;
   supplies.battery = chargeBattery(supplies.battery, sys.flashlight.on, p.offFor, dt);
   if (supplies.battery <= 0) sys.flashlight.on = false; // dead: off, so it starts recharging
-  setWaterTier(sys.ctx.stage.tier);
-  sys.flashlight.clearWatch(WATCH.horde);
-  sys.horde.forEachAlive(p.watchZombie);
-  sys.flashlight.apply(supplies.battery, run.time, dt);
+  lightTorch(p, dt);
   sys.horde.update(dt, sense, p.onHit);
   sys.armory.update(dt);
   sys.gates.update(dt);
@@ -459,6 +465,7 @@ function tick(p: State, dt: number): void {
   if (sys.ctx.isPaused()) {
     p.controls.drain();
     p.wasPaused = true;
+    lightTorch(p, dt);
     return;
   }
   if (p.wasPaused) {
@@ -470,6 +477,7 @@ function tick(p: State, dt: number): void {
   p.wasPaused = false;
   if (run.frozen) {
     sys.ambience.hush(dt);
+    lightTorch(p, dt);
     return;
   }
   run.time += dt;
@@ -499,6 +507,8 @@ export function createPlay(sys: Systems, run: Run, events: Events): Play {
   return {
     reset() {
       p.offFor = 0;
+      p.sys.flashlight.clearWatch(WATCH.horde);
+      p.sys.flashlight.clearWatch(WATCH.mom);
       // beginPhase already cleared run.cutscene and set the torch: just forget the cutscene (no restore).
       p.cutscene = false;
       p.torchBefore = false;
