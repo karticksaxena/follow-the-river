@@ -15,8 +15,10 @@ import {
   scatterGrass,
   stripGrass,
   stripZone,
+  SWAP_BAND,
   triangles,
   visible,
+  type Kind,
 } from './vegetation';
 
 const TIERS: readonly Tier[] = ['low', 'medium', 'high'];
@@ -136,28 +138,39 @@ describe('forest and suburbs vegetation', () => {
 });
 
 describe('visible', () => {
-  it('shows near trees up close and their thinned twin from there out, never both', () => {
+  const show = (kind: Kind, d: number, tier: Tier = 'high', fog = 60): boolean =>
+    visible(kind, d, d, tier, fog);
+
+  it('shows near trees up close, their thinned twin farther, and both only in the swap band', () => {
     for (const tier of ['medium', 'high'] as const) {
-      for (let d = 0; d < 150; d += 5) {
-        expect(visible('near', d, tier, 60) && visible('far', d, tier, 60)).toBe(false);
+      const swap = REACH.nearTree[tier];
+      for (let d = 0; d < 150; d += 1) {
+        const both = show('near', d, tier) && show('far', d, tier);
+        expect(both).toBe(Math.abs(d - swap) < SWAP_BAND);
       }
-      const edge = REACH.nearTree[tier];
-      expect(visible('near', edge - 1, tier, 60)).toBe(true);
-      expect(visible('far', edge + 1, tier, 60)).toBe(true);
+      expect(show('near', swap - SWAP_BAND - 1, tier)).toBe(true);
+      expect(show('far', swap - SWAP_BAND - 1, tier)).toBe(false);
+      expect(show('near', swap + SWAP_BAND + 1, tier)).toBe(false);
+      expect(show('far', swap + SWAP_BAND + 1, tier)).toBe(true);
     }
   });
 
+  it('keeps a cell whose far corner is past the band: a long cell spans the swap', () => {
+    expect(visible('far', 0, 100, 'high', 60)).toBe(true);
+    expect(visible('near', 0, 100, 'high', 60)).toBe(true);
+  });
+
   it('draws no near trees on Low, and thinned ones out to the fog plus a margin', () => {
-    expect(visible('near', 0, 'low', 60)).toBe(false);
-    expect(visible('farOnly', 60 + REACH.treeMargin, 'low', 60)).toBe(true);
-    expect(visible('farOnly', 60 + REACH.treeMargin + 1, 'low', 60)).toBe(false);
-    expect(visible('farOnly', 500, 'high', 500)).toBe(false); // capped at treeMax
+    expect(show('near', 0, 'low')).toBe(false);
+    expect(show('farOnly', 60 + REACH.treeMargin, 'low')).toBe(true);
+    expect(show('farOnly', 60 + REACH.treeMargin + 1, 'low')).toBe(false);
+    expect(show('farOnly', 500, 'high', 500)).toBe(false); // capped at treeMax
   });
 
   it('ends grass where its fade ends and small plants sooner on lower tiers', () => {
     for (const tier of ['low', 'medium', 'high'] as const) {
-      expect(visible('grass', GRASS[tier].fade.to, tier, 60)).toBe(true);
-      expect(visible('grass', GRASS[tier].fade.to + 1, tier, 60)).toBe(false);
+      expect(show('grass', GRASS[tier].fade.to, tier)).toBe(true);
+      expect(show('grass', GRASS[tier].fade.to + 1, tier)).toBe(false);
     }
     expect(REACH.small.low).toBeLessThan(REACH.small.medium);
     expect(REACH.small.medium).toBeLessThan(REACH.small.high);

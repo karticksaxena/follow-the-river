@@ -10,7 +10,6 @@ import { addVegetation, type Vegetation } from './nature';
 import { shackBounds } from './shack';
 import { type Plant, plantsOf, stripGrass } from './vegetation';
 
-/** Vegetation meshes per scene: every one is a draw call in every pass. */
 /** Vegetation meshes shown per pass: every one is a draw call. */
 const MAX_MESHES = 60;
 const TIERS: readonly Tier[] = ['low', 'medium', 'high'];

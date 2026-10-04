@@ -1,3 +1,14 @@
+import {
+  bool,
+  cameraPosition,
+  distance,
+  dot,
+  fract,
+  positionWorld,
+  screenCoordinate,
+  smoothstep,
+  vec2,
+} from 'three/tsl';
 import * as THREE from 'three/webgpu';
 import { assetUrl } from '../../engine/assets';
 import { loadModel } from '../../engine/models';
@@ -9,6 +20,8 @@ import {
   GRASS,
   isTree,
   REACH,
+  SMALL_FADE,
+  SWAP_BAND,
   visible,
   type Kind,
   type Plant,
@@ -121,18 +134,45 @@ function partsOf(category: Category, model: string): Promise<Part[]> {
   return pending;
 }
 
-/** How a material sways (null: stays still: bark, rocks). */
+/** How a material sways (null: stays still: bark). Rocks only fade away: a still look. */
 function windOf(category: Category, name: string): WindLook | null {
   if (category === 'grass') return WIND.grass;
   if (category === 'plants') return WIND.plant;
-  return category !== 'rocks' && /leaves/i.test(name) ? WIND.tree : null;
+  if (category === 'rocks') return STILL;
+  return /leaves/i.test(name) ? WIND.tree : null;
+}
+
+const STILL: WindLook = { strength: 0, reach: 1 };
+
+/** How a material is faded: grass by its tier's fade, ferns/rocks/pebbles over their last metres. */
+function fadeOf(category: Category, tier: Tier): Fade | undefined {
+  if (category === 'grass') return GRASS[tier].fade;
+  if (category === 'plants' || category === 'rocks') {
+    const to = REACH.small[tier];
+    return { from: to - SMALL_FADE, to };
+  }
+  return undefined;
+}
+
+/** How a tree material takes part in the near/thinned swap (none: only one of the two is ever drawn). */
+type Swap = 'near' | 'twin' | 'none';
+
+/**
+ * Screen-door mask for the swap: interleaved-gradient noise against the pixel's distance from the
+ * camera, complementary between the near tree and its thinned twin, so the swap is a dissolve.
+ */
+function swapMask(swap: 'near' | 'twin', at: number): THREE.Node<'bool'> {
+  const t = smoothstep(at - SWAP_BAND, at + SWAP_BAND, distance(positionWorld, cameraPosition));
+  const noise = fract(fract(dot(screenCoordinate, vec2(0.06711056, 0.00583715))).mul(52.9829189));
+  return swap === 'near' ? noise.greaterThanEqual(t) : noise.lessThan(t);
 }
 
 /** A muted, matte, alpha-tested copy of a PBR material as a node material, swaying if `look`. */
 function foliage(
   s: THREE.MeshStandardMaterial,
   look: WindLook | null,
-  fade?: Fade,
+  fade: Fade | undefined,
+  swap: { mode: Swap; at: number },
 ): THREE.Material {
   const tint = TINTS.find(([pattern]) => pattern.test(s.name))?.[1];
   const material = new THREE.MeshStandardNodeMaterial({
@@ -147,18 +187,29 @@ function foliage(
     alphaTest: s.alphaTest > 0 ? ALPHA_TEST : 0,
   });
   if (look) material.positionNode = windNode(look, fade);
+  if (swap.mode !== 'none') {
+    material.maskNode = swapMask(swap.mode, swap.at);
+    material.maskShadowNode = bool(true); // the shadow pass has its own pixels: no dither there
+  }
   material.userData.cached = true; // shared by every scene: disposeScene keeps it
   return material;
 }
 
 /** One shared, never-freed node material per (source, category, tier). */
-function materialFor(source: THREE.Material, category: Category, tier: Tier): THREE.Material {
+function materialFor(
+  source: THREE.Material,
+  category: Category,
+  kind: Kind,
+  tier: Tier,
+): THREE.Material {
   if (!(source instanceof THREE.MeshStandardMaterial)) return source;
   const look = windOf(category, source.name);
-  const key = `${source.uuid}|${category}|${look ? tier : ''}`;
+  const mode: Swap = kind === 'near' ? 'near' : kind === 'far' ? 'twin' : 'none';
+  const key = `${source.uuid}|${category}|${mode}|${tier}`;
   let material = materials.get(key);
   if (!material) {
-    material = foliage(source, look, category === 'grass' ? GRASS[tier].fade : undefined);
+    const swap = { mode, at: REACH.nearTree[tier] };
+    material = foliage(source, look, fadeOf(category, tier), swap);
     materials.set(key, material);
   }
   return material;
@@ -233,7 +284,7 @@ function instances(part: Part, g: Group, tier: Tier): THREE.InstancedMesh {
   });
   const mesh = new THREE.InstancedMesh(
     instancedGeometry(part.geometry, scales),
-    materialFor(part.source, g.category, tier),
+    materialFor(part.source, g.category, g.kind, tier),
     g.plants.length,
   );
   mesh.instanceMatrix.array.set(matrices);
@@ -260,16 +311,21 @@ interface Cell {
 
 /** Fog far plane assumed when the scene has none (day, about). */
 const DEFAULT_FOG = 100;
+const eye = new THREE.Vector3();
 
 /**
- * The area's vegetation: cell meshes shown or hidden every frame by their distance to the camera
- * (`visible`), so only a few cells are ever drawn, in every pass (shadows and reflection too).
- * The cull runs from `updateMatrixWorld`, which the renderer calls on the scene once a frame.
+ * The area's vegetation: cell meshes shown or hidden by their distance to the camera (`visible`),
+ * so only a few cells are ever drawn, in every pass (shadows and reflection too). The cull runs
+ * from `updateMatrixWorld`, which the renderer calls on the scene once a frame; it works from the
+ * camera's world position and skips when nothing moved (nested renders, a paused frame).
  */
 export class Vegetation extends THREE.Group {
   private readonly cells: Cell[] = [];
   private readonly camera: THREE.Camera | null;
   private readonly tier: Tier;
+  private lastX = NaN;
+  private lastZ = NaN;
+  private lastFog = NaN;
 
   constructor(tier: Tier, camera: THREE.Camera | null) {
     super();
@@ -293,23 +349,32 @@ export class Vegetation extends THREE.Group {
     this.add(mesh);
   }
 
-  /** The meshes now shown for a camera at (x, z) under fog ending at `fogFar`. */
-  cull(x: number, z: number, fogFar: number): THREE.InstancedMesh[] {
-    const shown: THREE.InstancedMesh[] = [];
+  /** Shows the cells for a camera at (x, z) under fog ending at `fogFar`. No allocation. */
+  apply(x: number, z: number, fogFar: number): void {
+    if (x === this.lastX && z === this.lastZ && fogFar === this.lastFog) return;
+    this.lastX = x;
+    this.lastZ = z;
+    this.lastFog = fogFar;
     for (const c of this.cells) {
       const dx = Math.max(c.minX - x, 0, x - c.maxX);
       const dz = Math.max(c.minZ - z, 0, z - c.maxZ);
-      c.mesh.visible = visible(c.kind, Math.hypot(dx, dz), this.tier, fogFar);
-      if (c.mesh.visible) shown.push(c.mesh);
+      const fx = Math.max(Math.abs(c.minX - x), Math.abs(c.maxX - x));
+      const fz = Math.max(Math.abs(c.minZ - z), Math.abs(c.maxZ - z));
+      c.mesh.visible = visible(c.kind, Math.hypot(dx, dz), Math.hypot(fx, fz), this.tier, fogFar);
     }
-    return shown;
+  }
+
+  /** Tests: `apply`, then the meshes now shown. */
+  cull(x: number, z: number, fogFar: number): THREE.InstancedMesh[] {
+    this.apply(x, z, fogFar);
+    return this.cells.filter((c) => c.mesh.visible).map((c) => c.mesh);
   }
 
   override updateMatrixWorld(force?: boolean): void {
     if (this.camera) {
+      this.camera.getWorldPosition(eye);
       const fog = this.parent instanceof THREE.Scene ? this.parent.fog : null;
-      const far = fog instanceof THREE.Fog ? fog.far : DEFAULT_FOG;
-      this.cull(this.camera.position.x, this.camera.position.z, far);
+      this.apply(eye.x, eye.z, fog instanceof THREE.Fog ? fog.far : DEFAULT_FOG);
     }
     super.updateMatrixWorld(force);
   }
@@ -335,6 +400,9 @@ export async function addVegetation(
   });
   vegetation.matrixAutoUpdate = false;
   parent.add(vegetation);
-  if (camera) vegetation.cull(camera.position.x, camera.position.z, DEFAULT_FOG);
+  if (camera) {
+    camera.getWorldPosition(eye);
+    vegetation.apply(eye.x, eye.z, DEFAULT_FOG);
+  }
   return vegetation;
 }

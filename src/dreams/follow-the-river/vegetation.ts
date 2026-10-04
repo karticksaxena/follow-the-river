@@ -79,7 +79,7 @@ export const GRASS: Readonly<
   >
 > = {
   high: { perM2: 0.65, fade: { from: 18, to: 30 }, scale: [0.3, 0.6] },
-  medium: { perM2: 0.38, fade: { from: 12, to: 22 }, scale: [0.3, 0.6] },
+  medium: { perM2: 0.3, fade: { from: 12, to: 22 }, scale: [0.3, 0.6] },
   low: { perM2: 0.14, fade: { from: 8, to: 15 }, scale: [0.35, 0.65] },
 };
 
@@ -133,29 +133,44 @@ export type Kind = 'near' | 'far' | 'farOnly' | 'grass' | 'small';
 
 /** Draw distances (m) per tier. Tuning knobs. Low has no near trees at all: thinned ones only. */
 export const REACH = {
-  nearTree: { high: 35, medium: 22, low: 0 },
+  nearTree: { high: 35, medium: 18, low: 0 },
   /** Ferns, plants, rocks and pebbles. */
   small: { high: 45, medium: 35, low: 25 },
   /** Trees are drawn to the fog's far plane plus this, up to the max. */
-  treeMargin: 10,
-  treeMax: 110,
+  treeMargin: 5,
+  treeMax: 90,
 } as const satisfies Record<string, unknown>;
 
-/** Pure: is a cell of `kind` at `distance` m from the camera drawn? Grass ends where its fade ends. */
-export function visible(kind: Kind, distance: number, tier: Tier, fogFar: number): boolean {
+/** Near and thinned trees cross-fade (a per-pixel dither by distance) this far (m) either side of the swap. */
+export const SWAP_BAND = 6;
+/** Ferns, rocks and pebbles sink away over the last this many metres of their reach. */
+export const SMALL_FADE = 8;
+
+/**
+ * Pure: is a cell of `kind` drawn, for a camera `nearest` m from the cell's box and `farthest` m
+ * from its far corner? Grass ends where its fade ends; near trees and their twins both show in the
+ * band around the swap distance, where the shaders dither between them.
+ */
+export function visible(
+  kind: Kind,
+  nearest: number,
+  farthest: number,
+  tier: Tier,
+  fogFar: number,
+): boolean {
   const trees = Math.min(REACH.treeMax, fogFar + REACH.treeMargin);
-  const near = REACH.nearTree[tier];
+  const swap = REACH.nearTree[tier];
   switch (kind) {
     case 'near':
-      return distance < near;
+      return swap > 0 && nearest < swap + SWAP_BAND;
     case 'far':
-      return distance >= near && distance <= trees;
+      return farthest > swap - SWAP_BAND && nearest <= trees;
     case 'farOnly':
-      return distance <= trees;
+      return nearest <= trees;
     case 'grass':
-      return distance <= GRASS[tier].fade.to;
+      return nearest <= GRASS[tier].fade.to;
     default:
-      return distance <= REACH.small[tier];
+      return nearest <= REACH.small[tier];
   }
 }
 

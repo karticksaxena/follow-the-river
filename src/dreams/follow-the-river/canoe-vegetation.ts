@@ -53,7 +53,7 @@ function bank(g: CanoeGround, zNear: number, zFar: number, from: number, to: num
 }
 
 /** Three common-tree models only: fewer meshes (draw calls). */
-const CANOE_COMMON = COMMON_TREES.slice(0, 3);
+const CANOE_COMMON = COMMON_TREES.slice(0, 1);
 
 const oneOf = (list: readonly string[], random: () => number): string =>
   list[Math.floor(random() * list.length)];
