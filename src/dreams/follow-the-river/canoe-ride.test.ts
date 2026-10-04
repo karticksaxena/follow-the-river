@@ -11,7 +11,7 @@ import {
   type CalfPose,
   type Pose,
 } from './canoe-ride';
-import { pathSlope, pathX, RIVER_HALF, rng, terrainY, WATER_LEVEL } from './canoe-scene';
+import { meshY, pathSlope, pathX, RIVER_HALF, rng, terrainY, WATER_LEVEL } from './canoe-scene';
 
 const blank = (): Pose => ({ x: 0, y: 0, z: 0, yaw: 0, roll: 0 });
 const calfBlank = (): CalfPose => ({ x: 0, z: 0, y: 0, pitch: 0, visible: false, surfaced: 0 });
@@ -112,5 +112,28 @@ describe('closing pages and rng', () => {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThan(1);
     }
+  });
+});
+
+describe('ground under the scenery', () => {
+  it('meshY equals terrainY on every grid vertex', () => {
+    for (const [x, z] of [
+      [-125, 70],
+      [0, 0],
+      [12.5, -100],
+      [-2.5, -297.5],
+    ] as const)
+      expect(meshY(x, z)).toBeCloseTo(terrainY(x, z), 5);
+  });
+  it('is the flat triangle between vertices (never the curve above it)', () => {
+    const r = rng(5);
+    let worst = 0;
+    for (let i = 0; i < 20000; i++) {
+      const z = 70 - r() * 400;
+      const x = pathX(z) + (r() < 0.5 ? -1 : 1) * (RIVER_HALF + 1.5 + r() * 80);
+      worst = Math.max(worst, Math.abs(meshY(x, z) - terrainY(x, z)));
+    }
+    expect(worst).toBeGreaterThan(0.2); // proves the old placement could float
+    expect(worst).toBeLessThan(0.8);
   });
 });

@@ -7,9 +7,11 @@ import { EDGE_X, shoreY } from './river';
 import type { Systems } from './run';
 
 /** Tuning knobs. Mom's lantern is the chapter's lantern, beside her on the pebbles. */
-export const MOM_LANTERN = { intensity: 5, distance: 28, height: 1.3 } as const;
+export const MOM_LANTERN = { intensity: 2, distance: 14, height: 1.3 } as const;
 const LANTERN_SIZE = { width: 0.14, height: 0.24 } as const;
-const LANTERN_COLOR = 0xffb060;
+const LANTERN_COLOR = 0xc07a30; // dim, so bloom only haloes it
+const LANTERN_GLOW_UP = 0.05;
+const lamp = new THREE.Vector3();
 
 /** The yaw that points a model's +Z from `(x, z)` toward `(toX, toZ)`. */
 export function facing(x: number, z: number, toX: number, toZ: number): number {
@@ -75,7 +77,10 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
       mom.update(dt);
       // Her feet follow the pebble shore where it slopes toward the water.
       if (lakeZ !== null) mom.group.position.y = shoreY(mom.group.position.z - lakeZ);
-      held?.position.set(mom.group.position.x + 0.5, MOM_LANTERN.height, mom.group.position.z);
+      if (held) {
+        mom.pack.getWorldPosition(lamp); // the lantern mesh rides her right hand
+        held.position.set(lamp.x, lamp.y + LANTERN_GLOW_UP, lamp.z);
+      }
     },
     place(toX, toZ, lantern) {
       actor.stop();

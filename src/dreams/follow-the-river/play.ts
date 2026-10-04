@@ -10,7 +10,7 @@ import { applyDim, LIGHTING } from './lighting';
 import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
 import { addSupply, AMMO_OF, chapterOf, isNight } from './state';
-import { ambushSpot, stepWaves, waveLeft } from './waves';
+import { ambushSpot, stepWaves } from './waves';
 import type { Tuning } from './zombies/brain';
 import type { PlayerSense } from './zombies/horde';
 
@@ -95,7 +95,6 @@ function createState(sys: Systems, run: Run, events: Events): State {
       weapon: 'bow',
       wave: 0,
       waves: area.waves.length,
-      left: 0,
     },
     wasPaused: true,
     hitPause: false,
@@ -225,7 +224,6 @@ function tickView(p: State, dt: number): void {
   hudState.health = run.health;
   const fighting = isNight(run.phase) && run.ending === 'no' && run.waves.fighting;
   hudState.wave = fighting ? run.waves.cleared + 1 : 0;
-  hudState.left = waveLeft(run.waves, sys.horde.aliveCount());
   sys.hud.set(hudState);
   sys.hud.prompt(p.controls.prompt());
 }

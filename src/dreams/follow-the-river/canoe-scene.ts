@@ -15,7 +15,7 @@ export const RIVER_HALF = 8;
 export const BED_Y = -1.6;
 export const WATER_LEVEL = 0;
 /** Terrain cell size, half-width (x) and the margins past each end of the ride (z). */
-const TERRAIN = { cell: 2.5, halfWidth: 125, behind: 70, ahead: 120 } as const;
+export const TERRAIN = { cell: 2.5, halfWidth: 125, behind: 70, ahead: 120 } as const;
 
 const TAU = Math.PI * 2;
 
@@ -121,6 +121,25 @@ const isLeaf = (n: string): boolean => /leaf/i.test(n);
 const isWood = (n: string): boolean => /wood|bark/i.test(n);
 const isGrass = (n: string): boolean => /grass/i.test(n);
 
+/** Pure: the terrain mesh's own height at (x, z): the flat triangle of the grid cell, exactly as drawn. */
+export function meshY(x: number, z: number, zNear: number = TERRAIN.behind): number {
+  const { cell, halfWidth } = TERRAIN;
+  const k = Math.floor((x + halfWidth) / cell);
+  const r = Math.floor((zNear - z) / cell);
+  const x0 = -halfWidth + k * cell;
+  const z0 = zNear - r * cell;
+  const u = (x - x0) / cell;
+  const v = (z0 - z) / cell;
+  const h00 = terrainY(x0, z0);
+  const h10 = terrainY(x0 + cell, z0);
+  const h01 = terrainY(x0, z0 - cell);
+  const h11 = terrainY(x0 + cell, z0 - cell);
+  // makeTerrain's index order: (i, i+cols, i+1) and (i+1, i+cols, i+cols+1).
+  return u + v <= 1
+    ? h00 + (h10 - h00) * u + (h01 - h00) * v
+    : h11 + (h01 - h11) * (1 - u) + (h10 - h11) * (1 - v);
+}
+
 function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
   const { cell, halfWidth } = TERRAIN;
   const cols = Math.round((2 * halfWidth) / cell) + 1;
@@ -172,6 +191,8 @@ interface Scatter {
   minY: number;
 }
 
+const SINK = 0.15; // trunks and rocks bite into the ground
+
 /** Clones `model` at random bank spots (deterministic). */
 function scatter(
   s: Scatter,
@@ -185,11 +206,10 @@ function scatter(
     const z = zNear - rand() * (zNear - zFar);
     const d = s.from + (s.to - s.from) * rand() ** 1.4;
     const x = pathX(z) + (rand() < 0.5 ? -d : d);
-    const y = terrainY(x, z);
-    if (y < s.minY) continue;
+    if (terrainY(x, z) < s.minY) continue;
     const item = s.model.clone(true);
     recolor(item);
-    item.position.set(x, y - 0.05, z);
+    item.position.set(x, meshY(x, z) - SINK, z);
     item.rotation.y = rand() * TAU;
     item.scale.setScalar(s.scale[0] + (s.scale[1] - s.scale[0]) * rand());
     out.push(item);
@@ -300,7 +320,7 @@ function makeFlowers(zNear: number, zFar: number): THREE.InstancedMesh {
   for (let i = 0; i < count; i++) {
     const z = zNear - rand() * (zNear - zFar);
     const x = pathX(z) + (rand() < 0.5 ? -1 : 1) * (RIVER_HALF + 2 + rand() ** 1.5 * 30);
-    dummy.position.set(x, terrainY(x, z) + 0.13, z);
+    dummy.position.set(x, meshY(x, z) + 0.13, z);
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
     mesh.setColorAt(i, color.setHex(COLORS.flowers[i % COLORS.flowers.length] ?? 0xffffff));

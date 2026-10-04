@@ -11,7 +11,6 @@ import {
   stepWaves,
   WAVE,
   waveCrates,
-  waveLeft,
   waveTotal,
   type WaveEvent,
 } from './waves';
@@ -30,13 +29,12 @@ const first = (): WaveDef => {
 };
 
 /** Walks the whole zone of wave `i` from its start to its gate; `kill` empties the bank each frame. */
-function walk(i: number, kill: boolean): { events: WaveEvent[]; fired: number[]; left: number[] } {
+function walk(i: number, kill: boolean): { events: WaveEvent[]; fired: number[] } {
   const w = newWaveState(i);
   const def = waves[i];
   if (!def) throw new Error('no such wave');
   const events: WaveEvent[] = [];
   const fired: number[] = [];
-  const left: number[] = [];
   let alive = 0;
   for (let z = def.z + 5; z > def.gateZ; z -= 0.5) {
     const e = stepWaves(w, waves, z, alive);
@@ -45,10 +43,9 @@ function walk(i: number, kill: boolean): { events: WaveEvent[]; fired: number[];
       alive += e.ambush.count;
       fired.push(z);
     }
-    left.push(waveLeft(w, alive));
     if (kill) alive = 0;
   }
-  return { events, fired, left };
+  return { events, fired };
 }
 
 describe('waves', () => {
@@ -82,16 +79,8 @@ describe('waves', () => {
     const z = def.gateZ + 1;
     while (w.fired < def.ambushes.length) stepWaves(w, waves, z, 0);
     expect(stepWaves(w, waves, z, 2)).toBeNull(); // two lying ones still down
-    expect(waveLeft(w, 2)).toBe(2);
     expect(stepWaves(w, waves, z, 0)).toEqual({ kind: 'clear', wave: 0 });
     expect([w.cleared, w.fighting]).toEqual([1, false]);
-  });
-
-  it('the counter starts at the whole wave and never goes up', () => {
-    const { left } = walk(1, false);
-    const fight = left.filter((n) => n > 0);
-    expect(fight[0]).toBe(waveTotal(waves[1] ?? first()));
-    for (let i = 1; i < fight.length; i++) expect(fight[i]).toBeLessThanOrEqual(fight[i - 1] ?? 0);
   });
 
   it('restarts at a checkpoint on the next wave with none sprung', () => {
@@ -99,7 +88,6 @@ describe('waves', () => {
     const def = waves[1] ?? first();
     expect(stepWaves(w, waves, def.z - 1, 0)).toEqual({ kind: 'start', wave: 1 });
     expect(w.fired).toBe(0);
-    expect(waveLeft(w, 0)).toBe(waveTotal(def));
   });
 
   it('never runs past the last wave', () => {

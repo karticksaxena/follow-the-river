@@ -21,8 +21,8 @@ describe('hearts', () => {
 
 describe('hud text', () => {
   it('shows the wave being fought, the torch with its spares, and the guns you own as bits', () => {
-    expect(waveText(2, 3, 5)).toBe('Wave 2/3 · 5 left');
-    expect(waveText(0, 3, 0)).toBe('');
+    expect(waveText(2, 3)).toBe('Wave 2 of 3');
+    expect(waveText(0, 3)).toBe('');
     expect(torchText(100, 2)).toBe('🔦 ▮▮▮▮▮ +2');
     expect(torchText(30, 0)).toBe('🔦 ▮▮▯▯▯');
     expect(gunBits([])).toBe(0);

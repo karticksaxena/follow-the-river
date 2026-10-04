@@ -19,7 +19,6 @@ export interface HudState {
   /** The wave being fought (1-based; 0 = none), of how many, and zombies left in it. */
   wave: number;
   waves: number;
-  left: number;
 }
 
 const NAMES: Readonly<Record<Weapon, string>> = {
@@ -38,9 +37,9 @@ export function gunBits(guns: readonly GunKind[]): number {
   return bits;
 }
 
-/** "Wave 2/3 · 5 left", or '' between waves. */
-export function waveText(wave: number, waves: number, left: number): string {
-  return wave > 0 ? `Wave ${wave}/${waves} · ${left} left` : '';
+/** "Wave 2 of 3", or '' between waves. */
+export function waveText(wave: number, waves: number): string {
+  return wave > 0 ? `Wave ${wave} of ${waves}` : '';
 }
 
 /** The torch: its cells and the spares, e.g. "🔦 ▮▮▮▯▯ +2". */
@@ -123,7 +122,6 @@ function buildHud(root: HTMLElement): HudEls {
     weapon: 'bow',
     wave: 0,
     waves: 0,
-    left: 0,
   };
   return {
     hud,
@@ -165,8 +163,8 @@ function writeStats(h: HudEls, s: HudState): void {
   if (fresh || last.arrows !== s.arrows) h.arrows.textContent = `➶ ${s.arrows}`;
   if (fresh || last.fishPacks !== s.fishPacks) h.fish.textContent = `🐟 ${s.fishPacks}`;
   writeWeapons(h, s);
-  if (fresh || last.wave !== s.wave || last.left !== s.left) {
-    h.waveEl.textContent = waveText(s.wave, s.waves, s.left);
+  if (fresh || last.wave !== s.wave) {
+    h.waveEl.textContent = waveText(s.wave, s.waves);
   }
   if (fresh || last.health !== s.health) {
     h.health.textContent = hearts(s.health);

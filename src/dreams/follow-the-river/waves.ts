@@ -75,10 +75,6 @@ export function stepWaves(
   return { kind: 'clear', wave: w.cleared - 1 };
 }
 
-/** The wave's zombies left (not yet sprung plus alive), or 0 when it isn't being fought. */
-export const waveLeft = (w: WaveState, alive: number): number =>
-  w.fighting ? w.toSpawn + alive : 0;
-
 /** Pure: where one zombie of an ambush goes, on the bank within [minX, maxX], never past the gate. */
 export function ambushSpot(
   a: AmbushDef,

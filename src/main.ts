@@ -64,6 +64,7 @@ async function boot(): Promise<void> {
         if (error === null) home.dispose();
         return error;
       });
+      void overlay.fade(false); // finish() left the screen black
     } catch {
       showMessage(overlay, "Kartik's Dreams", HOME_FAILED);
       await overlay.fade(false);
