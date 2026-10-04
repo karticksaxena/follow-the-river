@@ -15,7 +15,7 @@ import {
 } from './fish-parts';
 import type { Grab, GrabHooks, GrabPose, StrikeStyle } from './orca-grab';
 import { makeMist, makeSick, type Blow, type Sickness } from './orca-sick';
-import type { Strand } from './orca-strand';
+import { STRAND, type Strand } from './orca-strand';
 import { picker, type Sounds } from './sounds';
 
 const CAPACITY = Math.max(32, HORDE_CAPACITY);
@@ -57,6 +57,11 @@ export interface FishState {
   readonly mixer: THREE.AnimationMixer;
   readonly swim: THREE.AnimationAction;
   readonly lunge: THREE.AnimationAction;
+  /** The Beached clip she lies in, and the bones that sag on top of it (see orca-strand.ts). */
+  readonly settled: THREE.AnimationAction;
+  readonly sagBones: readonly THREE.Object3D[];
+  /** Where the zombie she struck last was (read-only for the ending), or null. */
+  lastStrike: { x: number; z: number } | null;
   readonly buffer: Float32Array;
   readonly packFrom: THREE.Vector3;
   readonly packTo: THREE.Vector3;
@@ -107,14 +112,15 @@ export interface FishState {
 function makeClips(
   body: THREE.Object3D,
   asset: SkinnedAsset,
-): Pick<FishState, 'mixer' | 'swim' | 'lunge'> {
+): Pick<FishState, 'mixer' | 'swim' | 'lunge' | 'settled'> {
   const mixer = new THREE.AnimationMixer(body);
   const swim = mixer.clipAction(findClip(asset.clips, 'Swim'));
   const lunge = mixer.clipAction(findClip(asset.clips, 'Lunge'));
   lunge.setLoop(THREE.LoopOnce, 1);
   lunge.clampWhenFinished = true;
+  const settled = mixer.clipAction(findClip(asset.clips, 'Beached'));
   swim.play();
-  return { mixer, swim, lunge };
+  return { mixer, swim, lunge, settled };
 }
 
 function collectZombie(f: FishState, id: number, x: number, z: number): void {
@@ -159,7 +165,7 @@ export function createState(
   const blow = audio.positional(splashAt, 4);
   const thump = audio.positional(splashAt, 4);
   const voice = audio.positional(root, 6);
-  const { mixer, swim, lunge } = makeClips(body, asset);
+  const { mixer, swim, lunge, settled } = makeClips(body, asset);
   const buffer = new Float32Array(CAPACITY * 3);
   const f: FishState = {
     scene,
@@ -184,6 +190,9 @@ export function createState(
     mixer,
     swim,
     lunge,
+    settled,
+    sagBones: STRAND.bend.bones.flatMap((n) => body.getObjectByName(n) ?? []),
+    lastStrike: null,
     buffer,
     packFrom: new THREE.Vector3(),
     packTo: new THREE.Vector3(),

@@ -42,8 +42,8 @@ export interface Horde {
   /** A bullet or arrow struck `id`: true if it died (a head hit, or enough body hits), else it flinches. */
   hurt(id: number, head: boolean): boolean;
   kill(id: number): void;
-  /** The orca knocks `id` into the lake (the jaws are at fromX, fromZ): it flies, splashes, sinks. */
-  throwByFish(id: number, fromX: number, fromZ: number): void;
+  /** The orca knocks `id` into the lake (its jaws are at depth jawZ: it flies away from them): it flies, splashes, sinks. */
+  throwByFish(id: number, jawZ: number): void;
   /** Called where a thrown zombie hits the water (the orca's big splash). */
   onSplash: ((x: number, z: number) => void) | null;
   /** The orca bites `id`: false if it is no longer alive. Pose it with hold(), end with drown(). */
@@ -388,7 +388,7 @@ export async function createHorde(
     rayHit: (origin, dir, maxDistance) => rayHitHorde(bodies, origin, dir, maxDistance),
     hurt: (id, head) => hurtBody(bodies[id], head),
     kill: (id) => killMind(bodies[id].mind),
-    throwByFish: (id, _fromX, fromZ) => throwBody(bodies[id], fromZ),
+    throwByFish: (id, jawZ) => throwBody(bodies[id], jawZ),
     get onSplash() {
       return h.onSplash;
     },

@@ -159,7 +159,10 @@ export function play(b: Body, intent: Intent, fade = FADE): void {
 const air = { x: 0, y: 0 };
 
 /** The orca knocked it aside: it flies into the lake, splashes once, and sinks (see `thrownPose`). */
-function fly(b: Body, dt: number): void {
+export function fly(
+  b: Pick<Body, 'fly' | 'fromX' | 'fromZ' | 'push' | 'x' | 'y' | 'z' | 'splashDue'>,
+  dt: number,
+): void {
   b.fly += dt;
   const inWater = thrownPose(b.fly, { x: b.fromX, z: b.fromZ }, EDGE_X, air);
   b.x = air.x;

@@ -8,6 +8,7 @@ import {
   strandPose,
   strandRest,
   swimming,
+  UNDERSIDE,
 } from './orca-strand';
 import { shoreY } from './river';
 
@@ -21,27 +22,35 @@ describe('where she lies', () => {
   it('lies up the shore facing the pebbles, nose up the slope, tail back in the lake', () => {
     expect(rest.yaw).toBeCloseTo(Math.PI);
     expect(rest.z).toBeCloseTo(LAKE_Z);
-    expect(rest.pitch).toBeGreaterThan(0.1); // nose up the 14 degree slope
+    expect(rest.pitch).toBeGreaterThan(0); // nose up the slope (her sagging tail is what dips)
   });
 
-  it('lies ON the pebbles: her lowest point (the pectoral tips) touches, nothing is under the shore', () => {
-    const gaps = restGaps(rest, shore); // chin, belly, pectoral tips, rear belly, tail
-    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(-0.001); // not buried
-    expect(Math.min(...gaps)).toBeLessThan(0.05); // and resting on something
-    expect(gaps[2]).toBeLessThan(0.05); // the pectoral tips are what she rests on
-  });
+  /** The underside gap at the sample `ahead` m from the centre (see UNDERSIDE). */
+  const gapAt = (ahead: number): number => {
+    const i = UNDERSIDE.findIndex(([a]) => a === ahead);
+    return restGaps(rest, shore)[i];
+  };
 
-  it('keeps the chin and the tail close above the slope (the rigid body cannot touch at all three)', () => {
+  it('lies ON the pebbles: nothing under the shore, her lowest point touches', () => {
     const gaps = restGaps(rest, shore);
-    expect(gaps[0]).toBeLessThan(0.45);
-    expect(gaps[gaps.length - 1]).toBeLessThan(0.45);
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(-0.001); // not buried (pectoral tips included)
+    expect(Math.min(...gaps)).toBeLessThan(0.01); // and resting on something
+  });
+
+  it('has nose, chin, middle (pectoral tips) and tail all within 5 cm of the shore', () => {
+    for (const ahead of [3.4, 3, 1.3, -3]) expect(gapAt(ahead)).toBeLessThan(0.05);
+  });
+
+  it('bends the tail down into the lake to do it (a straight body cannot)', () => {
+    expect(STRAND.bend.angle).toBeGreaterThan(0.05);
+    expect(STRAND.bend.bones).toContain('Tail2');
   });
 
   it('is not half buried or floating on flat pebbles either', () => {
     const flat = strandRest(1.5, 3.5, () => 0);
     expect(Math.min(...restGaps(flat, () => 0))).toBeGreaterThanOrEqual(-0.001);
     expect(flat.y).toBeGreaterThan(0.5);
-    expect(flat.y).toBeLessThan(1.1);
+    expect(flat.y).toBeLessThan(1.3);
   });
 });
 

@@ -23,25 +23,45 @@ export const STRAND = {
   arc: 1.6,
   /** Slow breaths while it lies there: height (m) and breaths per second. */
   breath: { amp: 0.04, rate: 0.25 },
+  /**
+   * Once beached her spine and tail sag: each of these bones turns about its X axis by `-angle`
+   * (tail down) on top of the Beached clip, so the chin, pectoral tips and tail all lie on the slope.
+   * Seconds: the sag eases in over `settle` after the landing.
+   */
+  bend: { bones: ['Spine3', 'Spine4', 'Spine5', 'Tail1', 'Tail2'], angle: 0.13, settle: 1.2 },
 } as const;
 
 const HALF_LENGTH = ANATOMY.halfLength;
+const PITCH_MIN = -0.2;
 const PITCH_MAX = 0.6;
-const PITCH_STEP = 0.005;
+const PITCH_STEP = 0.004;
 
 /**
- * The orca's underside, measured from the model (`ahead` of the centre, `depth` below the root, m):
- * chin, belly, the pectoral tips (the lowest points: 0.15 m below the belly), rear belly, tail.
- * The first is the "nose", the third the "middle", the last the "tail".
+ * The orca's underside as she lies (the Beached clip's rest pose with `STRAND.bend` on top), measured
+ * from the skinned mesh in three.js (`ahead` of the centre, `depth` below the root, m): the nose tip
+ * (3.4), chin (3), pectoral tips (the lowest points, 1.3-1.5), belly, and the tail sagging into the lake.
  */
 export const UNDERSIDE: readonly (readonly [number, number])[] = [
-  [3.0, 0.54],
-  [2.0, 0.65],
+  [3.4, 0.423],
+  [3, 0.53],
+  [2.5, 0.586],
+  [2, 0.64],
+  [1.5, 0.831],
   [1.3, 0.844],
-  [0, 0.66],
-  [-1.5, 0.46],
-  [-3.0, 0.18],
+  [1, 0.684],
+  [0.5, 0.677],
+  [0, 0.687],
+  [-0.5, 0.702],
+  [-1, 0.79],
+  [-1.5, 0.946],
+  [-2, 1.151],
+  [-2.5, 1.481],
+  [-3, 1.717],
 ];
+/** The samples that must touch: nose tip, chin, pectoral tips (1.3), tail; and how much more they weigh than the belly. */
+const KEY = [0, 1, 5, UNDERSIDE.length - 1] as const;
+const KEY_WEIGHT = 10;
+
 /** Where a pose's underside sample `[ahead, depth]` is (z along the shore, and height). */
 function underside(rest: GrabPose, [ahead, depth]: readonly [number, number]): [number, number] {
   const { pitch } = rest;
@@ -88,20 +108,22 @@ const lerpAngle = (a: number, b: number, s: number): number =>
  */
 export function strandRest(noseX: number, noseZ: number, ground: (z: number) => number): GrabPose {
   const z = noseZ - HALF_LENGTH;
-  let best: GrabPose | null = null;
-  let bestOver = Infinity;
-  // Nose-up from level to steep: the pitch that keeps the chin and tail lowest, resting on the tips.
-  for (let pitch = 0; pitch <= PITCH_MAX; pitch += PITCH_STEP) {
+  let best: GrabPose = { x: noseX, y: 0, z, yaw: Math.PI, pitch: 0 };
+  let bestScore = Infinity;
+  // Nose-up from a little down to steep: lowest total gap, the nose, chin, pectoral tips and tail first.
+  for (let pitch = PITCH_MIN; pitch <= PITCH_MAX; pitch += PITCH_STEP) {
     const rest = { x: noseX, y: 0, z, yaw: Math.PI, pitch };
     const gaps = restGaps(rest, ground);
-    rest.y = -Math.min(...gaps);
-    const over = Math.max(gaps[0], gaps[gaps.length - 1]) + rest.y;
-    if (over < bestOver) {
-      bestOver = over;
-      best = rest;
+    const low = Math.min(...gaps);
+    const score =
+      gaps.reduce((sum, g) => sum + g - low, 0) +
+      KEY_WEIGHT * Math.max(...KEY.map((i) => gaps[i] - low));
+    if (score < bestScore) {
+      bestScore = score;
+      best = { ...rest, y: -low };
     }
   }
-  return best ?? { x: noseX, y: 0, z, yaw: Math.PI, pitch: 0 };
+  return best;
 }
 
 export function newStrand(from: GrabPose, rest: GrabPose, cruiseY: number): Strand {
@@ -172,6 +194,10 @@ export function strandPose(s: Strand, out: GrabPose): GrabPose {
   }
   return out;
 }
+
+/** Pure: how far her spine and tail have sagged (0 flying .. 1 settled on the shore). */
+export const strandBend = (s: Strand): number =>
+  smooth(clamp01((s.t - s.ends.leap) / STRAND.bend.settle));
 
 /** True once it has landed (the leap is over). */
 export const beached = (s: Strand): boolean => s.t >= s.ends.leap;

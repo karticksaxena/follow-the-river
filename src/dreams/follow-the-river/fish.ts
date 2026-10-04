@@ -3,7 +3,6 @@ import type { AudioBus } from '../../engine/audio';
 import { loadModel, loadSkinned } from '../../engine/models';
 import type { Vec3 } from '../../engine/ray';
 import { waterlineX } from './banks';
-import { ANATOMY } from './dras-anatomy';
 import {
   cruiseHeading,
   cruiseTargetX,
@@ -21,20 +20,13 @@ import {
   turnToward,
   WAKE_SIZE,
 } from './fish-parts';
-import { callOut, playBlow, playSplash } from './fish-sound';
+import { callOut, playSplash } from './fish-sound';
 import { createState, type Finale, type FishState, type Rise } from './fish-state';
+import { blowOut, openJaw, stepMist, stepStrand } from './fish-strand';
 import { characterUrl, propUrl } from './kits';
 import { jawAt, newGrab, stepGrab, type GrabHooks, type StrikeStyle } from './orca-grab';
-import { blowAt, mistColor, SICK } from './orca-sick';
-import {
-  beached,
-  newStrand,
-  strandPhases,
-  strandPose,
-  strandRest,
-  swimming,
-  type Strand,
-} from './orca-strand';
+import { mistColor, SICK } from './orca-sick';
+import { beached, newStrand, strandRest, swimming } from './orca-strand';
 import { EDGE_X, WATER_Y } from './river';
 import type { Sounds } from './sounds';
 import type { Horde } from './zombies/horde';
@@ -51,8 +43,6 @@ const PACK_DISTANCE = 4;
 const PACK_TIME = 1;
 const PACK_ARC = 1.2;
 const SURFACE_DRIFT = 1.5; // metres downstream while surfacing
-/** Where the blow rises from: ahead of the body's centre and up near its back (m). */
-const BLOWHOLE = ANATOMY.blowhole;
 
 export interface Fish {
   /** The ending's state (read it each frame; it only moves forward). */
@@ -75,6 +65,8 @@ export interface Fish {
    * Mom's group): she only takes zombies within the style's `guard` of one of them.
    */
   setGuards(points: readonly { x: number; z: number }[]): void;
+  /** Where the zombie she struck last was (null before the first strike): the ending reads it. */
+  readonly lastStrike: { readonly x: number; readonly z: number } | null;
   /** Night: strikes left this phase. */
   readonly strikes: number;
   /** Arms `strikes` for the night, struck in `style` (a normal night's by default). */
@@ -87,48 +79,12 @@ export interface Fish {
   dispose(): void;
 }
 
-const OPEN_AXIS = new THREE.Vector3(1, 0, 0);
-const jawTurn = new THREE.Quaternion();
-
-/** Opens her jaw bone `k` (0 shut .. 1 open) on top of the animation (call after `mixer.update`). */
-function openJaw(f: FishState, k: number): void {
-  f.jaw?.quaternion.multiply(jawTurn.setFromAxisAngle(OPEN_AXIS, -ANATOMY.jawOpen * k));
-}
-
 /** In the last stand she fights beside you: a finite guard (see `Fish.setGuards`). */
 const besideYou = (f: FishState): boolean => Number.isFinite(f.style.guard);
 
 /** Seconds until her next surfacing: oftener beside you in the last stand. */
 const nextUp = (f: FishState): number =>
   besideYou(f) ? fightSurfacing(Math.random()) : nextSurfacing(Math.random(), f.sickness);
-
-/** It breathes out: the blow's sound and its mist. */
-function blowOut(f: FishState): void {
-  playBlow(f);
-  f.mistT = 0;
-  f.mist.visible = true;
-}
-
-/** The mist rises from the blowhole, grows and fades. */
-function stepMist(f: FishState, dt: number): void {
-  if (f.mistT < 0) return;
-  f.mistT += dt;
-  const b = f.blowOut;
-  if (!blowAt(f.mistT, f.sickness, b)) {
-    f.mistT = -1;
-    f.mist.visible = false;
-    return;
-  }
-  const { x, y, z } = f.root.position;
-  const ahead = BLOWHOLE.ahead;
-  f.mist.position.set(
-    x - Math.sin(f.yaw) * ahead,
-    y + BLOWHOLE.up + b.rise,
-    z - Math.cos(f.yaw) * ahead,
-  );
-  f.mist.scale.setScalar(b.size);
-  f.mist.material.opacity = b.opacity;
-}
 
 function startRise(
   f: FishState,
@@ -203,6 +159,7 @@ function tryStrike(f: FishState, player: { x: number; z: number }, horde: Horde)
     }
   }
   f.strikes--;
+  f.lastStrike = { x: zx, z: zz };
   f.cooldown = f.style.cooldown;
   const { x, y, z } = f.root.position;
   const from = { x, y, z, yaw: f.yaw, pitch: 0 };
@@ -325,26 +282,6 @@ function startStrand(
   );
 }
 
-function stepStrand(f: FishState, s: Strand, dt: number): void {
-  const { rise, dip } = strandPhases(s);
-  const was = s.t;
-  s.t += dt;
-  strandPose(s, f.pose);
-  const { pose } = f;
-  f.root.position.set(pose.x, pose.y, pose.z);
-  f.yaw = pose.yaw;
-  f.root.rotation.set(pose.pitch, pose.yaw, 0);
-  if (was < rise && s.t >= rise) {
-    playSplash(f, pose.x, pose.z); // she breaks the surface and blows
-    blowOut(f);
-  }
-  if (was < dip && s.t >= dip) {
-    f.lunge.reset().play();
-    f.lunge.crossFadeFrom(f.swim, FADE, false);
-  }
-  if (was < s.ends.leap && beached(s)) playSplash(f, pose.x, pose.z - 3, true);
-}
-
 function updateFish(
   f: FishState,
   dt: number,
@@ -406,9 +343,12 @@ function resetFish(f: FishState): void {
   for (const a of [f.splash, f.thump, f.voice]) if (a.isPlaying) a.stop();
   if (f.grab || f.strand) {
     f.lunge.stop();
+    f.settled.stop();
     f.swim.reset().play();
   }
   f.swim.timeScale = 1;
+  f.settled.timeScale = 1;
+  f.lastStrike = null;
   f.rise = null;
   f.grab = null; // horde.reset parks a zombie still in the jaws
   f.strand = null;
@@ -475,6 +415,7 @@ export async function createFish(
       blowOut(f);
       if (f.strand) f.strand.still = true;
       f.swim.timeScale = 0; // the tail stops
+      f.settled.timeScale = 0;
     },
     setSickness(k) {
       f.sickness = Math.min(1, Math.max(0, k));
@@ -489,6 +430,9 @@ export async function createFish(
     },
     get strikes() {
       return f.strikes;
+    },
+    get lastStrike() {
+      return f.lastStrike;
     },
     arm(n, style = NIGHT_STRIKE) {
       f.strikes = n;

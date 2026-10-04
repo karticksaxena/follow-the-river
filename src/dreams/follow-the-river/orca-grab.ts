@@ -280,7 +280,7 @@ function sweepAside(g: Grab, horde: Prey): void {
   if (g.sweep <= 0) return;
   horde.forEachAlive((id, x, z) => {
     if (id !== g.victim && Math.hypot(x - jaw.x, z - jaw.z) <= g.sweep)
-      horde.throwByFish(id, jaw.x, jaw.z);
+      horde.throwByFish(id, jaw.z);
   });
 }
 

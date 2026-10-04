@@ -12,6 +12,7 @@ import {
   nightEnd,
   REPLAY_PAGES,
   sickenToEnd,
+  struckNear,
   WAVE,
   waveCount,
   waveDue,
@@ -77,6 +78,12 @@ describe('the stranding', () => {
 });
 
 describe('the last stand', () => {
+  it('Mom flinches only when the orca strikes within 4 m of her', () => {
+    expect(struckNear({ x: 0, z: 3 }, { x: 0, z: 0 })).toBe(true);
+    expect(struckNear({ x: 0, z: 9 }, { x: 0, z: 0 })).toBe(false);
+    expect(struckNear(null, { x: 0, z: 0 })).toBe(false);
+  });
+
   it('sends a horde in groups, too big for you alone, and never more', () => {
     expect(waveDue(0)).toBe(WAVE.group);
     expect(waveDue(WAVE.gap)).toBe(2 * WAVE.group);
