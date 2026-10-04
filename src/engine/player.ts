@@ -100,6 +100,8 @@ export function createPlayer(
     update(dt) {
       if (!inputOn) {
         fall(air, dt);
+        stepBob(bob, 'stand', dt); // settle the head bob instead of freezing mid-stride
+        camera.rotation.z = bob.roll;
         moveBy(0, 0);
         return;
       }

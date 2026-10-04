@@ -79,6 +79,13 @@ function bobPeak(gait: 'walk' | 'sprint'): number {
 }
 
 describe('stepBob', () => {
+  it('settles a mid-stride bob within a second of standing', () => {
+    const b = { phase: 1, amp: BOB.sprint.amp, y: 0.06, roll: 0.012 };
+    for (let i = 0; i < 60; i++) stepBob(b, 'stand', 1 / 60);
+    expect(Math.abs(b.y)).toBeLessThan(0.001);
+    expect(Math.abs(b.roll)).toBeLessThan(0.001);
+  });
+
   it('bobs more and faster when sprinting, and settles when you stop', () => {
     expect(bobPeak('sprint')).toBeGreaterThan(bobPeak('walk'));
     expect(bobPeak('walk')).toBeLessThanOrEqual(BOB.walk.amp + 1e-9);

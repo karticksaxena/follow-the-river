@@ -176,7 +176,8 @@ function switchWeapons(c: Ctl, dt: number): void {
   const { keys } = c.sys.ctx;
   const { guns } = c.run.live;
   for (const key of WEAPON_KEYS) {
-    if (keys.consumePress(key)) startSwitch(c.sw, nextWeapon(c.sw.current, guns, key), key);
+    if (keys.consumePress(key) && !c.run.cutscene)
+      startSwitch(c.sw, nextWeapon(c.sw.current, guns, key), key);
   }
   const drop = stepSwitch(c.sw, dt) * LOWER;
   for (const w of SLOTS) {

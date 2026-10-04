@@ -53,6 +53,9 @@ interface State {
   hitPause: boolean;
   grace: number;
   toldAboutWait: boolean;
+  /** Last cutscene state seen, and the torch as it was before the cutscene took it. */
+  cutscene: boolean;
+  torchBefore: boolean;
   wasInShack: boolean;
   blocked: (x: number, z: number) => boolean;
   onHit: (damage: number) => void;
@@ -100,6 +103,8 @@ function createState(sys: Systems, run: Run, events: Events): State {
     hitPause: false,
     grace: 0,
     toldAboutWait: false,
+    cutscene: false,
+    torchBefore: false,
     wasInShack: false,
     blocked(x, z) {
       for (const box of grid.near(x, z, 1)) {
@@ -201,6 +206,18 @@ function tickDim(p: State, dt: number): void {
   }
 }
 
+/** On entering or leaving a cutscene: hide or show the HUD, torch off then back as it was. */
+function syncCutscene(p: State): void {
+  const { sys, run } = p;
+  if (run.cutscene === p.cutscene) return;
+  p.cutscene = run.cutscene;
+  sys.hud.setHidden(run.cutscene);
+  if (run.cutscene) {
+    p.torchBefore = sys.flashlight.on;
+    sys.flashlight.on = false;
+  } else sys.flashlight.on = p.torchBefore;
+}
+
 function tickView(p: State, dt: number): void {
   const { sys, run, sense, hudState } = p;
   const s = run.live.supplies;
@@ -224,7 +241,6 @@ function tickView(p: State, dt: number): void {
   hudState.health = run.health;
   const fighting = isNight(run.phase) && run.ending === 'no' && run.waves.fighting;
   hudState.wave = fighting ? run.waves.cleared + 1 : 0;
-  sys.hud.setHidden(run.cutscene);
   sys.hud.set(hudState);
   sys.hud.prompt(p.controls.prompt());
 }
@@ -257,7 +273,7 @@ function tick(p: State, dt: number): void {
   }
   run.time += dt;
   updateSense(p);
-  if (run.cutscene) sys.flashlight.on = false;
+  syncCutscene(p);
   p.controls.update(dt);
   tickWorld(p, dt);
   sys.scares.update(dt, sense, isNight(run.phase) && run.ending !== 'calm');
