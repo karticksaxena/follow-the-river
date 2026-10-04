@@ -19,7 +19,7 @@ import {
   vec3,
 } from 'three/tsl';
 import * as THREE from 'three/webgpu';
-import type { Tier } from '../../engine/quality';
+import { TIERS, type Tier } from '../../engine/quality';
 import { NO_REFLECTION_LAYER } from '../../engine/volume';
 
 /** Downstream speed in m/s and the water's colours. Tuning knobs. */
@@ -43,7 +43,8 @@ export interface WaterLook {
 
 /** Reflection tuning: fraction of the frame the reflector renders at, and how much of it shows. */
 export const REFLECTION = {
-  resolutionScale: 0.35,
+  /** Low has no reflection pass: this flat colour (dim sky-blue, HDR) stands in for it. */
+  lowColor: 0x0a141c,
   /** Reflectivity looking straight down (Schlick F0 for water is ~0.02; a touch more reads better). */
   base: 0.06,
   /** Cap at grazing angles. A lit window reflects; the water never glows. */
@@ -186,7 +187,7 @@ function fresnelNode(cosTheta: THREE.Node<'float'>, still: boolean): THREE.Node<
  * water mesh (`createWaterMesh` does). Disposing the material frees the reflection render target.
  */
 export function createRiverMaterial(look: WaterLook = RIVER_FLOW): THREE.MeshStandardNodeMaterial {
-  const reflection = reflector({ resolutionScale: REFLECTION.resolutionScale, bounces: false });
+  const reflection = reflector({ resolutionScale: reflectionScale(waterTier), bounces: false });
   // The virtual camera is a clone of the player's: it must not see the unreflected layer.
   const base = reflection.reflector;
   const virtualCamera = base.getVirtualCamera.bind(base);
@@ -207,19 +208,27 @@ export function createRiverMaterial(look: WaterLook = RIVER_FLOW): THREE.MeshSta
   return material;
 }
 
+/** The reflector's resolution share for a tier (Low never renders it: any value, kept above 0). */
+function reflectionScale(tier: Tier): number {
+  return Math.max(0.1, TIERS[tier].reflectionScale);
+}
+
 /** Water materials alive now, so a tier change can rebuild their shaders. */
 const live = new Map<THREE.MeshStandardNodeMaterial, WaterLook>();
 let waterTier: Tier = 'high';
 
 /**
- * Low drops the broad swell layer (half the noise); Medium and High are the same. Rebuilds the
+ * Low drops the broad swell layer (half the noise) and the planar reflection (a flat colour instead);
+ * Medium and High differ in the reflection's resolution (`TIERS`). Rebuilds the
  * live water shaders on a change (it happens when the Graphics setting or Auto steps).
  */
 export function setWaterTier(tier: Tier): void {
   if (tier === waterTier) return;
   waterTier = tier;
   for (const [m, look] of live) {
-    buildNodes(m, look, waterReflection(m));
+    const reflection = waterReflection(m);
+    reflection.reflector.resolutionScale = reflectionScale(tier);
+    buildNodes(m, look, reflection);
     m.needsUpdate = true;
   }
 }
@@ -277,7 +286,7 @@ function buildNodes(
   material.roughnessNode = float(0.45).sub(streaks.mul(0.35)).add(foam.mul(0.5));
   material.emissiveNode = color(look.glow)
     .mul(streaks)
-    .add(reflection.rgb.mul(strength))
+    .add((waterTier === 'low' ? color(REFLECTION.lowColor) : reflection.rgb).mul(strength))
     .add(color(FOAM.color).mul(foam.mul(FOAM.glow)))
     .add(color(SPECKS.color).mul(specks.mul(SPECKS.glow)))
     .add(glintColor.mul(glint));

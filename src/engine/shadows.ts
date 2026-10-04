@@ -1,6 +1,6 @@
 import { CSMShadowNode } from 'three/addons/csm/CSMShadowNode.js';
 import * as THREE from 'three/webgpu';
-import type { Tier } from './quality';
+import { TIERS, type Tier } from './quality';
 
 export interface KeyShadowSetup {
   cascades: number;
@@ -9,9 +9,9 @@ export interface KeyShadowSetup {
 
 /** Per tier: cascades and map size of the key light's shadows (Low has none). Tuning knobs. */
 export const KEY_SHADOWS: Readonly<Record<Tier, KeyShadowSetup | null>> = {
-  low: null,
-  medium: { cascades: 2, mapSize: 1024 },
-  high: { cascades: 3, mapSize: 2048 },
+  low: TIERS.low.keyShadow,
+  medium: TIERS.medium.keyShadow,
+  high: TIERS.high.keyShadow,
 };
 
 /** How far from the camera the cascades reach (m); beyond it nothing is shadowed. */

@@ -13,8 +13,6 @@ export const QUALITY = {
   minGap: 2,
   /** Per-frame weight of the newest frame in the moving average. */
   smoothing: 0.1,
-  /** Resolution step a tier drop restarts from. */
-  tierDropStep: 1,
 } as const;
 
 export interface Quality {
@@ -32,6 +30,70 @@ export type Graphics = Tier | 'auto';
 export const GRAPHICS: readonly Graphics[] = ['auto', 'low', 'medium', 'high'];
 
 const LAST = QUALITY.steps.length - 1;
+
+export interface TierSettings {
+  /** Planar water reflection: share of the frame it renders at; 0 = none (a flat colour stands in). */
+  reflectionScale: number;
+  /** The moon/sun's cascaded shadows; null = none. */
+  keyShadow: { cascades: number; mapSize: number } | null;
+  /** The torch's spot-shadow map size (px). */
+  torchShadowMap: number;
+  /** GTAO (with its normal pre-pass and TRAA); null = none. */
+  ao: { scale: number; samples: number } | null;
+  /** Bloom glow (lamps, windows, the moon). */
+  bloom: boolean;
+  /** Raymarch steps of the mist (0 = no pass; WebGL 2 never has it). */
+  mistSteps: number;
+  /** Resolution step Auto restarts from when it drops to this tier. */
+  dropStep: number;
+}
+
+/**
+ * Everything a tier turns on: the one table the engine and the game read. Tuning knobs.
+ * Low: no reflection pass, no shadows but the torch, scene pass + bloom + SMAA only.
+ */
+export const TIERS: Readonly<Record<Tier, TierSettings>> = {
+  low: {
+    reflectionScale: 0,
+    keyShadow: null,
+    torchShadowMap: 512,
+    ao: null,
+    bloom: true,
+    mistSteps: 0,
+    dropStep: 3,
+  },
+  medium: {
+    reflectionScale: 0.2,
+    keyShadow: { cascades: 1, mapSize: 1024 },
+    torchShadowMap: 512,
+    ao: { scale: 0.5, samples: 12 },
+    bloom: true,
+    mistSteps: 8,
+    dropStep: 1,
+  },
+  high: {
+    reflectionScale: 0.35,
+    keyShadow: { cascades: 3, mapSize: 2048 },
+    torchShadowMap: 1024,
+    ao: { scale: 0.75, samples: 24 },
+    bloom: true,
+    mistSteps: 12,
+    dropStep: 0,
+  },
+};
+
+/** A frame within this share of the cap period counts as cap-paced. */
+const CAP_PACED = 1.15;
+
+/**
+ * The number `adaptQuality` is fed. Under a binding cap the interval just equals the cap period and
+ * says nothing about headroom, so a cap-paced frame is judged by its work time (update and submit):
+ * Auto can climb back. A frame that ran longer than the cap period (the GPU is behind) is judged by
+ * its interval. `capMs` 0 (no cap) always uses the interval.
+ */
+export function frameCost(intervalMs: number, workMs: number, capMs: number): number {
+  return capMs > 0 && intervalMs <= capMs * CAP_PACED ? Math.min(intervalMs, workMs) : intervalMs;
+}
 
 export function newQuality(): Quality {
   return { step: 0, slow: 0, fast: 0, since: 0, ema: (QUALITY.slowMs + QUALITY.fastMs) / 2 };
@@ -90,7 +152,7 @@ export function adaptQuality(
     q.slow >= QUALITY.slowFor &&
     q.since >= QUALITY.minGap
   ) {
-    settle(q, QUALITY.tierDropStep);
+    settle(q, TIERS[lowerTier(tier)].dropStep);
     return 'tier';
   }
   return null;

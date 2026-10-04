@@ -20,6 +20,7 @@ export interface PerfReport {
   gpuMs: Stat | null;
   /** Median GPU ms per render pass, in submission order (shadows, reflection, pre-pass, scene...). */
   gpuPassMs: number[] | null;
+  /** Median per frame (all passes: shadows, reflection, pre-pass, scene...). */
   drawCalls: number;
   triangles: number;
 }
@@ -85,7 +86,10 @@ export function createPerf(renderer: THREE.WebGPURenderer): Perf {
   let cpu: number[] = [];
   let gpuTotals: number[] = [];
   let gpuPasses: number[][] = [];
+  let draws: number[] = [];
+  let tris: number[] = [];
   let last = 0;
+  let lastFrame = 0;
   let t0 = 0;
   let resolving = false;
 
@@ -110,6 +114,12 @@ export function createPerf(renderer: THREE.WebGPURenderer): Perf {
     gpu,
     begin(now) {
       if (!sampling) return;
+      // three resets the counters and advances `info.frame` once per animation tick; a loop stepped by
+      // hand (the playtest harness) does neither, which merged many frames into one. Do both here.
+      const info = renderer.info;
+      info.reset();
+      if (info.frame <= lastFrame) Object.assign(info, { frame: lastFrame + 1 }); // frame is typed readonly
+      lastFrame = info.frame;
       if (last > 0) intervals.push(now - last);
       last = now;
       t0 = performance.now();
@@ -117,19 +127,22 @@ export function createPerf(renderer: THREE.WebGPURenderer): Perf {
     end() {
       if (!sampling) return;
       cpu.push(performance.now() - t0);
-      if (gpu) void resolve();
+      draws.push(renderer.info.render.drawCalls);
+      tris.push(renderer.info.render.triangles);
+      if (gpu) resolve().catch(() => undefined); // a failed read only loses that sample
     },
     async sample(seconds) {
       intervals = [];
       cpu = [];
       gpuTotals = [];
       gpuPasses = [];
+      draws = [];
+      tris = [];
       last = 0;
       sampling = true;
       await new Promise((r) => setTimeout(r, seconds * 1000));
       if (gpu) await resolve();
       sampling = false;
-      const info = renderer.info.render;
       const frames = cpu.length;
       return {
         seconds,
@@ -139,8 +152,8 @@ export function createPerf(renderer: THREE.WebGPURenderer): Perf {
         cpuMs: summarize(cpu),
         gpuMs: gpu ? summarize(gpuTotals) : null,
         gpuPassMs: gpu ? gpuPasses.map((ms) => percentile(ms, 0.5)) : null,
-        drawCalls: info.drawCalls,
-        triangles: info.triangles,
+        drawCalls: percentile(draws, 0.5),
+        triangles: percentile(tris, 0.5),
       };
     },
   };

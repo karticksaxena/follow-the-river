@@ -11,8 +11,7 @@ export interface GpuInfo {
 const has = (text: string, pattern: RegExp): boolean => pattern.test(text);
 
 function intel(arch: string, text: string): Tier {
-  if (has(arch, /xe-hp|xe2-hp|xe-hpg/) || has(text, /\barc\b.*\ba\d{3}\b|\bb\d{3}\b/))
-    return 'high';
+  if (has(arch, /xe-hp|xe2-hp|xe-hpg/) || has(text, /\barc\b.*\b[ab]\d{3}\b/)) return 'high';
   if (has(arch, /^gen-?(9|11)\b/) || has(text, /\buhd\b/)) return 'low';
   return 'medium';
 }

@@ -32,9 +32,9 @@ describe('needsShadowChange', () => {
     expect(needsShadowChange(null, 'low')).toBe(false);
   });
 
-  it('gives High 3 cascades at 2048, Medium 2 at 1024, Low none', () => {
+  it('gives High 3 cascades at 2048, Medium 1 at 1024, Low none', () => {
     expect(KEY_SHADOWS.high).toEqual({ cascades: 3, mapSize: 2048 });
-    expect(KEY_SHADOWS.medium).toEqual({ cascades: 2, mapSize: 1024 });
+    expect(KEY_SHADOWS.medium).toEqual({ cascades: 1, mapSize: 1024 });
     expect(KEY_SHADOWS.low).toBeNull();
   });
 });
@@ -69,7 +69,7 @@ describe('syncKeyShadows', () => {
     attachKeyShadows(light, 'high');
     expect([cascades(light), light.shadow.mapSize.x]).toEqual([3, 2048]);
     syncKeyShadows(light, 'medium');
-    expect([cascades(light), light.shadow.mapSize.x]).toEqual([2, 1024]);
+    expect([cascades(light), light.shadow.mapSize.x]).toEqual([1, 1024]);
     expect(remove).toHaveBeenCalledTimes(1); // the High one's listener went
     syncKeyShadows(light, 'medium');
     expect(add).toHaveBeenCalledTimes(2); // no rebuild when nothing changed

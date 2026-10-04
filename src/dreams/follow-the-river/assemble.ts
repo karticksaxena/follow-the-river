@@ -158,7 +158,7 @@ export async function assemble(
   const atmosphere = createAtmosphere();
   scene.add(atmosphere.mesh);
   ctx.stage.mist(atmosphere.mesh.material);
-  const flashlight = createFlashlight(camera);
+  const flashlight = createFlashlight(camera, ctx.stage.tier);
   const motion = createMotion(scene, camera, {
     fires: [area.waitSpot],
     fireflies: { kind: 'band', minX: area.landX - 10, maxX: area.landX + 2, y: 0.4 },

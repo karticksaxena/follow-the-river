@@ -4,7 +4,14 @@ import type { AmbushDef } from './areas/types';
 import { createControls, cutsceneChange, type Controls } from './controls';
 import { DIFFICULTY, nightTuning, type DifficultyTuning } from './difficulty';
 import { nightEnd } from './ending';
-import { BEAM, chargeBattery, FLASHLIGHT, TORCH_EXPOSURE, WATCH } from './flashlight';
+import {
+  BEAM,
+  chargeBattery,
+  FLASHLIGHT,
+  setTorchShadowTier,
+  TORCH_EXPOSURE,
+  WATCH,
+} from './flashlight';
 import { nearSpot, takeDamage } from './flow';
 import { gunBits, type HudState } from './hud';
 import { applyDim, LIGHTING } from './lighting';
@@ -200,6 +207,7 @@ function moveMotion(p: State, dt: number): void {
 function lightTorch(p: State, dt: number): void {
   const { sys, run } = p;
   setWaterTier(sys.ctx.stage.tier);
+  setTorchShadowTier(sys.flashlight.light, sys.ctx.stage.tier);
   sys.flashlight.clearWatch(WATCH.horde);
   sys.horde.forEachAlive(p.watchZombie);
   sys.flashlight.apply(run.live.supplies.battery, run.time, dt);

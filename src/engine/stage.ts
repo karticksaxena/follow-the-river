@@ -1,12 +1,13 @@
 import * as THREE from 'three/webgpu';
 import { initEnvironment } from './environment';
-import { newPacer, shouldRender, type MaxFps } from './frame-cap';
+import { capPeriod, newPacer, shouldRender, type MaxFps } from './frame-cap';
 import { autoStartTier, readGpuInfo } from './gpu-class';
 import type { GradePreset } from './grade';
 import { createPerf, type Perf } from './perf';
 import { createPost, POST } from './post';
 import {
   adaptQuality,
+  frameCost,
   lowerTier,
   newQuality,
   pixelRatio,
@@ -64,9 +65,12 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   const forceWebGL = new URLSearchParams(location.search).has('webgl');
   // GPU timestamp queries cost a little, so they are on only in dev with `?perf`.
   const trackTimestamp = import.meta.env.DEV && new URLSearchParams(location.search).has('perf');
-  const autoStart = forceWebGL ? 'medium' : autoStartTier(await readGpuInfo());
+  const gpuInfo = forceWebGL ? null : await readGpuInfo();
   const renderer = new THREE.WebGPURenderer({ antialias: false, forceWebGL, trackTimestamp });
   await renderer.init();
+  // The WebGL 2 fallback (forced, or no WebGPU) never starts at High; a software adapter starts at Low.
+  const webgpu = 'isWebGPUBackend' in renderer.backend;
+  const autoStart: Tier = webgpu ? autoStartTier(gpuInfo) : gpuInfo?.isFallback ? 'low' : 'medium';
   initEnvironment(renderer);
   renderer.toneMapping = THREE.AgXToneMapping;
   renderer.toneMappingExposure = POST.exposure;
@@ -94,7 +98,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   const stage: Stage = {
     renderer,
     camera,
-    backend: 'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl2',
+    backend: webgpu ? 'webgpu' : 'webgl2',
     scene: new THREE.Scene(),
     quality,
     get tier() {
@@ -132,8 +136,9 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
     },
   };
   /** Resolution first, then (Auto only) the tier; each at most every `QUALITY.minGap` s. */
-  const adapt = (dt: number): void => {
-    const change = adaptQuality(quality, tier, auto, dt * 1000, dt);
+  const adapt = (dt: number, workMs: number): void => {
+    const frameMs = frameCost(dt * 1000, workMs, capPeriod(cap) * 1000);
+    const change = adaptQuality(quality, tier, auto, frameMs, dt);
     if (change === 'tier') {
       tier = post.setTier(lowerTier(tier));
       setSurfaceTier(tier);
@@ -144,11 +149,12 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
     timer.update(time);
     if (!shouldRender(pacer, timer.getDelta(), cap)) return;
     perf?.begin(time);
+    const start = performance.now();
     const dt = clampDelta(pacer.dt);
     runUpdaters(updaters, dt);
     post.update(dt);
     post.render(stage.scene);
-    if (dt > 0) adapt(dt);
+    if (dt > 0) adapt(dt, performance.now() - start);
     perf?.end();
   });
   return stage;

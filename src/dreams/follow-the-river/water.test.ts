@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import { disposeScene } from '../../engine/dispose';
+import { TIERS } from '../../engine/quality';
 import {
   clampGlint,
   createWaterMesh,
@@ -17,6 +18,19 @@ import {
   setWaterTier,
   waterReflection,
 } from './water';
+
+/** Whether the water's emissive graph samples the reflector node. */
+function reflectsPlanar(material: THREE.MeshStandardNodeMaterial): boolean {
+  const target = waterReflection(material);
+  const seen = new Set<unknown>();
+  const walk = (node: unknown): boolean => {
+    if (node === target || node === target.reflector) return true;
+    if (!node || typeof node !== 'object' || seen.has(node)) return false;
+    seen.add(node);
+    return Object.values(node).some(walk);
+  };
+  return walk(material.emissiveNode);
+}
 
 describe('fresnel', () => {
   it('stays within [0, cap] and never lets the water glow', () => {
@@ -51,7 +65,8 @@ describe('createWaterMesh', () => {
     expect(mesh.position.length()).toBe(0);
     const reflection = waterReflection(mesh.material);
     expect(mesh.children).toContain(reflection.target);
-    expect(reflection.reflector.resolutionScale).toBe(REFLECTION.resolutionScale);
+    setWaterTier('high');
+    expect(reflection.reflector.resolutionScale).toBe(TIERS.high.reflectionScale);
     expect(reflection.reflector.bounces).toBe(false);
   });
 
@@ -131,6 +146,7 @@ describe('setWaterAttribute', () => {
 
 describe('setWaterTier', () => {
   it('rebuilds live water shaders only when the tier changes', () => {
+    setWaterTier('high');
     const mesh = createWaterMesh(10, 10);
     const v = mesh.material.version;
     setWaterTier('high');
@@ -141,5 +157,28 @@ describe('setWaterTier', () => {
     mesh.material.dispose();
     setWaterTier('low');
     setWaterTier('high'); // a disposed material is no longer rebuilt
+  });
+});
+
+describe('the planar reflection per tier', () => {
+  it('renders at the tier scale, resizing live water on a change', () => {
+    setWaterTier('high');
+    const mesh = createWaterMesh(10, 10);
+    const r = waterReflection(mesh.material).reflector;
+    expect(r.resolutionScale).toBe(TIERS.high.reflectionScale);
+    setWaterTier('medium');
+    expect(r.resolutionScale).toBe(TIERS.medium.reflectionScale);
+    mesh.material.dispose();
+    setWaterTier('high');
+  });
+
+  it('is not in the Low shader at all (a flat colour stands in), and is back on Medium', () => {
+    setWaterTier('low');
+    const low = createWaterMesh(10, 10);
+    expect(reflectsPlanar(low.material)).toBe(false);
+    setWaterTier('medium');
+    expect(reflectsPlanar(low.material)).toBe(true);
+    low.material.dispose();
+    setWaterTier('high');
   });
 });

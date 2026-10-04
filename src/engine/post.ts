@@ -27,7 +27,7 @@ import {
 } from 'three/tsl';
 import * as THREE from 'three/webgpu';
 import { createGrading, type GradePreset } from './grade';
-import type { Tier } from './quality';
+import { TIERS, type Tier } from './quality';
 import { VOLUME, VOLUME_LAYER, volumeSteps } from './volume';
 
 /** Horror look. Tuning knobs. */
@@ -43,9 +43,8 @@ export const POST = {
   vignette: 0.55,
   /** Film grain amount. */
   grain: 0.08,
-  /** GTAO: radius in metres; Medium runs half resolution, High full resolution with more samples. */
+  /** GTAO radius in metres (resolution and samples per tier: `TIERS`). */
   aoRadius: 0.6,
-  ao: { medium: { scale: 0.5, samples: 16 }, high: { scale: 1, samples: 32 } },
   /** Depth of field in cutscenes. */
   focalLength: 4,
   bokeh: 3,
@@ -145,10 +144,16 @@ function aoGraph(
   };
 }
 
+function aoKnobs(tier: Tier): { scale: number; samples: number } {
+  const knobs = TIERS[tier].ao;
+  if (!knobs) throw new Error(`no AO on ${tier}`);
+  return knobs;
+}
+
 const BUILD: Record<Tier, (camera: THREE.PerspectiveCamera) => Graph> = {
   low: lowGraph,
-  medium: (camera) => aoGraph(camera, POST.ao.medium),
-  high: (camera) => aoGraph(camera, POST.ao.high),
+  medium: (camera) => aoGraph(camera, aoKnobs('medium')),
+  high: (camera) => aoGraph(camera, aoKnobs('high')),
 };
 
 /** DEV only: `?gpuload=N` makes the final pass do N loops of per-pixel busywork (simulates a slower GPU). */
@@ -188,9 +193,12 @@ export function createPost(
 
   /** bloom, vignette, (depth of field), tone map, (SMAA), grade, grain. Nodes with targets go to `owned`. */
   const finish = (g: Graph, withDof: boolean, owned: Disposable[]): THREE.Node => {
-    const glow = bloom(g.color, grading.bloom, POST.bloomRadius, POST.bloomThreshold);
-    owned.push(glow);
-    const lit = g.color.add(glow).mul(dark);
+    let lit: THREE.Node = g.color.mul(dark);
+    if (TIERS[tier].bloom) {
+      const glow = bloom(g.color, grading.bloom, POST.bloomRadius, POST.bloomThreshold);
+      owned.push(glow);
+      lit = g.color.add(glow).mul(dark);
+    }
     let seen: THREE.Node = lit;
     if (withDof) {
       const blur = dof(lit, g.viewZ, focusAt, uniform(POST.focalLength), uniform(POST.bokeh));

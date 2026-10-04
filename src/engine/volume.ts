@@ -1,4 +1,4 @@
-import type { Tier } from './quality';
+import { TIERS, type Tier } from './quality';
 
 /** The layer the mist box and the lights that scatter into it live on (they stay on layer 0 too). */
 export const VOLUME_LAYER = 10;
@@ -12,7 +12,11 @@ export const NO_REFLECTION_LAYER = 3;
 /** Volumetric pass tuning knobs. */
 export const VOLUME = {
   /** Raymarch steps per tier (Low has no pass). */
-  steps: { low: 0, medium: 8, high: 12 } as Readonly<Record<Tier, number>>,
+  steps: {
+    low: TIERS.low.mistSteps,
+    medium: TIERS.medium.mistSteps,
+    high: TIERS.high.mistSteps,
+  } as Readonly<Record<Tier, number>>,
   /** The pass renders at this share of the screen's resolution, then is blurred. */
   resolutionScale: 0.25,
   /** Gaussian blur radius and sigma over the quarter-res result (hides raymarch banding and noise). */

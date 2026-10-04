@@ -7,6 +7,7 @@ import {
   createFlashlight,
   FLASHLIGHT,
   inBeamDistance,
+  setTorchShadowTier,
   TORCH_EXPOSURE,
   torchAim,
   torchScale,
@@ -79,6 +80,22 @@ describe('shadow', () => {
     fl.apply(100, 0);
     expect(fl.light.shadow.autoUpdate).toBe(true);
     expect(fl.light.shadow.needsUpdate).toBe(true);
+    fl.dispose();
+  });
+});
+
+describe('torch shadow map per tier', () => {
+  it('is 1024 on High and 512 on Medium and Low, and resizes only on a change', () => {
+    const fl = createFlashlight(new THREE.PerspectiveCamera(), 'medium');
+    expect(fl.light.shadow.mapSize.x).toBe(512);
+    setTorchShadowTier(fl.light, 'high');
+    expect(fl.light.shadow.mapSize.x).toBe(1024);
+    expect(fl.light.shadow.needsUpdate).toBe(true);
+    fl.light.shadow.needsUpdate = false;
+    setTorchShadowTier(fl.light, 'high');
+    expect(fl.light.shadow.needsUpdate).toBe(false);
+    setTorchShadowTier(fl.light, 'low');
+    expect(fl.light.shadow.mapSize.y).toBe(512);
     fl.dispose();
   });
 });

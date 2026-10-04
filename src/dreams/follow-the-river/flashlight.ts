@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { TIERS, type Tier } from '../../engine/quality';
 import { VOLUME_LAYER } from '../../engine/volume';
 
 /**
@@ -97,8 +98,18 @@ export interface Flashlight {
   dispose(): void;
 }
 
+/** The torch's shadow map for a tier (512 on Low and Medium); a no-op when it is already that size. */
+export function setTorchShadowTier(light: THREE.SpotLight, tier: Tier): void {
+  const size = TIERS[tier].torchShadowMap;
+  if (light.shadow.mapSize.x === size) return;
+  light.shadow.mapSize.set(size, size);
+  light.shadow.map?.dispose(); // the next shadow pass allocates the new size
+  light.shadow.map = null;
+  light.shadow.needsUpdate = true;
+}
+
 /** A torch held at the camera, pointing where the player looks. Starts on. */
-export function createFlashlight(camera: THREE.Camera): Flashlight {
+export function createFlashlight(camera: THREE.Camera, tier: Tier = 'high'): Flashlight {
   const light = new THREE.SpotLight(
     0xfff1d6,
     FLASHLIGHT.intensity,
@@ -110,7 +121,7 @@ export function createFlashlight(camera: THREE.Camera): Flashlight {
   // Held in the left hand, so its cone misses the bow in the right (it blew the bow out to white).
   light.position.set(-0.25, -0.12, 0);
   light.castShadow = true;
-  light.shadow.mapSize.set(1024, 1024);
+  light.shadow.mapSize.set(TIERS[tier].torchShadowMap, TIERS[tier].torchShadowMap);
   light.shadow.bias = -0.0005;
   torchAim(light.target.position);
   light.layers.enable(VOLUME_LAYER); // the beam shows in the mist

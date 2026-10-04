@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { adaptQuality, lowerTier, QUALITY, stepQuality, type Quality, type Tier } from './quality';
+import {
+  adaptQuality,
+  frameCost,
+  lowerTier,
+  QUALITY,
+  stepQuality,
+  TIERS,
+  type Quality,
+  type Tier,
+} from './quality';
 
 const fresh = (): Quality => ({ step: 0, slow: 0, fast: 0, since: 10, ema: 16 });
 
@@ -73,5 +82,83 @@ describe('adaptQuality', () => {
     for (; t < 3 && !stepQuality(q, 18, 1 / 55); t += 1 / 55);
     expect(q.step).toBe(1);
     expect(t).toBeLessThan(3);
+  });
+});
+
+describe('TIERS (what each graphics tier turns on)', () => {
+  it('Low: no reflection pass, no key shadows, no AO/TRAA, no mist; only a small torch shadow', () => {
+    expect(TIERS.low).toEqual({
+      reflectionScale: 0,
+      keyShadow: null,
+      torchShadowMap: 512,
+      ao: null,
+      bloom: true,
+      mistSteps: 0,
+      dropStep: 3,
+    });
+  });
+
+  it('Medium: quarter-ish reflection, one 1024 cascade, half-res 12-sample AO, 512 torch', () => {
+    expect(TIERS.medium).toEqual({
+      reflectionScale: 0.2,
+      keyShadow: { cascades: 1, mapSize: 1024 },
+      torchShadowMap: 512,
+      ao: { scale: 0.5, samples: 12 },
+      bloom: true,
+      mistSteps: 8,
+      dropStep: 1,
+    });
+  });
+
+  it('High: the full look', () => {
+    expect(TIERS.high).toEqual({
+      reflectionScale: 0.35,
+      keyShadow: { cascades: 3, mapSize: 2048 },
+      torchShadowMap: 1024,
+      ao: { scale: 0.75, samples: 24 },
+      bloom: true,
+      mistSteps: 12,
+      dropStep: 0,
+    });
+  });
+
+  it('never costs more on a lower tier', () => {
+    const order: Tier[] = ['low', 'medium', 'high'];
+    for (let i = 1; i < order.length; i++) {
+      const [lo, hi] = [TIERS[order[i - 1]], TIERS[order[i]]];
+      expect(lo.reflectionScale).toBeLessThanOrEqual(hi.reflectionScale);
+      expect(lo.torchShadowMap).toBeLessThanOrEqual(hi.torchShadowMap);
+      expect(lo.mistSteps).toBeLessThanOrEqual(hi.mistSteps);
+      expect(lo.keyShadow?.cascades ?? 0).toBeLessThanOrEqual(hi.keyShadow?.cascades ?? 0);
+      expect(lo.ao?.samples ?? 0).toBeLessThanOrEqual(hi.ao?.samples ?? 0);
+    }
+  });
+
+  it('a drop to Low restarts at 0.6 resolution, to Medium at 0.85', () => {
+    expect(QUALITY.steps[TIERS.low.dropStep]).toBe(0.6);
+    const q = { ...fresh(), step: QUALITY.steps.length - 1, slow: 5 };
+    expect(adaptQuality(q, 'medium', true, 40, 1 / 60)).toBe('tier');
+    expect(q.step).toBe(TIERS.low.dropStep);
+  });
+});
+
+describe('frameCost (what Auto is fed)', () => {
+  it('a cap-paced frame is judged by its work time, so Auto can climb under the cap', () => {
+    expect(frameCost(16.7, 6, 16.7)).toBe(6);
+    const q = { ...fresh(), step: 2, ema: 16.7 };
+    let up = false;
+    for (let t = 0; t < 10 && !up; t += 1 / 60) {
+      up = stepQuality(q, frameCost(16.7, 6, 16.7), 1 / 60);
+    }
+    expect(q.step).toBe(1);
+  });
+
+  it('a frame that overran the cap is judged by its interval', () => {
+    expect(frameCost(25, 6, 16.7)).toBe(25);
+    expect(frameCost(18.1, 3, 11.1)).toBe(18.1);
+  });
+
+  it('with no cap the interval is used', () => {
+    expect(frameCost(8.3, 3, 0)).toBe(8.3);
   });
 });
