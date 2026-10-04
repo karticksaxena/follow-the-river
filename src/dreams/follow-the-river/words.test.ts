@@ -3,9 +3,19 @@ import { DREAMS } from '../registry';
 import { CLOSING_PAGES } from './canoe-ride';
 import { ENDING_PAGES, REPLAY_PAGES } from './ending';
 import { FAREWELL_PAGES } from './ending-farewell';
+import { waitQuestion } from './flow';
 import { HINTS } from './hints';
 import { INTRO_PAGES } from './intro';
+import { PROMPT as PICKUP_PROMPT } from './pickups';
 import { TAPES } from './tapes';
+
+// Prompts live in controls.ts (literals, copied here) and pickups.ts (PROMPT).
+const PROMPTS = [
+  'E: feed Dras',
+  'E: throw a fish pack',
+  'E: wait for dark',
+  ...Object.values(PICKUP_PROMPT).flatMap((p) => [p.take, p.full]),
+];
 
 const all = (): string[] => [
   ...Object.values(TAPES).flat(),
@@ -15,6 +25,9 @@ const all = (): string[] => [
   ...Object.values(FAREWELL_PAGES).flat(),
   ...REPLAY_PAGES,
   ...CLOSING_PAGES,
+  waitQuestion(1, true),
+  waitQuestion(2, false),
+  ...PROMPTS,
   ...DREAMS.flatMap((d) => [...d.intro, ...d.howToPlay]),
 ];
 

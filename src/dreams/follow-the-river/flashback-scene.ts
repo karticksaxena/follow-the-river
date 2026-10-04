@@ -60,9 +60,9 @@ export const SPILLWAY = {
 } as const;
 
 /**
- * Tape 1's orca: a slow glide across the tank that turns toward Mom (+Z) at each end, then comes
- * to the glass and holds still facing her (`holdFrom`..`holdTo`, s) while Mom names her; it eases
- * into and out of the hold over `blend` seconds.
+ * Tape 1's orca: a slow glide across the tank that turns toward Mom (+Z) at each end. Once the
+ * page "She comes to the glass..." is shown (`TANK_HOLD_PAGE`), she eases to the glass over
+ * `blend` seconds and holds still facing Mom; going Back before that page releases her.
  */
 export const TANK_SWIM = {
   halfWidth: 1.4,
@@ -71,10 +71,18 @@ export const TANK_SWIM = {
   period: 14,
   scale: 0.4,
   centreY: 1.27,
-  holdFrom: 18,
-  holdTo: 30,
   blend: 2,
 } as const;
+
+/** Index of the tape-1 page that brings her to the glass (checked against TAPES[1] in a test). */
+export const TANK_HOLD_PAGE = 4;
+
+/** Pure: the hold weight (0 swimming, 1 held) after `dt`, moving toward the page's target. */
+export function holdStep(hold: number, page: number, dt: number, blend = TANK_SWIM.blend): number {
+  const target = page >= TANK_HOLD_PAGE ? 1 : 0;
+  const step = dt / blend;
+  return hold < target ? Math.min(target, hold + step) : Math.max(target, hold - step);
+}
 
 const MOM_SWAY = { amplitude: 0.06, rate: 0.9 } as const;
 const LAB_INTERACT_EVERY = 7;
@@ -97,23 +105,16 @@ export interface Glide {
   yaw: number;
 }
 
-/** 0..1: how far into the hold the glide is at `t` (eased in before `holdFrom`, out after `holdTo`). */
-function holdWeight(t: number, swim: typeof TANK_SWIM): number {
-  const into = (t - (swim.holdFrom - swim.blend)) / swim.blend;
-  const out = (swim.holdTo + swim.blend - t) / swim.blend;
-  return smooth(Math.min(1, Math.max(0, Math.min(into, out))));
-}
-
-/** Where the young orca is at `t`: x sweeps the tank, z bows toward the glass, yaw follows. */
-export function tankSwim(t: number, out: Glide, swim = TANK_SWIM): Glide {
+/** Where the young orca is at `t`: x sweeps the tank, z bows toward the glass, yaw follows; `hold` 0..1 blends to nose-at-the-glass. */
+export function tankSwim(t: number, out: Glide, hold = 0, swim = TANK_SWIM): Glide {
   const w = (2 * Math.PI) / swim.period;
   out.x = swim.halfWidth * Math.sin(w * t);
   out.z = swim.depth - swim.sway * Math.cos(2 * w * t); // at the glass when x peaks
   const vx = swim.halfWidth * w * Math.cos(w * t);
   const vz = 2 * w * swim.sway * Math.sin(2 * w * t);
   out.yaw = Math.atan2(-vx, -vz); // the orca's nose points −Z at yaw 0
-  const k = holdWeight(t, swim);
-  if (k === 0) return out;
+  if (hold <= 0) return out;
+  const k = smooth(Math.min(1, hold));
   const glass = swim.depth + swim.sway; // nose to the glass, facing Mom
   const turn = Math.atan2(Math.sin(Math.PI - out.yaw), Math.cos(Math.PI - out.yaw)); // shortest way round
   out.x *= 1 - k;
@@ -127,6 +128,8 @@ export interface Flashback {
   /** Pose source only: the stage camera is readonly, so the player copies this one's pose. */
   camera: THREE.PerspectiveCamera;
   update(dt: number): void;
+  /** The tape's page changed (first open, Next or Back). */
+  onPage?(index: number): void;
   dispose(): void;
 }
 
@@ -238,12 +241,14 @@ function finish(
   camera: THREE.PerspectiveCamera,
   tick: (dt: number) => void,
   free: () => void,
+  onPage?: (index: number) => void,
 ): Flashback {
   let freed = false;
   return {
     scene,
     camera,
     update: tick,
+    onPage,
     dispose() {
       if (freed) return;
       freed = true;
@@ -314,21 +319,32 @@ async function buildTank(): Promise<Flashback> {
   const { camera, move } = makeCamera(SHOTS[1]);
   const glide: Glide = { x: 0, z: 0, yaw: 0 };
   let t = 0;
+  let page = 0;
+  let hold = 0;
   const tick = (dt: number): void => {
+    hold = holdStep(hold, page, dt);
     t += dt;
     move(t);
     mom.update(dt);
     orca.mixer.update(dt);
     mom.group.rotation.y = Math.PI + MOM_SWAY.amplitude * Math.sin(MOM_SWAY.rate * t);
-    tankSwim(t, glide);
+    tankSwim(t, glide, hold);
     orca.pivot.position.x = glide.x;
     orca.pivot.position.z = glide.z;
     orca.pivot.rotation.y = glide.yaw;
   };
-  return finish(scene, camera, tick, () => {
-    mom.dispose();
-    orca.dispose();
-  });
+  return finish(
+    scene,
+    camera,
+    tick,
+    () => {
+      mom.dispose();
+      orca.dispose();
+    },
+    (index) => {
+      page = index;
+    },
+  );
 }
 
 function makeLantern(): THREE.Group {

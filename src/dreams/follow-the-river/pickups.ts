@@ -43,7 +43,7 @@ const GUN_NAME: Readonly<Record<GunKind, string>> = {
   rifle: 'the rifle',
 };
 
-const PROMPT: Readonly<Record<PickupKind, { take: string; full: string }>> = {
+export const PROMPT: Readonly<Record<PickupKind, { take: string; full: string }>> = {
   battery: { take: 'E: pick up batteries', full: 'Batteries full' },
   arrows: { take: 'E: pick up arrows', full: 'Arrows full' },
   fishPack: { take: 'E: pick up a fish pack', full: 'Fish packs full' },

@@ -58,7 +58,13 @@ async function run(
       restore();
       done();
     },
-    hooks,
+    {
+      ...hooks,
+      onPage: (page, index) => {
+        hooks?.onPage?.(page, index);
+        flashback?.onPage?.(index);
+      },
+    },
   );
 }
 

@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  holdStep,
   LAB_LIGHT,
   lampPulse,
   shotProgress,
   SHOTS,
   SPILLWAY,
+  TANK_HOLD_PAGE,
   TANK_SWIM,
   tankSwim,
   type Glide,
   type Tape,
 } from './flashback-scene';
+import { TAPES as TAPE_TEXT } from './tapes';
 
 const TAPES: readonly Tape[] = [1, 2, 3];
 
@@ -80,23 +83,45 @@ describe('tank swim', () => {
 });
 
 describe('tank swim hold', () => {
-  it('holds at the glass facing Mom for the naming, easing in and out', () => {
+  it('holds at the glass facing Mom when fully held', () => {
     const out: Glide = { x: 9, z: 9, yaw: 0 };
-    tankSwim(24, out);
+    tankSwim(24, out, 1);
     expect(out.x).toBeCloseTo(0, 9); // not toBe: x * 0 can be -0
     expect(out.yaw).toBeCloseTo(Math.PI);
     expect(out.z).toBeGreaterThan(TANK_SWIM.depth);
-    tankSwim(TANK_SWIM.holdFrom - 1, out); // inside the 2 s blend: between swim and hold
+    tankSwim(5, out, 0.5); // half way: between swimming and held
     expect(Math.abs(out.x)).toBeLessThan(TANK_SWIM.halfWidth);
   });
 
-  it('never snaps: positions move continuously across the whole clip', () => {
+  it('is named by the right page of tape 1', () => {
+    expect(TAPE_TEXT[1]?.[TANK_HOLD_PAGE]).toBe(
+      '"She comes to the glass when I sing. Every single time."',
+    );
+  });
+
+  it('ramps 0 to 1 over the blend after the page, and back on Back', () => {
+    let hold = 0;
+    for (let i = 0; i < 100; i++) hold = holdStep(hold, TANK_HOLD_PAGE - 1, 0.1);
+    expect(hold).toBe(0);
+    hold = holdStep(hold, TANK_HOLD_PAGE, TANK_SWIM.blend / 2);
+    expect(hold).toBeCloseTo(0.5);
+    hold = holdStep(hold, TANK_HOLD_PAGE + 1, TANK_SWIM.blend);
+    expect(hold).toBe(1);
+    hold = holdStep(hold, TANK_HOLD_PAGE - 1, TANK_SWIM.blend / 2);
+    expect(hold).toBeCloseTo(0.5);
+    hold = holdStep(hold, 0, TANK_SWIM.blend);
+    expect(hold).toBe(0);
+  });
+
+  it('never snaps while the hold ramps', () => {
     const out: Glide = { x: 0, z: 0, yaw: 0 };
-    tankSwim(0, out);
+    let hold = 0;
+    tankSwim(0, out, hold);
     let px = out.x;
     let pz = out.z;
-    for (let t = 0.01; t < 45; t += 0.01) {
-      tankSwim(t, out);
+    for (let t = 0.01; t < 20; t += 0.01) {
+      hold = holdStep(hold, t > 6 ? TANK_HOLD_PAGE : 0, 0.01);
+      tankSwim(t, out, hold);
       expect(Math.hypot(out.x - px, out.z - pz)).toBeLessThan(0.05);
       px = out.x;
       pz = out.z;
