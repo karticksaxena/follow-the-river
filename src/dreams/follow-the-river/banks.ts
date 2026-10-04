@@ -21,7 +21,7 @@ export const BANK = {
   rail: 0x1c1c1e,
   mud: 0x3a3226,
   sand: 0x2c2820,
-  railX: 2.8,
+  railX: 2.95, // flush with the wall: the player stops at x 2.7, the rail never clips the view
   postHeight: 0.9,
   postSpacing: 2.5,
   reedStep: [3, 5],

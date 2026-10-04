@@ -171,6 +171,18 @@ export function cruiseHeading(vx: number, vz: number): number {
 
 export const smooth = (s: number): number => s * s * (3 - 2 * s);
 
+/** orca.py LENGTH 7: half the body, and how far its nose and tail must stay from the bank (m). */
+const HALF_LENGTH = 3.5;
+const BANK_MARGIN = 0.6;
+
+/**
+ * The smallest x that keeps the whole orca (nose and tail) in the river when it faces `yaw`:
+ * turned toward the bank, its 7 m body reaches sideways and the nose used to end up on land.
+ */
+export function inWaterX(x: number, yaw: number, edgeX: number): number {
+  return Math.max(x, edgeX + BANK_MARGIN + Math.abs(Math.sin(yaw)) * HALF_LENGTH);
+}
+
 export function turnToward(current: number, target: number, amount: number): number {
   const diff = Math.atan2(Math.sin(target - current), Math.cos(target - current));
   return current + diff * Math.min(1, amount);

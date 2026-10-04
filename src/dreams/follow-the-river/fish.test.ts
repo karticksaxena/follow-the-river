@@ -3,6 +3,7 @@ import { canThrow, cruiseHeading, FISH, pickStrike, strikesFor } from './fish';
 import {
   cruiseTargetX,
   cruiseYFor,
+  inWaterX,
   nearestTo,
   nextSurfacing,
   sinkPose,
@@ -74,5 +75,16 @@ describe('fish', () => {
     expect(nextSurfacing(0.999)).toBeLessThan(SURFACE_MAX);
     expect(SURFACE_MIN).toBe(18);
     expect(SURFACE_MAX).toBe(30);
+  });
+
+  it('keeps the whole 7 m orca in the river, even turned toward the bank', () => {
+    const edge = 3;
+    for (const yaw of [0, 0.4, Math.PI / 2, -Math.PI / 2, Math.PI, 2.5]) {
+      const x = inWaterX(edge + 0.5, yaw, edge);
+      const nose = x - Math.sin(yaw) * 3.5;
+      const tail = x + Math.sin(yaw) * 3.5;
+      expect(Math.min(nose, tail)).toBeGreaterThan(edge);
+    }
+    expect(inWaterX(9, 0, edge)).toBe(9); // already well out: unchanged
   });
 });

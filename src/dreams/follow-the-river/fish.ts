@@ -9,6 +9,7 @@ import {
   cruiseYFor,
   findClip,
   FISH,
+  inWaterX,
   makeWake,
   makeWet,
   nearestTo,
@@ -169,7 +170,8 @@ function stepRise(f: FishState, r: Rise, dt: number, horde: Horde | null): void 
   const dx = x - f.root.position.x;
   const dz = z - f.root.position.z;
   if (dx * dx + dz * dz > 1e-6) f.yaw = turnToward(f.yaw, Math.atan2(-dx, -dz), 6 * dt);
-  f.root.position.set(x, f.cruiseY + (r.peak - f.cruiseY) * Math.sin(Math.PI * s), z);
+  const y = f.cruiseY + (r.peak - f.cruiseY) * Math.sin(Math.PI * s);
+  f.root.position.set(inWaterX(x, f.yaw, EDGE_X), y, z);
   if (r.surface) f.root.rotation.z = surfaceRoll(s);
   if (!r.done && s >= 0.5) {
     r.done = true;
@@ -192,7 +194,7 @@ function cruise(f: FishState, dt: number, player: { x: number; z: number }): voi
   const dx = x - pos.x;
   f.yaw = turnToward(f.yaw, cruiseHeading(dx / dt, stepZ / dt), 3 * dt);
   const y = pos.y + (f.cruiseY - pos.y) * Math.min(1, 3 * dt);
-  pos.set(x, y, pos.z + stepZ);
+  pos.set(inWaterX(x, f.yaw, EDGE_X), y, pos.z + stepZ);
 }
 
 function tryStrike(f: FishState, player: { x: number; z: number }, horde: Horde): void {
@@ -307,6 +309,7 @@ function updateFish(
   f.mixer.update(dt);
   if (!f.placed) {
     f.placed = true;
+    f.root.visible = true; // hidden until placed, so it never flashes at the origin
     f.root.position.set(cruiseTargetX(EDGE_X, 0), f.cruiseY, player.z - LAG_Z);
     f.surfaceIn = nextSurfacing(Math.random());
   }
@@ -347,6 +350,7 @@ function resetFish(f: FishState): void {
   f.strikes = 0;
   f.cooldown = 0;
   f.placed = false;
+  f.root.visible = false;
   f.packT = -1;
   f.takePending = false;
   f.packModel.visible = false;
@@ -360,7 +364,6 @@ function resetFish(f: FishState): void {
   f.finale = 'no';
   f.surfaceIn = nextSurfacing(Math.random());
   f.victims.length = 0;
-  f.root.visible = true;
   f.root.rotation.set(0, f.yaw, 0);
 }
 
@@ -406,6 +409,7 @@ function createState(
   packModel: THREE.Object3D,
 ): FishState {
   const root = new THREE.Group();
+  root.visible = false; // until the first update places it beside the player
   const body = clone(asset.scene);
   body.traverse((n) => (n.frustumCulled = false));
   makeWet(body);
