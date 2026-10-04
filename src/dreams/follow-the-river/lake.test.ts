@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { shoreHeight } from './lake';
-import { LAKE, shoreY, WATER_Y } from './river';
+import { shoreHeight, waterlineDistance } from './lake';
+import { EDGE_X, FAR_EDGE_X, LAKE, shoreY, WATER_Y } from './river';
 
 describe('shoreHeight', () => {
   it('is the water level at the waterline, level inland and below the water inside', () => {
@@ -11,5 +11,16 @@ describe('shoreHeight', () => {
     expect(shoreHeight(2)).toBeLessThan(WATER_Y);
     expect(shoreHeight(500)).toBe(shoreHeight(LAKE.slopeRun)); // the bed is flat past the slope
     expect(shoreHeight(-1.5)).toBe(shoreY(1.5));
+  });
+});
+
+describe('waterlineDistance (the foam band)', () => {
+  const frame = { z: -400, west: LAKE.west, east: LAKE.east };
+  it('is zero at the beach and large across the open river mouth', () => {
+    expect(waterlineDistance(-6, frame.z, frame)).toBeCloseTo(0);
+    expect(waterlineDistance((EDGE_X + FAR_EDGE_X) / 2, frame.z - 0.01, frame)).toBeGreaterThan(10);
+  });
+  it('follows the flared bank in the mouth, not the lake line', () => {
+    expect(waterlineDistance(EDGE_X + 2, frame.z + 20, frame)).toBeCloseTo(2);
   });
 });

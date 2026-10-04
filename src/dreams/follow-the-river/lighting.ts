@@ -19,6 +19,7 @@ import {
 } from '../../engine/sky';
 import type { LightColors } from './light-colors';
 import type { LightPreset } from './light-presets';
+import { setWaterGlint } from './water';
 
 export * from './light-presets';
 
@@ -202,6 +203,7 @@ export function applyLighting(
   const aim = frame.sun ?? d;
   const lit = frame.key ?? aim; // the sun you see is the sun that lights and shadows
   key.position.set(lit.x * KEY_DISTANCE, lit.y * KEY_DISTANCE, lit.z * KEY_DISTANCE);
+  setWaterGlint(key.position, key.color); // the streak on the water follows the light
   setShadowStrength(key, preset.shadow);
   const night = preset.stars ? 1 : 0;
   const moonAmount = frame.moon ?? night;

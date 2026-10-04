@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { type Bend, noBend, rowsFor, SHORE } from './shore-shape';
-import { createWaterMesh } from './water';
+import { createWaterMesh, setWaterAttribute } from './water';
 
 /** The river: its near edge sits at x = 3, right beside the walkable bank. Tuning knobs. */
 export const RIVER_WIDTH = 30;
@@ -14,6 +14,8 @@ export const WATER_Y = -1;
 export const OVERRUN = 120;
 /** The far-bank land runs this far east of the far bank (m), into the fog. */
 const FAR_LAND_WIDTH = 120;
+/** The water has a vertex column every this many metres across, so the foam's shore distance interpolates true. */
+const WATER_COLUMN = 1.5;
 /** An embankment's kerb is this wide (m); the ground on either side stops where it starts. */
 export const KERB_WIDTH = 0.6;
 
@@ -141,7 +143,13 @@ export function addRiver(
   const wmiddle = (z0 + wz1) / 2;
   const water = createWaterMesh(RIVER_WIDTH, z0 - wz1);
   water.geometry.dispose();
-  water.geometry = new THREE.PlaneGeometry(RIVER_WIDTH, z0 - wz1, 1, rowsFor(z0 - wz1));
+  water.geometry = new THREE.PlaneGeometry(
+    RIVER_WIDTH,
+    z0 - wz1,
+    Math.round(RIVER_WIDTH / WATER_COLUMN),
+    rowsFor(z0 - wz1),
+  );
+  setWaterAttribute(water.geometry, (x) => RIVER_WIDTH / 2 - Math.abs(x));
   bendPlane(water.geometry, wmiddle, bend);
   water.position.set(RIVER_X, WATER_Y, wmiddle);
   scene.add(farBank, water);

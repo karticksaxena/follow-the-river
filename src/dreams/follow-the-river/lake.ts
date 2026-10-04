@@ -1,7 +1,16 @@
 import * as THREE from 'three/webgpu';
-import { EDGE_X, LAKE, lakeRects, PEBBLE_COLOR, type Rect, shoreY, WATER_Y } from './river';
+import {
+  EDGE_X,
+  FAR_EDGE_X,
+  LAKE,
+  lakeRects,
+  PEBBLE_COLOR,
+  type Rect,
+  shoreY,
+  WATER_Y,
+} from './river';
 import { lakeDepth, type LakeFrame, mouthFlare } from './shore-shape';
-import { createWaterMesh, LAKE_FLOW } from './water';
+import { createWaterMesh, LAKE_FLOW, setWaterAttribute } from './water';
 
 /** Shore terrain grid cell (m). A 4 m slope takes about one and a half cells. Tuning knob. */
 const CELL = 3;
@@ -56,6 +65,16 @@ function shoreMesh(r: Rect, frame: LakeFrame, landColor: number): THREE.Mesh {
 }
 
 /**
+ * Pure: metres from (x, z) to the nearest waterline: the lake outline's depth, or inside the
+ * river mouth the distance to its flared banks (the mouth itself is open water, not a shore).
+ */
+export function waterlineDistance(x: number, z: number, frame: LakeFrame): number {
+  const flare = mouthFlare(z, frame.z);
+  const banks = Math.min(x - (EDGE_X - flare), FAR_EDGE_X + flare - x);
+  return Math.max(lakeDepth(x, z, frame), banks);
+}
+
+/**
  * The lake: still dark water in one rectangle, and shore terrain either side of the river mouth
  * whose outline wanders (coves, points, rounded corners, a far shore), so no straight water edge
  * is ever in view. Built once.
@@ -64,7 +83,18 @@ export function addLake(scene: THREE.Scene, z: number, landColor: number, bankCo
   const r = lakeRects(z);
   const frame: LakeFrame = { z, west: LAKE.west, east: LAKE.east };
   const water = createWaterMesh(r.water.x1 - r.water.x0, r.water.z0 - r.water.z1, LAKE_FLOW);
-  water.position.set((r.water.x0 + r.water.x1) / 2, WATER_Y, (r.water.z0 + r.water.z1) / 2);
+  const cx = (r.water.x0 + r.water.x1) / 2;
+  const cz = (r.water.z0 + r.water.z1) / 2;
+  // A grid, so each vertex can carry its distance to the wandering shore (the foam's band).
+  water.geometry.dispose();
+  water.geometry = new THREE.PlaneGeometry(
+    r.water.x1 - r.water.x0,
+    r.water.z0 - r.water.z1,
+    Math.ceil((r.water.x1 - r.water.x0) / CELL),
+    Math.ceil((r.water.z0 - r.water.z1) / CELL),
+  );
+  setWaterAttribute(water.geometry, (x, y) => waterlineDistance(x + cx, cz - y, frame), cx);
+  water.position.set(cx, WATER_Y, cz);
   scene.add(
     water,
     shoreMesh(r.shoreWest, frame, landColor),

@@ -1,7 +1,21 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import { disposeScene } from '../../engine/dispose';
-import { createWaterMesh, fresnel, LAKE_FLOW, REFLECTION, waterReflection } from './water';
+import {
+  clampGlint,
+  createWaterMesh,
+  FLOW,
+  flowSpeed,
+  FOAM,
+  foamFalloff,
+  fresnel,
+  GLINT,
+  LAKE_FLOW,
+  REFLECTION,
+  RIVER_FLOW,
+  setWaterAttribute,
+  waterReflection,
+} from './water';
 
 describe('fresnel', () => {
   it('stays within [0, cap] and never lets the water glow', () => {
@@ -47,5 +61,69 @@ describe('createWaterMesh', () => {
     const spy = vi.spyOn(waterReflection(mesh.material), 'dispose');
     disposeScene(scene);
     expect(spy).toHaveBeenCalledOnce();
+  });
+});
+
+describe('flowSpeed', () => {
+  it('is slowest at the bank, fastest mid-river, never upstream', () => {
+    const bank = flowSpeed(0, RIVER_FLOW.speed);
+    const mid = flowSpeed(15, RIVER_FLOW.speed);
+    expect(bank).toBeCloseTo(RIVER_FLOW.speed * FLOW.bankSlow);
+    expect(bank).toBeGreaterThan(0);
+    expect(mid).toBeCloseTo(RIVER_FLOW.speed);
+    let previous = 0;
+    for (let d = 0; d <= 15; d += 1) {
+      const v = flowSpeed(d, RIVER_FLOW.speed);
+      expect(v).toBeGreaterThanOrEqual(previous);
+      previous = v;
+    }
+  });
+
+  it('keeps the still lake still, and treats a negative shore as the bank', () => {
+    expect(flowSpeed(8, LAKE_FLOW.speed)).toBe(0);
+    expect(flowSpeed(-3, 1)).toBeCloseTo(FLOW.bankSlow);
+  });
+});
+
+describe('foamFalloff', () => {
+  it('is full at the waterline and gone past the foam width', () => {
+    expect(foamFalloff(0)).toBe(1);
+    expect(foamFalloff(-2)).toBe(1);
+    expect(foamFalloff(FOAM.width)).toBe(0);
+    expect(foamFalloff(FOAM.width * 3)).toBe(0);
+  });
+
+  it('only ever fades with distance', () => {
+    let previous = 1;
+    for (let d = 0; d <= FOAM.width; d += FOAM.width / 20) {
+      const f = foamFalloff(d);
+      expect(f).toBeLessThanOrEqual(previous);
+      previous = f;
+    }
+  });
+});
+
+describe('clampGlint', () => {
+  it('stays under the bloom threshold so characters never bloom white', () => {
+    expect(clampGlint(0)).toBe(0);
+    expect(clampGlint(-1)).toBe(0);
+    expect(clampGlint(50)).toBe(GLINT.max);
+    expect(GLINT.max).toBeLessThan(1);
+  });
+});
+
+describe('setWaterAttribute', () => {
+  it('gives every vertex its distance to the nearest bank and its across-river position', () => {
+    const mesh = createWaterMesh(30, 20);
+    const a = mesh.geometry.getAttribute('water');
+    expect(a.itemSize).toBe(2);
+    const geo = new THREE.PlaneGeometry(30, 20, 20, 2);
+    setWaterAttribute(geo, (x) => 15 - Math.abs(x));
+    const w = geo.getAttribute('water');
+    const p = geo.getAttribute('position');
+    for (let i = 0; i < p.count; i++) {
+      expect(w.getX(i)).toBeCloseTo(15 - Math.abs(p.getX(i)));
+      expect(w.getY(i)).toBeCloseTo(p.getX(i));
+    }
   });
 });
