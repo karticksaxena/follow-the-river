@@ -75,7 +75,9 @@ export function createDawn(
       const moon = Math.min(1, k / DAWN.moonSets);
       lantern.intensity = lanternFull * (1 - (1 - LANTERN_LEFT) * moon);
       dawnFades(k, fades);
-      [frame.dome, frame.stars, frame.moon] = [fades.dome, fades.stars, fades.moon];
+      frame.dome = fades.dome;
+      frame.stars = fades.stars;
+      frame.moon = fades.moon;
       if (k < DAWN.moonSets) {
         mixPresetInto(night, LIGHTING.predawn, moon, scratch);
         mixColorsInto(night, LIGHTING.predawn, moon, colors);

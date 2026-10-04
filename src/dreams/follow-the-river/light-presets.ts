@@ -98,16 +98,16 @@ export const LIGHTING: Readonly<Record<LightingName, LightPreset>> = {
   },
   // The end of the farewell and the canoe ride: a warm, slightly misty sun over the dam, blue above.
   sunrise: {
-    skyTop: 0x4f7fb0,
+    skyTop: 0x4676a8,
     skyHorizon: 0xd89a5a,
-    fog: { color: 0x8f8070, near: 12, far: 130 },
+    fog: { color: 0x887a68, near: 12, far: 130 },
     hemi: { sky: 0xa8bcd0, ground: 0x2e3a22, intensity: SUNRISE_CAPS.hemi },
     key: { color: 0xffb870, intensity: SUNRISE_CAPS.key, elevation: 0.12, azimuth: 3.0 },
     disc: { color: 0xffd9a0, size: 5, soft: 0.6 },
     environment: SUNRISE_CAPS.environment,
     shadow: 1,
     clouds: 0,
-    sky: { turbidity: 4, rayleigh: 1.6, mie: 0.003, mieG: 0.8 },
+    sky: { turbidity: 4, rayleigh: 1.9, mie: 0.003, mieG: 0.8 },
   },
 };
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GRADES, mixGrade } from './grade';
+import { GRADES, mixGrade, SUNRISE_BLOOM } from './grade';
 
 describe('grades', () => {
   it('has every scene preset with finite values', () => {
@@ -55,5 +55,12 @@ describe('grades', () => {
   it('mixGrade clamps t', () => {
     expect(mixGrade(GRADES.night, GRADES.day, 5).saturation).toBeCloseTo(GRADES.day.saturation);
     expect(mixGrade(GRADES.night, GRADES.day, -2).saturation).toBeCloseTo(GRADES.night.saturation);
+  });
+});
+
+describe('bloom', () => {
+  it('is softer at the sunrise than anywhere else', () => {
+    expect(GRADES.sunrise.bloom).toBeLessThan(GRADES.night.bloom);
+    expect(GRADES.sunrise.bloom).toBeCloseTo(SUNRISE_BLOOM);
   });
 });

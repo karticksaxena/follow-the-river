@@ -81,8 +81,19 @@ export function createSkyDome(
   return dome;
 }
 
-/** Distance the stars sit at: inside the dome (80 m radius) so they are never past the far plane. */
-const STAR_RADIUS = 70;
+/** The stage camera's far plane (m). */
+export const CAMERA_FAR = 200;
+/**
+ * The sky layers sit at the very back of the depth range, so nothing real is ever behind them: the
+ * dome and the physical sky are drawn after the opaque scene and would paint over any far silhouette
+ * beyond them. (Fog is fully opaque long before: no preset's fog reaches this far.)
+ */
+export const SKY_RADIUS = CAMERA_FAR * 0.95;
+/** Stars, moon, halo and sun disc sit just inside the dome. */
+export const SKY_LAYER_RADIUS = CAMERA_FAR * 0.9;
+/** The distance preset disc sizes were tuned at (a size is a radius in metres at this distance). */
+export const DISC_REFERENCE = 70;
+const STAR_RADIUS = SKY_LAYER_RADIUS;
 const STAR_COUNT = 1500;
 const STAR_COLOR = 0x9fb0d0;
 
@@ -221,8 +232,12 @@ function moonTexture(): THREE.CanvasTexture | null {
   return texture;
 }
 
-/** Radius of the moon disc at the sky's distance (a child of the dome): about 2.5 degrees across. */
-export const MOON_RADIUS = 1.5;
+/** The moon's angular radius (rad): about 4 degrees across. */
+const MOON_ANGULAR = 0.035;
+/** Radius of the moon disc at the sky layers' distance (a child of the dome). */
+export const MOON_RADIUS = SKY_LAYER_RADIUS * MOON_ANGULAR;
+/** The halo's radius in moon radii. */
+export const MOON_HALO = 3;
 
 /** A round textured moon; a child of the dome, placed by the caller. Dim: the night stays dark. */
 export function createMoon(): THREE.Mesh {
@@ -230,7 +245,7 @@ export function createMoon(): THREE.Mesh {
     new THREE.CircleGeometry(1, 48),
     new THREE.MeshBasicMaterial({
       map: moonTexture(),
-      color: 0x9aa4b8,
+      color: 0xc4ccdc,
       fog: false,
       depthWrite: false,
       transparent: true,
@@ -244,7 +259,7 @@ export function createHalo(map: THREE.Texture | null): THREE.Mesh {
     new THREE.CircleGeometry(1, 32),
     new THREE.MeshBasicMaterial({
       map,
-      color: 0x28303f,
+      color: 0x3a4558,
       fog: false,
       depthWrite: false,
       transparent: true,

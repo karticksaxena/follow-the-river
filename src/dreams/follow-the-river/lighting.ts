@@ -8,10 +8,14 @@ import {
   createPhysicalSky,
   createSkyDome,
   createStars,
+  DISC_REFERENCE,
+  MOON_HALO,
   MOON_RADIUS,
   paintSkyDome,
   setDomeLook,
   setPhysicalSky,
+  SKY_LAYER_RADIUS,
+  SKY_RADIUS,
 } from '../../engine/sky';
 import type { LightColors } from './light-colors';
 import type { LightPreset } from './light-presets';
@@ -34,8 +38,6 @@ export interface WorldLights {
 
 /** Name of the sky dome, so a dream can keep it centred on the player. */
 export const SKY_NAME = 'sky';
-const SKY_DOME_RADIUS = 80;
-const DISC_DISTANCE = 70;
 const KEY_DISTANCE = 60;
 /** How much `dim = 1` darkens the hemisphere and key light (inside shacks). */
 const DIM_STRENGTH = 0.7;
@@ -91,7 +93,7 @@ export function skyDirection(
 export function createWorldLights(scene: THREE.Scene): WorldLights {
   const hemi = new THREE.HemisphereLight();
   const key = new THREE.DirectionalLight();
-  const sky = createSkyDome(0, 0, SKY_DOME_RADIUS);
+  const sky = createSkyDome(0, 0, SKY_RADIUS);
   sky.name = SKY_NAME;
   const disc = new THREE.Mesh(
     new THREE.CircleGeometry(1, 32),
@@ -156,11 +158,14 @@ function place(
   dir: { x: number; y: number; z: number },
   scale: number,
 ): void {
-  mesh.position.set(dir.x * DISC_DISTANCE, dir.y * DISC_DISTANCE, dir.z * DISC_DISTANCE);
+  mesh.position.set(dir.x * SKY_LAYER_RADIUS, dir.y * SKY_LAYER_RADIUS, dir.z * SKY_LAYER_RADIUS);
   // Face the dome's centre (these are children of the dome, so work in dome space).
   mesh.quaternion.setFromUnitVectors(FORWARD, towardCentre.set(-dir.x, -dir.y, -dir.z));
   mesh.scale.setScalar(scale);
 }
+
+/** A preset disc size (tuned at `DISC_REFERENCE` m) at the sky layers' distance. */
+const discScale = (size: number): number => (size * SKY_LAYER_RADIUS) / DISC_REFERENCE;
 
 function setOpacity(mesh: THREE.Mesh | THREE.Points, opacity: number): void {
   mesh.visible = opacity > 0.001;
@@ -204,7 +209,7 @@ export function applyLighting(
   setOpacity(moon, moonAmount);
   setOpacity(halo, moonAmount);
   place(moon, d, MOON_RADIUS);
-  place(halo, d, preset.disc.size);
+  place(halo, d, MOON_RADIUS * MOON_HALO);
   applyDisc(disc, preset, c?.disc ?? preset.disc.color, moonAmount <= 0, aim);
   if (frame.refreshEnv) refreshEnvironment(scene, preset, c?.skyTop, c?.skyHorizon);
   else scene.environmentIntensity = preset.environment;
@@ -223,5 +228,5 @@ function applyDisc(
     const map = glowTexture(preset.disc.soft);
     if (map && map !== disc.material.map) disc.material.map = map;
   }
-  place(disc, aim, preset.disc.size);
+  place(disc, aim, discScale(preset.disc.size));
 }

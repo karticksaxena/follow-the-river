@@ -82,6 +82,7 @@ export function attachKeyShadows(light: THREE.DirectionalLight, tier: Tier): voi
     },
   };
   attached.set(light, entry);
+  setShadowStrength(light, light.shadow.intensity); // right from the first frame (0 = no passes)
 }
 
 /**

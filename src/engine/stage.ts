@@ -11,6 +11,7 @@ import {
   type Quality,
   type Tier,
 } from './quality';
+import { CAMERA_FAR } from './sky';
 import { clampDelta } from './time';
 import { runUpdaters, type Updater } from './updaters';
 
@@ -58,7 +59,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   container.append(renderer.domElement);
-  const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.05, 200);
+  const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.05, CAMERA_FAR);
   const quality = newQuality();
   let auto = true;
   let setting: Graphics = 'auto';

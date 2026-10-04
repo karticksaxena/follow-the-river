@@ -17,9 +17,14 @@ export interface GradeParams {
   /** Colour added in the shadows / the highlights (split toning). */
   shadows: Vec3;
   highlights: Vec3;
+  /** Multiplies the bloom strength (1 = the horror look's; below it a softer glow). */
+  bloom: number;
 }
 
 export type GradePreset = 'night' | 'day' | 'dusk' | 'flashback' | 'sunrise';
+
+/** The sunrise's bloom share: the sun behind the dam must not haze a quarter of the screen. */
+export const SUNRISE_BLOOM = 0.75;
 
 /** Per-scene looks. Tuning knobs. */
 export const GRADES: Readonly<Record<GradePreset, Readonly<GradeParams>>> = {
@@ -32,6 +37,7 @@ export const GRADES: Readonly<Record<GradePreset, Readonly<GradeParams>>> = {
     contrast: 1.12,
     shadows: [-0.015, 0.012, 0.02],
     highlights: [0, 0.01, 0.03],
+    bloom: 1,
   },
   // Overcast grey-green.
   day: {
@@ -42,6 +48,7 @@ export const GRADES: Readonly<Record<GradePreset, Readonly<GradeParams>>> = {
     contrast: 1.05,
     shadows: [-0.005, 0.012, 0],
     highlights: [0, 0.01, 0],
+    bloom: 1,
   },
   // Rust.
   dusk: {
@@ -52,6 +59,7 @@ export const GRADES: Readonly<Record<GradePreset, Readonly<GradeParams>>> = {
     contrast: 1.1,
     shadows: [0.02, 0, -0.01],
     highlights: [0.04, 0.015, -0.02],
+    bloom: 1,
   },
   // Sepia, cold shadows.
   flashback: {
@@ -62,6 +70,7 @@ export const GRADES: Readonly<Record<GradePreset, Readonly<GradeParams>>> = {
     contrast: 1.1,
     shadows: [-0.005, 0, 0.02],
     highlights: [0.04, 0.025, -0.01],
+    bloom: 1,
   },
   // Warm highlights, blue shadows.
   sunrise: {
@@ -72,6 +81,7 @@ export const GRADES: Readonly<Record<GradePreset, Readonly<GradeParams>>> = {
     contrast: 1,
     shadows: [-0.01, 0, 0.04],
     highlights: [0.06, 0.03, -0.03],
+    bloom: SUNRISE_BLOOM,
   },
 };
 
@@ -87,6 +97,7 @@ const blank = (): GradeParams => ({
   contrast: 1,
   shadows: [0, 0, 0],
   highlights: [0, 0, 0],
+  bloom: 1,
 });
 
 /** Blends two grades (`t` 0 to 1). Pass `out` to reuse it, e.g. every frame of a blend. */
@@ -104,6 +115,7 @@ export function mixGrade(
   out.gamma = a.gamma + (b.gamma - a.gamma) * t;
   out.saturation = a.saturation + (b.saturation - a.saturation) * t;
   out.contrast = a.contrast + (b.contrast - a.contrast) * t;
+  out.bloom = a.bloom + (b.bloom - a.bloom) * t;
   return out;
 }
 
@@ -111,6 +123,8 @@ const vec = (): ReturnType<typeof uniform<'vec3'>> => uniform(new THREE.Vector3(
 const ease = (x: number): number => x * x * (3 - 2 * x);
 
 export interface Grading {
+  /** Bloom strength (`bloomBase` times the grade's multiplier), a uniform driven by the grade. */
+  bloom: THREE.UniformNode<'float', number>;
   /** The grade as a TSL node over the (display-referred) `color`. */
   node(color: THREE.Node<'vec4'>): THREE.Node<'vec4'>;
   /** Blends to `preset` over `seconds` (0 = cut); returns the preset it left. */
@@ -119,7 +133,7 @@ export interface Grading {
 }
 
 /** Colour grade with named presets, blended over time. One per post pipeline. */
-export function createGrading(start: GradePreset): Grading {
+export function createGrading(start: GradePreset, bloomBase = 1): Grading {
   const now = mixGrade(GRADES[start], GRADES[start], 0);
   const from = mixGrade(now, now, 0);
   let target: GradePreset = start;
@@ -129,6 +143,7 @@ export function createGrading(start: GradePreset): Grading {
   const gamma = uniform(1);
   const saturation = uniform(1);
   const contrast = uniform(1);
+  const bloom = uniform(1);
   const push = (): void => {
     for (const k of ['lift', 'gain', 'shadows', 'highlights'] as const) {
       u[k].value.set(...now[k]);
@@ -136,9 +151,11 @@ export function createGrading(start: GradePreset): Grading {
     gamma.value = now.gamma;
     saturation.value = now.saturation;
     contrast.value = now.contrast;
+    bloom.value = now.bloom * bloomBase;
   };
   push();
   return {
+    bloom,
     node(color) {
       const luma = vec3(0.2126, 0.7152, 0.0722);
       const lit = color.rgb.mul(u.gain).add(u.lift.mul(float(1).sub(color.rgb)));

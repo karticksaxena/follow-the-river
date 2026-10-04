@@ -145,7 +145,7 @@ export function createPost(
 ): Post {
   const pipeline = new THREE.RenderPipeline(renderer);
   pipeline.outputColorTransform = false;
-  const grading = createGrading('night');
+  const grading = createGrading('night', POST.bloomStrength);
   const focusAt = uniform(3);
   const webgpu = 'isWebGPUBackend' in renderer.backend;
   const edge = smoothstep(float(0.75), float(0.2), screenUV.sub(0.5).length());
@@ -154,7 +154,7 @@ export function createPost(
 
   /** bloom, vignette, (depth of field), tone map, (SMAA), grade, grain. Nodes with targets go to `owned`. */
   const finish = (g: Graph, withDof: boolean, owned: Disposable[]): THREE.Node => {
-    const glow = bloom(g.color, POST.bloomStrength, POST.bloomRadius, POST.bloomThreshold);
+    const glow = bloom(g.color, grading.bloom, POST.bloomRadius, POST.bloomThreshold);
     owned.push(glow);
     const lit = g.color.add(glow).mul(dark);
     let seen: THREE.Node = lit;

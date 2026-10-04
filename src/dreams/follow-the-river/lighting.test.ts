@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
+import { CAMERA_FAR, MOON_RADIUS, SKY_LAYER_RADIUS, SKY_RADIUS } from '../../engine/sky';
 import {
   applyDim,
   applyLighting,
@@ -11,6 +12,8 @@ import {
   skyDirection,
   SUNRISE_CAPS,
 } from './lighting';
+import { FAR_EDGE_X } from './river';
+import { SKYLINE_SPAN } from './skyline';
 
 const brightness = (hex: number): number => ((hex >> 16) + ((hex >> 8) & 255) + (hex & 255)) / 765;
 
@@ -156,5 +159,30 @@ describe('the sunrise is warm, not blown out', () => {
   it('only day has the overcast layer', () => {
     expect(LIGHTING.day.clouds).toBeGreaterThan(0);
     expect(LIGHTING.night.clouds).toBe(0);
+  });
+});
+
+describe('the sky never hides the world', () => {
+  it('keeps every sky layer inside the far plane but beyond every silhouette and all fog', () => {
+    expect(SKY_RADIUS).toBeLessThan(CAMERA_FAR);
+    expect(SKY_LAYER_RADIUS).toBeLessThan(SKY_RADIUS);
+    // the farthest side silhouette (the far row's outer edge) and the far end of the strip
+    expect(SKY_LAYER_RADIUS).toBeGreaterThan(FAR_EDGE_X + 43);
+    expect(SKY_LAYER_RADIUS).toBeGreaterThan(
+      Math.max(...Object.values(LIGHTING).map((p) => p.fog.far)),
+    );
+    expect(SKYLINE_SPAN).toBeGreaterThan(0);
+  });
+
+  it('places the moon, halo and stars inside the dome and keeps the moon about 4 degrees across', () => {
+    const lights = createWorldLights(new THREE.Scene());
+    applyLighting(lights, LIGHTING.night);
+    for (const mesh of [lights.moon, lights.halo]) {
+      expect(mesh.position.length()).toBeCloseTo(SKY_LAYER_RADIUS);
+    }
+    const degrees = 2 * Math.atan(MOON_RADIUS / SKY_LAYER_RADIUS) * (180 / Math.PI);
+    expect(degrees).toBeGreaterThan(3.8);
+    expect(degrees).toBeLessThan(4.3);
+    expect(lights.halo.scale.x).toBeCloseTo(3 * lights.moon.scale.x);
   });
 });

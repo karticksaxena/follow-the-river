@@ -54,6 +54,15 @@ describe('attachKeyShadows', () => {
   });
 });
 
+describe('the first frame', () => {
+  it('starts with the strength the light already had (0 = no shadow passes)', () => {
+    const light = new THREE.DirectionalLight();
+    light.shadow.intensity = 0;
+    attachKeyShadows(light, 'high');
+    expect([light.shadow.intensity, light.shadow.autoUpdate]).toEqual([0, false]);
+  });
+});
+
 describe('syncKeyShadows', () => {
   it('rebuilds the cascades when the tier changes, and drops them on Low', () => {
     const light = new THREE.DirectionalLight();
