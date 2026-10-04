@@ -11,36 +11,121 @@ const WAKE_OPACITY = 0.3;
 const WAKE_COLOR = 0x9fb4bf;
 export const WAKE_SIZE = { width: 2.4, length: 6 } as const;
 
-/**
- * A faint pale V of broken water trailing the fin: on black water at night the fin alone is easy
- * to miss, the wake is what catches the eye. The V's tip sits at the plane's +Y edge (canvas top).
- */
-export function makeWake(): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
+export const WAKE_W = 128;
+export const WAKE_H = 256;
+const WAKE_FLECKS = 90;
+const WAKE_FLECK_MAX = 0.65; // peak alpha: the product with the envelope stays well under 0.75
+const WAKE_ARM_SPREAD = 0.4; // how far (of the width) each arm opens by the far end
+const WAKE_SCROLL_SPEED = 0.35; // texture lengths per second the water streams past the fin
+
+/** Deterministic hash in [0, 1) (no Math.random: two builds are identical). */
+function hash(n: number): number {
+  const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+interface Fleck {
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
+  a: number;
+}
+
+function makeFlecks(): Fleck[] {
+  const out: Fleck[] = [];
+  for (let i = 0; i < WAKE_FLECKS; i++) {
+    const v = hash(i * 3 + 1);
+    const lane = i % 5; // 0..1 the two arms, 2..4 the wide turbulent centre streak
+    const side = lane === 0 ? -1 : lane === 1 ? 1 : 0;
+    const spread = (hash(i * 3 + 2) - 0.5) * (side === 0 ? 0.3 : 0.08);
+    out.push({
+      x: (0.5 + side * WAKE_ARM_SPREAD * v + spread) * WAKE_W,
+      y: v * WAKE_H,
+      rx: side === 0 ? 7 + hash(i) * 6 : 2.5 + hash(i) * 3,
+      ry: side === 0 ? 14 + hash(i + 9) * 14 : 3 + hash(i + 9) * 5,
+      a: side === 0 ? 0.25 : 0.5 + hash(i + 5) * 0.5,
+    });
+  }
+  return out;
+}
+const FLECKS = makeFlecks();
+
+/** Soft foam flecks and ripple blobs, tiling along the length (wraps in y). Alpha in [0, 0.65]. */
+export function wakeFleck(x: number, y: number): number {
+  let sum = 0;
+  for (const f of FLECKS) {
+    let dy = Math.abs(y - f.y);
+    dy = Math.min(dy, WAKE_H - dy);
+    const dx = (x - f.x) / f.rx;
+    const e = dx * dx + (dy / f.ry) ** 2;
+    if (e < 9) sum += f.a * Math.exp(-e);
+  }
+  return Math.min(WAKE_FLECK_MAX, sum * WAKE_FLECK_MAX);
+}
+
+/** Strongest just behind the fin (top), nothing at the far end and at both edges. */
+function wakeEnvelope(x: number, y: number): number {
+  const v = y / (WAKE_H - 1);
+  const u = Math.abs(x / (WAKE_W - 1) - 0.5) * 2; // 0 centre .. 1 edge
+  return Math.max(0, 1 - v) ** 1.5 * Math.max(0, Math.min(1, (1 - u) * 5));
+}
+
+/** Final alpha per pixel (row-major, tip at row 0): flecks under the static envelope. */
+export function wakeAlpha(): Float32Array {
+  const a = new Float32Array(WAKE_W * WAKE_H);
+  for (let y = 0; y < WAKE_H; y++)
+    for (let x = 0; x < WAKE_W; x++) a[y * WAKE_W + x] = wakeFleck(x, y) * wakeEnvelope(x, y);
+  return a;
+}
+
+/** `map.offset.y` at time t: it grows, so the pattern streams away from the fin. */
+export function wakeScroll(t: number): number {
+  return (t * WAKE_SCROLL_SPEED) % 1;
+}
+
+type Pixel = (x: number, y: number) => [number, number, number, number];
+
+function fillCanvas(px: Pixel): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
-  canvas.width = 64;
-  canvas.height = 128;
+  canvas.width = WAKE_W;
+  canvas.height = WAKE_H;
   const g = canvas.getContext('2d');
   if (g) {
-    const fade = g.createLinearGradient(0, 0, 0, 128);
-    fade.addColorStop(0, 'rgba(255,255,255,0.9)');
-    fade.addColorStop(1, 'rgba(255,255,255,0)');
-    g.strokeStyle = fade;
-    g.lineWidth = 5;
-    g.lineCap = 'round';
-    for (const side of [-1, 1]) {
-      g.beginPath();
-      g.moveTo(32, 4);
-      g.lineTo(32 + side * 28, 124);
-      g.stroke();
+    const img = g.createImageData(WAKE_W, WAKE_H);
+    for (let y = 0; y < WAKE_H; y++) {
+      for (let x = 0; x < WAKE_W; x++) img.data.set(px(x, y), (y * WAKE_W + x) * 4);
     }
+    g.putImageData(img, 0, 0);
   }
+  return canvas;
+}
+
+/**
+ * A faint pale patch of broken, disturbed water trailing the fin: on black water at night the fin
+ * alone is easy to miss. The tip sits at the plane's +Y edge. `map` (tileable flecks) scrolls via
+ * `wakeScroll`; `alphaMap` is the static envelope that fades the wake out.
+ */
+export function makeWake(): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
+  const map = new THREE.CanvasTexture(
+    fillCanvas((x, y) => [255, 255, 255, Math.round(wakeFleck(x, y) * 255)]),
+  );
+  map.wrapT = THREE.RepeatWrapping;
+  const alphaMap = new THREE.CanvasTexture(
+    fillCanvas((x, y) => {
+      const e = Math.round(wakeEnvelope(x, y) * 255);
+      return [e, e, e, 255];
+    }),
+  );
   const material = new THREE.MeshBasicMaterial({
-    map: new THREE.CanvasTexture(canvas),
+    map,
+    alphaMap,
     color: WAKE_COLOR,
     transparent: true,
     opacity: WAKE_OPACITY,
     depthWrite: false,
   });
+  material.addEventListener('dispose', () => alphaMap.dispose());
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
   mesh.scale.set(WAKE_SIZE.width, WAKE_SIZE.length, 1);
   mesh.renderOrder = 1;
