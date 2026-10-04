@@ -13,7 +13,7 @@ const RADIUS = 0.35;
 const TURN_RATE = 6;
 const DRAG_SPEED = 2;
 /** Share of its speed a zombie keeps while winding up a blow. */
-const LUNGE = 0.55;
+const LUNGE = 0.45;
 const SINK_SPEED = 1.2;
 const PARK_Y = -50;
 

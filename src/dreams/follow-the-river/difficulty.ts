@@ -11,9 +11,9 @@ export interface NightDifficulty {
 
 /** Tuning knobs: each night is a little worse than the last. */
 export const NIGHT_DIFFICULTY: Readonly<Record<1 | 2 | 3, NightDifficulty>> = {
-  1: { cap: 14, interval: 2.2, speed: 4.0 },
-  2: { cap: 18, interval: 1.9, speed: 4.2 },
-  3: { cap: 22, interval: 1.6, speed: 4.4 },
+  1: { cap: 14, interval: 2.2, speed: 3.8 },
+  2: { cap: 18, interval: 1.9, speed: 3.9 },
+  3: { cap: 22, interval: 1.6, speed: 4.0 },
 };
 
 /** Horde pool size: the largest cap of any night. */
