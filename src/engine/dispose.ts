@@ -31,7 +31,10 @@ export function disposeScene(root: THREE.Object3D): void {
     done.add(thing);
     thing.dispose();
   };
-  root.traverse((node) => {
+  // Disposing can remove nodes (a CSM detaches its cascade lights), which breaks a live traverse.
+  const nodes: THREE.Object3D[] = [];
+  root.traverse((node) => nodes.push(node));
+  for (const node of nodes) {
     if (node instanceof THREE.DirectionalLight) detachKeyShadows(node);
     if (
       node instanceof THREE.Light &&
@@ -47,7 +50,7 @@ export function disposeScene(root: THREE.Object3D): void {
     }
     // An InstancedMesh's matrices (and per-instance attributes) are GPU buffers of their own.
     if (node instanceof THREE.InstancedMesh) node.dispose();
-    if (!isDrawable(node)) return;
+    if (!isDrawable(node)) continue;
     // three builds one geometry for every Sprite: freeing it left the next home screen's sprites
     // on a destroyed GPU buffer, every frame failed and the last game frame stayed on screen.
     if (!(node instanceof THREE.Sprite)) free(node.geometry);
@@ -56,5 +59,5 @@ export function disposeScene(root: THREE.Object3D): void {
       if (!isCached(material)) for (const texture of texturesOf(material)) free(texture);
       free(material);
     }
-  });
+  }
 }

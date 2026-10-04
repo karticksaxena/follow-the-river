@@ -1,7 +1,9 @@
+import { CSMShadowNode } from 'three/addons/csm/CSMShadowNode.js';
 import * as THREE from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import { disposeScene } from './dispose';
 import { markCached } from './models';
+import { attachKeyShadows } from './shadows';
 
 function mesh(): THREE.Mesh<THREE.BoxGeometry, THREE.MeshLambertMaterial> {
   const material = new THREE.MeshLambertMaterial({ map: new THREE.Texture() });
@@ -75,5 +77,37 @@ describe('disposeScene', () => {
     const spy = vi.spyOn(a.material, 'dispose');
     disposeScene(scene);
     expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it('survives a dispose that removes later nodes from the graph mid-walk', () => {
+    const scene = new THREE.Scene();
+    const a = mesh();
+    const b = mesh();
+    const c = mesh();
+    scene.add(a, b, c);
+    a.material.addEventListener('dispose', () => scene.remove(b, c));
+    const spies = [a, b, c].map((m) => vi.spyOn(m.material, 'dispose'));
+    expect(() => disposeScene(scene)).not.toThrow();
+    for (const spy of spies) expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it('survives key shadows whose CSM detach removes its cascade lights', () => {
+    vi.stubGlobal('addEventListener', vi.fn());
+    vi.stubGlobal('removeEventListener', vi.fn());
+    const scene = new THREE.Scene();
+    const key = new THREE.DirectionalLight();
+    attachKeyShadows(key, 'high');
+    const csm = key.shadow.shadowNode;
+    if (!(csm instanceof CSMShadowNode)) throw new Error('expected a CSM');
+    scene.add(key);
+    const cascade = new THREE.DirectionalLight(); // the CSM adds these itself on first render
+    csm.lights.push(cascade);
+    scene.add(cascade, cascade.target);
+    const tail = mesh();
+    scene.add(tail);
+    const spy = vi.spyOn(tail.material, 'dispose');
+    expect(() => disposeScene(scene)).not.toThrow();
+    expect(spy).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
   });
 });
