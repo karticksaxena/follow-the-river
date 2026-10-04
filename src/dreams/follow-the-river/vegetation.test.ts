@@ -137,10 +137,12 @@ describe('forest and suburbs vegetation', () => {
   });
 });
 
-describe('visible', () => {
-  const show = (kind: Kind, d: number, tier: Tier = 'high', fog = 60): boolean =>
-    visible(kind, d, d, tier, fog);
+/** `visible` for a point cell at distance `d`. */
+function show(kind: Kind, d: number, tier: Tier = 'high', fog = 60): boolean {
+  return visible(kind, d, d, tier, fog);
+}
 
+describe('visible', () => {
   it('shows near trees up close, their thinned twin farther, and both only in the swap band', () => {
     for (const tier of ['medium', 'high'] as const) {
       const swap = REACH.nearTree[tier];
