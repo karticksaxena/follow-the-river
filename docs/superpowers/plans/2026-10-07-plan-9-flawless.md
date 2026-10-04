@@ -51,6 +51,10 @@ window.__click = (label) => { const b=[...document.querySelectorAll('#overlay bu
 | Ammo | **Crates get smaller. Small ammo and arrow pickups lie along the river edge** (the orca's side) to pull the player to the water. Arrows get scarce too. |
 | Creature's name | Mom calls it **"Dras"**. |
 | Lore | The lab calls it **"Subject R-7"**: a **freshwater orca variant engineered to clean the river** (real orcas live in the sea). **New short flashback cutscene: Mom naming it "Dras" at the tank.** On-screen text never says "orca" again: use Dras / the subject / it. |
+| Naming scene placement (asked 2026-10-04) | **Tape 1 becomes the naming**: Day 1's tape shows Mom at the tank: Subject R-7, a freshwater orca variant made to clean the river, and she names her Dras. The old tape 1 lines (the escaped mice, Arun) move into tape 2. |
+| Graphics (asked 2026-10-04, after Kartik compared it to the threejs.org showcase) | **Sharp stylised.** Keep the low-poly art, but: full-resolution render with adaptive quality holding 60 fps (replaces the 540-row render), anti-aliasing, AgX tone mapping, ambient occlusion (GTAO) so things sit on the ground, a physical sky (`SkyMesh`: real sunrise, moonlit night), soft moon and sun shadows, wind in trees and grass, mist and splash particles, depth of field in cutscenes, and Quaternius' nicer CC0 nature models. This overrides the spec's "540-row render" line. |
+| Animation (asked 2026-10-04) | **Full pass.** More Quaternius UAL CC0 mocap clips (talking, crouching, filming with the phone, sit-down/get-up transitions), heads turning to look at you, hands placed exactly on the creature (IK), a smoother swim with a moving spine, the farewell's head lift and eye turn, and smooth spline camera rails for cutscenes. |
+| Kartik's look (asked 2026-10-04) | **Medium-brown skin**, dark hair, dark t-shirt, jeans. |
 
 ## 2. Kartik's feedback, item by item
 
