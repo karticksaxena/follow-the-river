@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import type { AmbushDef } from './areas/types';
 import { createControls, cutsceneChange, type Controls } from './controls';
-import { DIFFICULTY, nightTuning } from './difficulty';
+import { DIFFICULTY, nightTuning, type DifficultyTuning } from './difficulty';
 import { nightEnd } from './ending';
 import { BEAM, chargeBattery } from './flashlight';
 import { nearSpot, takeDamage } from './flow';
@@ -10,7 +10,8 @@ import { applyDim, LIGHTING } from './lighting';
 import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
 import { addSupply, AMMO_OF, chapterOf, isNight } from './state';
-import { ambushSpot, stepWaves } from './waves';
+import { ambushSpot, objective, spawnSpot, stepWaves } from './waves';
+import type { Tuning } from './zombies/brain';
 import type { PlayerSense } from './zombies/horde';
 
 /** Shack darkness eases at this rate (per second); lights are touched only past `DIM_EPSILON`. */
@@ -38,8 +39,12 @@ interface State {
   run: Run;
   events: Events;
   sense: PlayerSense;
-  /** The chapter (its night's zombie tuning is looked up per spawn: the difficulty can change). */
+  /** The chapter; the night's tuning and difficulty are read at each wave's start (a menu change applies from the next wave). */
   chapter: number;
+  waveD: Pick<DifficultyTuning, 'quota' | 'interval'>;
+  /** The night's zombie tuning plus the wave's `faster`, built once per wave. */
+  waveTuning: Tuning;
+  zone: { startZ: number; gateZ: number; minX: number; maxX: number };
   controls: Controls;
   look: THREE.Vector3;
   /** Seconds the torch has been off (it recharges after a moment). */
@@ -80,6 +85,9 @@ function createState(sys: Systems, run: Run, events: Events): State {
     events,
     sense,
     chapter,
+    waveD: DIFFICULTY[sys.ctx.difficulty()],
+    waveTuning: nightTuning(chapter, sys.ctx.difficulty()),
+    zone: { startZ: 0, gateZ: 0, minX: area.landX + 1, maxX: EDGE_X - NIGHT_STRIP_MARGIN },
     controls: createControls(sys, run, events, sense),
     look: new THREE.Vector3(),
     offFor: 0,
@@ -95,6 +103,7 @@ function createState(sys: Systems, run: Run, events: Events): State {
       weapon: 'bow',
       wave: 0,
       waves: area.waves.length,
+      goal: '',
     },
     wasPaused: true,
     hitPause: false,
@@ -156,16 +165,50 @@ function tickWorld(p: State, dt: number): void {
   sys.pickups.update(dt);
 }
 
-/** The night's waves: start when you pass one, spring its ambushes as you go, open the barricade when it's dead. */
-function tickWaves(p: State): void {
+/** A wave begins: its difficulty and zombie tuning (the night's plus the wave's `faster`) are fixed for it. */
+function startWave(p: State, wave: number): void {
+  const { sys } = p;
+  const def = sys.area.waves[wave];
+  if (!def) return;
+  const base = nightTuning(p.chapter, sys.ctx.difficulty());
+  p.waveTuning = { ...base, speed: base.speed + def.faster };
+  p.zone.startZ = def.z;
+  p.zone.gateZ = def.gateZ;
+  p.events.hint('wave');
+}
+
+/** One zombie that keeps the wave coming, on a free spot out of your face, hunting at once. */
+function spawnOne(p: State): void {
+  const { sys, sense, zone } = p;
+  for (let tries = 0; tries < 6; tries++) {
+    const at = spawnSpot(sense, zone, Math.random);
+    if (p.blocked(at.x, at.z)) continue;
+    sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), p.waveTuning, false);
+    sys.horde.alert(at.x, at.z, 2);
+    return;
+  }
+}
+
+/** The night's waves: start when you pass one, keep sending zombies, spring its ambushes, open the barricade when it's dead. */
+function tickWaves(p: State, dt: number): void {
   const { sys, run, sense } = p;
-  const event = stepWaves(run.waves, sys.area.waves, sense.z, sys.horde.aliveCount());
+  if (!run.waves.fighting) p.waveD = DIFFICULTY[sys.ctx.difficulty()];
+  const event = stepWaves(
+    run.waves,
+    sys.area.waves,
+    sense.z,
+    sys.horde.aliveCount(),
+    dt,
+    p.waveD,
+    Math.random,
+  );
   if (!event) return;
-  if (event.kind === 'start') p.events.hint('wave');
+  if (event.kind === 'start') startWave(p, event.wave);
   else if (event.kind === 'clear') {
     sys.gates.open(event.wave);
     p.events.checkpoint(event.wave + 1);
-  } else spawnAmbush(p, event.ambush);
+  } else if (event.kind === 'one') spawnOne(p);
+  else spawnAmbush(p, event.ambush);
 }
 
 /** One ambush's zombies, each on a free spot of the bank; the lying ones keep still until woken. */
@@ -179,13 +222,7 @@ function spawnAmbush(p: State, ambush: AmbushDef): void {
     for (let tries = 0; tries < 6; tries++) {
       const at = ambushSpot(ambush, sense, gateZ, sys.area.landX + 1, maxX, Math.random);
       if (p.blocked(at.x, at.z)) continue;
-      sys.horde.spawn(
-        at.x,
-        at.z,
-        Math.atan2(sense.x - at.x, sense.z - at.z),
-        nightTuning(p.chapter, sys.ctx.difficulty()),
-        lying,
-      );
+      sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), p.waveTuning, lying);
       spot ??= at;
       break;
     }
@@ -246,6 +283,14 @@ function tickView(p: State, dt: number): void {
   hudState.damage = DIFFICULTY[sys.ctx.difficulty()].damage;
   const fighting = isNight(run.phase) && run.ending === 'no' && run.waves.fighting;
   hudState.wave = fighting ? run.waves.cleared + 1 : 0;
+  hudState.goal = objective({
+    night: isNight(run.phase),
+    fighting,
+    wave: run.waves.cleared,
+    waves: hudState.waves,
+    ending: run.ending !== 'no',
+    lake: sys.area.lake !== undefined,
+  });
   sys.hud.set(hudState);
   sys.hud.prompt(p.controls.prompt());
 }
@@ -282,7 +327,7 @@ function tick(p: State, dt: number): void {
   p.controls.update(dt);
   tickWorld(p, dt);
   sys.scares.update(dt, sense, isNight(run.phase) && run.ending !== 'calm');
-  if (isNight(run.phase) && run.ending === 'no') tickWaves(p);
+  if (isNight(run.phase) && run.ending === 'no') tickWaves(p, dt);
   tickDim(p, dt);
   tickHints(p);
   tickView(p, dt);

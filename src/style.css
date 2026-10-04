@@ -241,6 +241,15 @@ h1.title {
   letter-spacing: 0.08em;
   text-shadow: 0 0 6px #000;
 }
+.hud-goal {
+  position: absolute;
+  left: 24px;
+  top: 4%;
+  max-width: 22em;
+  font-size: 0.85em;
+  opacity: 0.7;
+  text-shadow: 0 0 6px #000;
+}
 .hud-prompt {
   position: absolute;
   left: 50%;

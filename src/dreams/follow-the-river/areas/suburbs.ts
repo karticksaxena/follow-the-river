@@ -4,7 +4,7 @@ import type { AreaDef, LurkerDef, PickupDef, PropPlacement, ScareDef, ShackDef }
 
 const ROAD_X = -5;
 const START_Z = 14;
-const END_Z = -415;
+const END_Z = -505;
 const BARRICADE_Z = -120;
 const LAND_X = -18;
 const NIGHT_FOG = 50;
@@ -121,28 +121,28 @@ function farm(): PropPlacement[] {
   const corn: Extra = { scale: 0.35 };
   const out: PropPlacement[] = [];
   for (const x of [-16, -13.5, -11, -8.5, -6]) {
-    out.push(...row('nature', 'crops_cornStageD', -135, -230, 2.2, x, corn));
-    out.push(...row('nature', 'crops_cornStageD', -255, -345, 2.2, x, corn));
+    out.push(...row('nature', 'crops_cornStageD', -135, -340, 2.2, x, corn));
+    out.push(...row('nature', 'crops_cornStageD', -360, -470, 2.2, x, corn));
   }
   return [
     ...out,
-    ...row('nature', 'fence_planks', -126, -392, 2.7, -17.5, { yaw: Math.PI / 2, scale: 0.55 }),
-    ...row('roads', 'electricity-pole', -140, -400, 40, -9.5),
+    ...row('nature', 'fence_planks', -126, -480, 2.7, -17.5, { yaw: Math.PI / 2, scale: 0.55 }),
+    ...row('roads', 'electricity-pole', -140, -490, 40, -9.5),
     car('delivery', -3, -180, 0.3),
     car('delivery', -2.5, -240, 0.5),
     car('garbage-truck', -4.5, -350, -0.4),
     ...row('survival', 'barrel', -200, -330, 65, -24, { scale: 5 }),
-    ...row('nature', 'tree_default_dark', -150, -390, 60, -21),
+    ...row('nature', 'tree_default_dark', -150, -480, 60, -21),
   ];
 }
 
 /** The ranger camp at the forest edge: tents, a fire and logs (the cabin is the safe prop). */
 function camp(): PropPlacement[] {
   return [
-    { kit: 'nature', model: 'tent_detailedOpen', x: -5, z: -396, yaw: 0.3 },
-    { kit: 'nature', model: 'tent_detailedOpen', x: -5, z: -409, yaw: -0.2 },
-    { kit: 'nature', model: 'campfire_logs', x: -2, z: -402, scale: 0.4 },
-    { kit: 'nature', model: 'log_stack', x: -7, z: -392, yaw: 1, scale: 0.6 },
+    { kit: 'nature', model: 'tent_detailedOpen', x: -5, z: -486, yaw: 0.3 },
+    { kit: 'nature', model: 'tent_detailedOpen', x: -5, z: -499, yaw: -0.2 },
+    { kit: 'nature', model: 'campfire_logs', x: -2, z: -492, scale: 0.4 },
+    { kit: 'nature', model: 'log_stack', x: -7, z: -482, yaw: 1, scale: 0.6 },
   ];
 }
 
@@ -200,35 +200,47 @@ export const SUBURBS: AreaDef = {
   endZ: END_Z,
   waves: [
     {
-      z: -148,
-      gateZ: -180,
+      z: -134,
+      gateZ: -239,
+      quota: 11,
+      every: [4, 5.5],
+      cap: 7,
+      faster: 0,
       ambushes: [
-        { z: -148, count: 2, kind: 'street' },
-        { z: -152, count: 3, kind: 'cover', x: -10, at: -170 },
-        { z: -160, count: 1, kind: 'behind' },
-        { z: -162, count: 2, kind: 'lying', x: -4, at: -176 },
+        { z: -134, count: 2, kind: 'street' },
+        { z: -150, count: 3, kind: 'cover', x: -10, at: -172 },
+        { z: -185, count: 1, kind: 'behind' },
+        { z: -195, count: 2, kind: 'lying', x: -4, at: -220 },
       ],
       crate: { x: -1 },
     },
     {
-      z: -212,
-      gateZ: -244,
+      z: -249,
+      gateZ: -354,
+      quota: 14,
+      every: [3.5, 5],
+      cap: 9,
+      faster: 0.15,
       ambushes: [
-        { z: -212, count: 2, kind: 'street' },
-        { z: -214, count: 3, kind: 'cover', x: -10, at: -229 },
-        { z: -224, count: 2, kind: 'behind' },
-        { z: -226, count: 3, kind: 'cover', x: -1.5, at: -241 },
+        { z: -249, count: 2, kind: 'street' },
+        { z: -265, count: 3, kind: 'cover', x: -10, at: -290 },
+        { z: -305, count: 2, kind: 'behind' },
+        { z: -320, count: 3, kind: 'cover', x: -1.5, at: -340 },
       ],
       crate: { x: -1, gun: 'rifle' },
     },
     {
-      z: -276,
-      gateZ: -308,
+      z: -364,
+      gateZ: -469,
+      quota: 17,
+      every: [3, 4.5],
+      cap: 11,
+      faster: 0.3,
       ambushes: [
-        { z: -276, count: 2, kind: 'street' },
-        { z: -278, count: 4, kind: 'cover', x: -11, at: -296 },
-        { z: -288, count: 3, kind: 'lying', x: -5, at: -304 },
-        { z: -296, count: 3, kind: 'behind' },
+        { z: -364, count: 2, kind: 'street' },
+        { z: -385, count: 4, kind: 'cover', x: -11, at: -405 },
+        { z: -420, count: 3, kind: 'lying', x: -5, at: -440 },
+        { z: -440, count: 3, kind: 'behind' },
       ],
       crate: { x: -1 },
     },
@@ -241,8 +253,8 @@ export const SUBURBS: AreaDef = {
   waitSpot: { x: 0.5, z: -113, yaw: Math.PI },
   barricadeZ: BARRICADE_Z,
   nightStart: { x: 1.5, z: -124, yaw: 0 },
-  safeZ: -400,
-  safeProp: { prop: 'cabin', x: -10, z: -402, yaw: 0 },
+  safeZ: -490,
+  safeProp: { prop: 'cabin', x: -10, z: -492, yaw: 0 },
   nightFog: NIGHT_FOG,
   props: PROPS,
   shacks: SHACKS,

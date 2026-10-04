@@ -65,7 +65,15 @@ export interface WaveDef {
   z: number;
   /** The barricade across the bank (z) that stays up until the wave is dead. */
   gateZ: number;
-  /** Ambushes set off along the zone, by trigger z (downstream order); the wave is their total. */
+  /** Zombies to kill before the barricade falls (Normal; ambushes count toward it). */
+  quota: number;
+  /** Seconds between spawns, random in [min, max] (Normal). */
+  every: readonly [number, number];
+  /** Most of this wave alive at once. */
+  cap: number;
+  /** Added to the night's chase speed (m/s): each wave a little faster. */
+  faster: number;
+  /** Ambushes set off along the zone, by trigger z (downstream order); they count toward the quota. */
   ambushes: readonly AmbushDef[];
   /** The crate's x on the bank, and the gun inside, if any. */
   crate: { x: number; gun?: GunKind };

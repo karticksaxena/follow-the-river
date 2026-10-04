@@ -6,7 +6,7 @@ const ROAD_X = -5;
 const LIGHT_X = -8.5;
 /** Day-1 strip: from the start blocker to the barricade, then Night 1 on to the boathouse. */
 const START_Z = 14;
-const END_Z = -415;
+const END_Z = -505;
 const BARRICADE_Z = -120;
 const LAND_X = -18;
 /** Shack interiors: back wall at x ≈ -17, so pickups sit 1 m in. */
@@ -113,16 +113,16 @@ function barricade(): PropPlacement[] {
 /** Past the barricade the city thins into suburb fences, big trees and poles. */
 function outskirts(): PropPlacement[] {
   return [
-    ...row('suburb', 'fence-2x3', -250, -400, 12, -16, { yaw: Math.PI / 2 }),
-    ...row('suburb', 'tree-large', -255, -400, 20, -14),
-    ...row('suburb', 'tree-large', -265, -400, 28, -12.5),
-    ...row('roads', 'electricity-pole', -270, -400, 40, -10.5),
+    ...row('suburb', 'fence-2x3', -250, -500, 12, -16, { yaw: Math.PI / 2 }),
+    ...row('suburb', 'tree-large', -255, -500, 20, -14),
+    ...row('suburb', 'tree-large', -265, -500, 28, -12.5),
+    ...row('roads', 'electricity-pole', -270, -500, 40, -10.5),
   ];
 }
 
 const PROPS: readonly PropPlacement[] = [
-  ...row('roads', 'road-straight', 12, -410, 6, ROAD_X, { yaw: Math.PI / 2 }),
-  ...row('roads', 'light-square', 10, -400, 18, LIGHT_X),
+  ...row('roads', 'road-straight', 12, -500, 6, ROAD_X, { yaw: Math.PI / 2 }),
+  ...row('roads', 'light-square', 10, -495, 18, LIGHT_X),
   ...streetProps(),
   ...backdrop(),
   ...barricade(),
@@ -179,35 +179,45 @@ export const CITY: AreaDef = {
   endZ: END_Z,
   waves: [
     {
-      z: -148,
-      gateZ: -180,
+      z: -134,
+      gateZ: -239,
+      quota: 9,
+      every: [4, 6],
+      cap: 6,
+      faster: 0,
       ambushes: [
-        { z: -148, count: 2, kind: 'street' },
-        { z: -152, count: 2, kind: 'lying', x: -4, at: -172 },
-        { z: -160, count: 1, kind: 'street' },
-        { z: -166, count: 1, kind: 'behind' },
+        { z: -134, count: 2, kind: 'street' },
+        { z: -160, count: 2, kind: 'lying', x: -4, at: -185 },
+        { z: -205, count: 1, kind: 'behind' },
       ],
       crate: { x: -1, gun: 'pistol' },
     },
     {
-      z: -212,
-      gateZ: -244,
+      z: -249,
+      gateZ: -354,
+      quota: 12,
+      every: [3.5, 5],
+      cap: 8,
+      faster: 0.15,
       ambushes: [
-        { z: -212, count: 2, kind: 'street' },
-        { z: -217, count: 2, kind: 'lying', x: -6, at: -236 },
-        { z: -226, count: 2, kind: 'street' },
-        { z: -234, count: 2, kind: 'behind' },
+        { z: -249, count: 2, kind: 'street' },
+        { z: -275, count: 2, kind: 'lying', x: -6, at: -300 },
+        { z: -320, count: 2, kind: 'behind' },
       ],
       crate: { x: -1, gun: 'shotgun' },
     },
     {
-      z: -276,
-      gateZ: -308,
+      z: -364,
+      gateZ: -469,
+      quota: 15,
+      every: [3, 4.5],
+      cap: 10,
+      faster: 0.3,
       ambushes: [
-        { z: -276, count: 3, kind: 'street' },
-        { z: -278, count: 2, kind: 'cover', x: -13, at: -293 },
-        { z: -286, count: 3, kind: 'lying', x: -5, at: -304 },
-        { z: -296, count: 2, kind: 'behind' },
+        { z: -364, count: 3, kind: 'street' },
+        { z: -385, count: 2, kind: 'cover', x: -13, at: -405 },
+        { z: -420, count: 3, kind: 'lying', x: -5, at: -445 },
+        { z: -440, count: 2, kind: 'behind' },
       ],
       crate: { x: -1 },
     },
@@ -220,8 +230,8 @@ export const CITY: AreaDef = {
   waitSpot: { x: 0.5, z: -113, yaw: Math.PI },
   barricadeZ: BARRICADE_Z,
   nightStart: { x: 1.5, z: -124, yaw: 0 },
-  safeZ: -400,
-  safeProp: { prop: 'boathouse', x: 0, z: -402, yaw: 0 },
+  safeZ: -490,
+  safeProp: { prop: 'boathouse', x: 0, z: -492, yaw: 0 },
   props: PROPS,
   shacks: SHACKS,
   pickups: PICKUPS,

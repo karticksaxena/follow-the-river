@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
 import type { AmbushDef, AreaDef, GatePiece, PickupDef, WaveDef } from './areas/types';
+import type { DifficultyTuning } from './difficulty';
 import { KIT_SCALE, kitUrl } from './kits';
 import { EDGE_X } from './river';
 
@@ -27,13 +28,16 @@ export interface WaveState {
   fighting: boolean;
   /** Ambushes of the wave in play already sprung. */
   fired: number;
-  /** Zombies of the wave in play still waiting in ambushes not yet sprung. */
+  /** Zombies of the wave in play still to spawn (ambushes not yet sprung included). */
   toSpawn: number;
+  /** Seconds to the next continuous spawn. */
+  nextIn: number;
 }
 
 export type WaveEvent =
   | { kind: 'start'; wave: number }
   | { kind: 'spawn'; ambush: AmbushDef }
+  | { kind: 'one' }
   | { kind: 'clear'; wave: number }
   | null;
 
@@ -42,17 +46,34 @@ export const newWaveState = (cleared = 0): WaveState => ({
   fighting: false,
   fired: 0,
   toSpawn: 0,
+  nextIn: 0,
 });
 
-/** Zombies in a wave, all its ambushes together. */
+/** Zombies in a wave's ambushes. */
 export const waveTotal = (def: WaveDef): number => def.ambushes.reduce((n, a) => n + a.count, 0);
 
-/** Pure: one frame of the waves. `z` is the player's, `alive` the zombies (lying too) on the bank. */
+/** Zombies a wave sends at difficulty factor `k`: never fewer than its ambushes. */
+export const quotaOf = (def: WaveDef, k: number): number =>
+  Math.max(waveTotal(def), Math.round(def.quota * k));
+
+const reservedFrom = (def: WaveDef, fired: number): number =>
+  def.ambushes.slice(fired).reduce((n, a) => n + a.count, 0);
+
+const ONE: WaveEvent = { kind: 'one' };
+
+/**
+ * Pure: one frame of the waves. `z` is the player's, `alive` the zombies (lying too) on the bank.
+ * Once started a wave sends a zombie every few seconds (up to its cap) until its quota is out,
+ * so standing still never buys peace; ambushes are extra bursts at their triggers.
+ */
 export function stepWaves(
   w: WaveState,
   waves: readonly WaveDef[],
   z: number,
   alive: number,
+  dt: number,
+  d: Pick<DifficultyTuning, 'quota' | 'interval'>,
+  rand: () => number,
 ): WaveEvent {
   const def = waves[w.cleared];
   if (!def) return null;
@@ -60,7 +81,8 @@ export function stepWaves(
     if (z > def.z) return null;
     w.fighting = true;
     w.fired = 0;
-    w.toSpawn = waveTotal(def);
+    w.toSpawn = quotaOf(def, d.quota);
+    w.nextIn = 0;
     return { kind: 'start', wave: w.cleared };
   }
   const next = def.ambushes[w.fired];
@@ -69,10 +91,60 @@ export function stepWaves(
     w.toSpawn -= next.count;
     return { kind: 'spawn', ambush: next };
   }
-  if (next || alive > 0) return null;
+  w.nextIn -= dt;
+  if (w.toSpawn > reservedFrom(def, w.fired) && alive < def.cap && w.nextIn <= 0) {
+    w.toSpawn--;
+    const [lo, hi] = def.every;
+    w.nextIn = (lo + rand() * (hi - lo)) * d.interval;
+    return ONE;
+  }
+  if (w.toSpawn > 0 || alive > 0) return null;
   w.fighting = false;
   w.cleared++;
   return { kind: 'clear', wave: w.cleared - 1 };
+}
+
+/** Where continuous spawns go (tuning knobs): out of the fog, never in your face. */
+export const SPAWN = {
+  near: 18,
+  far: 32,
+  flank: 4,
+  keepAway: 12,
+  land: 14,
+  behindMax: 10,
+} as const;
+
+/** A z `keepAway` from the player for a spawn `dx` across: on the side asked, else the other. */
+function pushedZ(pz: number, dx: number, sign: number, lo: number, hi: number): number {
+  const dz = Math.sqrt(Math.max(0, SPAWN.keepAway ** 2 - dx * dx));
+  const a = pz + sign * dz;
+  if (a >= lo && a <= hi) return a;
+  const b = pz - sign * dz;
+  return b >= lo && b <= hi ? b : Math.max(lo, Math.min(hi, a));
+}
+
+/**
+ * Pure: where one continuous zombie appears. 45 % ahead (downstream), 25 % behind, 30 % from the
+ * land side; always on the bank, short of the gate, and at least `keepAway` from the player.
+ */
+export function spawnSpot(
+  player: { x: number; z: number },
+  zone: { startZ: number; gateZ: number; minX: number; maxX: number },
+  rand: () => number,
+): { x: number; z: number } {
+  const roll = rand();
+  const d = SPAWN.near + rand() * (SPAWN.far - SPAWN.near);
+  const lo = zone.gateZ + 2;
+  const hi = zone.startZ + SPAWN.behindMax;
+  const land = roll >= 0.7;
+  const sign = roll < 0.45 ? -1 : roll < 0.7 ? 1 : rand() < 0.5 ? -1 : 1;
+  const span = land ? SPAWN.flank : zone.maxX - zone.minX;
+  const x = zone.minX + rand() * span;
+  let z = Math.max(lo, Math.min(hi, player.z + sign * (land ? SPAWN.land : d)));
+  if (Math.hypot(x - player.x, z - player.z) < SPAWN.keepAway) {
+    z = pushedZ(player.z, x - player.x, z >= player.z ? 1 : -1, lo, hi);
+  }
+  return { x, z };
 }
 
 /** Pure: where one zombie of an ambush goes, on the bank within [minX, maxX], never past the gate. */
@@ -106,6 +178,35 @@ export function waveCrates(area: AreaDef): PickupDef[] {
     z: w.z - 2,
     ...(w.crate.gun ? { gun: w.crate.gun } : {}),
   }));
+}
+
+/** Small supplies at the water's edge, three per zone: something to run for while the wave comes. */
+export function edgePickups(area: AreaDef): PickupDef[] {
+  const kinds = ['ammo', 'arrows', 'ammo'] as const;
+  return area.waves.flatMap((w, i) =>
+    kinds.map((kind, k) => ({
+      id: `${area.id}-edge-${i + 1}-${k + 1}`,
+      kind,
+      x: EDGE_X - 0.45,
+      z: w.z - 25 - k * 30,
+    })),
+  );
+}
+
+/** The one line that says what to do; `wave` is the waves cleared (all of them: the lake is next). */
+export function objective(o: {
+  night: boolean;
+  fighting: boolean;
+  wave: number;
+  waves: number;
+  ending: boolean;
+  lake: boolean;
+}): string {
+  if (o.ending) return '';
+  if (!o.night) return 'Search for supplies. Rest by the campfire when you are ready.';
+  if (o.fighting) return 'Kill them all. The barricade falls when the wave is dead.';
+  if (o.lake && o.wave >= o.waves) return 'Follow the river to the lake. Mom is waiting.';
+  return 'Follow the river. Keep moving downstream.';
 }
 
 export interface Gates {

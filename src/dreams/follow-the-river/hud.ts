@@ -17,9 +17,10 @@ export interface HudState {
   /** Guns owned, as bits (see `gunBits`): crates are optional, so any mix is possible. */
   guns: number;
   weapon: Weapon;
-  /** The wave being fought (1-based; 0 = none), of how many, and zombies left in it. */
+  /** The wave being fought (1-based; 0 = none) of how many, and the goal line (what to do). */
   wave: number;
   waves: number;
+  goal: string;
 }
 
 const NAMES: Readonly<Record<Weapon, string>> = {
@@ -84,6 +85,7 @@ interface HudEls {
   readonly weapons: Readonly<Record<Weapon, HTMLElement>>;
   readonly weaponRow: HTMLElement;
   readonly waveEl: HTMLElement;
+  readonly goalEl: HTMLElement;
   readonly promptEl: HTMLElement;
   // Last written values, so the DOM is only touched when something changes.
   // `fresh` makes the first set() write everything; after that fields are copied in place.
@@ -110,8 +112,9 @@ function buildHud(root: HTMLElement): HudEls {
   ammo.hidden = true;
   weaponRow.hidden = true;
   const waveEl = el('div', 'hud-wave');
+  const goalEl = el('div', 'hud-goal');
   stats.append(health, battery, arrows, fish, ammo, weaponRow);
-  hud.append(hurtEl, dot, waveEl, stats, promptEl);
+  hud.append(hurtEl, dot, waveEl, goalEl, stats, promptEl);
   root.append(hud);
   hurtEl.addEventListener('animationend', () => hurtEl.classList.remove('flash'));
   const last: HudState = {
@@ -126,6 +129,7 @@ function buildHud(root: HTMLElement): HudEls {
     weapon: 'bow',
     wave: 0,
     waves: 0,
+    goal: '',
   };
   return {
     hud,
@@ -138,6 +142,7 @@ function buildHud(root: HTMLElement): HudEls {
     weapons,
     weaponRow,
     waveEl,
+    goalEl,
     promptEl,
     last,
     fresh: true,
@@ -170,6 +175,7 @@ function writeStats(h: HudEls, s: HudState): void {
   if (fresh || last.wave !== s.wave) {
     h.waveEl.textContent = waveText(s.wave, s.waves);
   }
+  if (fresh || last.goal !== s.goal) h.goalEl.textContent = s.goal;
   if (fresh || last.health !== s.health || last.damage !== s.damage) {
     h.health.textContent = hearts(s.health, s.damage);
     h.health.classList.toggle('low', s.health <= s.damage);

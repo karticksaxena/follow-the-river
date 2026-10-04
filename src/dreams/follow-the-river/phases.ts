@@ -20,7 +20,7 @@ import {
   type StoredRun,
 } from './state';
 import { playTape } from './tapes';
-import { newWaveState, waveCrates } from './waves';
+import { edgePickups, newWaveState, waveCrates } from './waves';
 
 /** Lantern brightness at night (tuning knob); it is 0 by day. */
 const LANTERN_NIGHT = 6;
@@ -94,7 +94,7 @@ export function beginPhase(f: Flow): void {
   run.interact = null;
   fish.setSickness(SICKNESS[save.phase]);
   sys.gates.set(cleared);
-  run.pickups = night ? waveCrates(area) : area.pickups;
+  run.pickups = night ? [...waveCrates(area), ...edgePickups(area)] : area.pickups;
   pickups.place(run.pickups, run.taken);
   if (!night)
     for (const l of area.lurkers)
