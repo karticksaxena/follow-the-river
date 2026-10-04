@@ -759,3 +759,176 @@ export function stepWaves(w, waves, z, alive, dt, d, rand): WaveEvent {
 - [ ] **Step 4:** tests PASS (update `areas/*.test.ts` that pinned old z's, `world.test.ts` strip length); `pnpm run check`.
 - [ ] **Step 5: Chrome check (Normal, as a player):** Night 1: stand still at the crate 60 s (no input): zombies keep arriving from ahead, behind and the land side, never popping in within 12 m (log spawn distances); screenshot from the crate down the bank: no barricade in sight (fog). Walk to the gate: the gate opens only after the quota (log). Wave 2 faster (log tuning speed). Edge supplies glow at the water's edge. The HUD shows "Wave 1 of 3" and the goal line, no count. Night 2 and Night 3 the same. Frame time with 10 alive: `__gpuFrames(300)` p95 under 8 ms at 540 rows (re-checked at full resolution in A13).
 - [ ] **Step 6: commit** `feat: waves keep coming until they are dead, longer zones, each wave harder, supplies by the water, an objective line`.
+
+### Task A7: Rebuild Dras to real orca anatomy (eyes, mouth and jaw, a female's fin, a smooth spine)
+
+Done by the controller (ruling), headless Blender (`/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python tools/blender/orca.py -- public/assets/characters/orca.glb`), renders checked by eye.
+
+**Files:**
+- Rewrite: `tools/blender/orca.py` (same CLI). Output: `public/assets/characters/orca.glb` (meshopt-compressed per `tools/assets/README.md`).
+- Create: `src/dreams/follow-the-river/dras-anatomy.ts` (measured constants), `src/dreams/follow-the-river/orca-model.test.ts` (reads the GLB's JSON chunk with `node:fs`).
+- Modify: `fish-parts.ts` (`FIN_HEIGHT`, `BODY_HALF_WIDTH` from anatomy), `fish.ts` (`BLOWHOLE` from anatomy), `orca-grab.ts` (`jawAhead`/`jawBelow` from anatomy), `flashback-scene.ts` and `canoe-scene.ts` (young Dras and the calf use the same GLB: re-check scale and placement).
+
+**Interfaces:**
+- Produces (`dras-anatomy.ts`, metres in the model's own space, nose toward −Z, up +Y, origin at the body centre):
+```ts
+export const ANATOMY = {
+  length: 7, // keep: every grab, strand and lane distance is built on it
+  halfLength: 3.5,
+  halfWidth: 0, // measured: widest half-width of the body (no fins)
+  finHeight: 0, // measured: dorsal fin tip above the back
+  blowhole: { ahead: 0, up: 0 }, // from the centre
+  eye: { ahead: 0, up: 0, side: 0 },
+  bite: { ahead: 0, below: 0 }, // the middle of the mouth, where a zombie is held
+  jawOpen: 0, // radians the Jaw bone opens at most (about 0.55)
+  dentZ: [0, 0] as const, // z range of the "peanut head" dent behind the blowhole
+} as const;
+```
+(the zeros are filled with measured values in Step 4; the test pins that none is 0 except where noted).
+- Bones (exact names): `Head`, `Jaw` (child of `Head`, hinge just below and behind the eye), `Spine1`…`Spine5`, `Tail1`, `Tail2`. Clips (exact names): `Swim`, `Lunge`. Materials (exact names): `orca-black`, `orca-white`, `orca-grey`, `orca-mouth`, `orca-eye`.
+
+- [ ] **Step 1: reference.** Read three sources on killer whale external anatomy and pigmentation, and note the proportions in the ledger (grounded-research; e.g. NOAA Fisheries' killer whale species page, the Center for Whale Research ID guide, a published morphometrics table). Target proportions on a 7 m body, female:
+  - Maximum girth about 38 % back from the snout; body height there about 1.3 m, width about 1.15 m; a blunt rounded head with no beak; tail stock laterally compressed (height:width about 2.5:1) with a low keel.
+  - Dorsal fin (female): 0.9 m tall, falcate (curved backward), base about 0.9 m, its front edge at 46 % of the length.
+  - Pectoral fins: rounded paddles 0.9 m long and 0.5 m wide, at 22–28 % of the length, low on the sides, angled down and back.
+  - Flukes: span 1.5 m, swept-back tips, a central notch; the underside white.
+  - Pattern: an oval white eye patch above and behind the eye (0.4 m long, tilted up toward the back); a white chin and throat from the lower jaw to between the pectorals; a white belly band narrowing between the pectorals and then sweeping up the flank behind the dorsal fin (the flank lobe); a grey saddle patch just behind the fin; everything else black.
+  - Eye: small (visible radius about 3.5 cm), dark and glossy, just below the front end of the eye patch and just above the mouth line, at about 12 % of the length.
+  - Mouth: a gently upturned line from the snout tip to below the eye; a lower jaw that opens; inside dark pink-grey; 10–12 small conical teeth per jaw side.
+- [ ] **Step 2: build.** Loft elliptical cross-sections along the length (at least 48 rings × 24 segments before smoothing), add the fins as separate solid shells merged into one mesh, cut the lower jaw as its own vertex group weighted 100 % to `Jaw`, add mouth interior faces and teeth, and two eye spheres (16 × 12 segments) on the `orca-eye` material (roughness 0.08, near black). Apply a level 1 subdivision, then decimate to 8–12 k triangles; smooth shading with sharp edges only on fin trailing edges. Colour by material per face (no UVs needed), keeping the materials' base colours: black 0.012, white 0.8, grey 0.16 (linear), mouth 0.25/0.12/0.13, eye 0.01.
+- [ ] **Step 3: rig and clips.** Bones along the midline at 0–0.18–0.32–0.46–0.60–0.72–0.84–0.94–1.12 of the length; automatic weights, then hand-fix the jaw (only `Jaw`) and the fins (pectorals to `Spine1`, dorsal to `Spine3`). `Swim` (48 frames, loops): vertical undulation (orcas beat their flukes up and down) as a wave travelling tail-ward, pitch amplitude per bone `[0.015, 0.02, 0.03, 0.045, 0.065, 0.09, 0.14, 0.22]` rad with a phase lag of 0.55 rad per bone; the head barely moves. `Lunge` (24 frames, once): the head rears up 0.35 rad, the tail drives down, then settles. The jaw is driven by code (not keyed in either clip).
+- [ ] **Step 4: measure and write `dras-anatomy.ts`** from the built mesh in Blender (print the values; never eyeball them into code).
+- [ ] **Step 5: renders.** Four 1024 px renders on a neutral grey background (left side, right three-quarter front, top, underside) and one close-up of the head with the jaw open 0.5 rad, saved to the scratchpad; compare each with the references. Fix and re-render until a person would say "that's an orca": tall-enough rounded body, no blob, eyes visible as small dark dots in front of the white patches, mouth line readable.
+- [ ] **Step 6: failing test, then green** (`orca-model.test.ts`):
+```ts
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { ANATOMY } from './dras-anatomy';
+
+function gltf(path: string): { materials: { name: string }[]; animations: { name: string }[]; nodes: { name?: string }[] } {
+  const b = readFileSync(path);
+  const length = b.readUInt32LE(12);
+  return JSON.parse(b.subarray(20, 20 + length).toString('utf8'));
+}
+
+describe('Dras model', () => {
+  const j = gltf('public/assets/characters/orca.glb');
+  it('has her materials, bones and clips', () => {
+    expect(j.materials.map((m) => m.name).sort()).toEqual(['orca-black', 'orca-eye', 'orca-grey', 'orca-mouth', 'orca-white']);
+    const names = j.nodes.map((n) => n.name);
+    for (const b of ['Head', 'Jaw', 'Spine1', 'Spine5', 'Tail1', 'Tail2']) expect(names).toContain(b);
+    expect(j.animations.map((a) => a.name).sort()).toEqual(['Lunge', 'Swim']);
+  });
+  it('was measured', () => {
+    expect(ANATOMY.halfWidth).toBeGreaterThan(0.4);
+    expect(ANATOMY.finHeight).toBeGreaterThan(0.7);
+    expect(ANATOMY.finHeight).toBeLessThan(1.1);
+    expect(ANATOMY.eye.side).toBeGreaterThan(0.2);
+    expect(ANATOMY.bite.ahead).toBeGreaterThan(2.5);
+    expect(ANATOMY.jawOpen).toBeGreaterThan(0.3);
+  });
+});
+```
+- [ ] **Step 7: code follows the model.** `FIN_HEIGHT = ANATOMY.finHeight`, `BODY_HALF_WIDTH = ANATOMY.halfWidth`, `BLOWHOLE = ANATOMY.blowhole`, `GRAB.jawAhead = ANATOMY.bite.ahead`, `GRAB.jawBelow = ANATOMY.bite.below`. Run every fish/grab/strand test; fix expectations that encoded the old 1.45 m fin.
+- [ ] **Step 8: Chrome check:** intro (she takes the pack), Night 1 cruise (fin, wake), a grab (side view), the tank flashback (young Dras, scale 0.4) and the canoe calf (0.35): screenshots, each reads as a black-and-white orca with a visible eye. `?webgl` the same.
+- [ ] **Step 9: commit** `feat: Dras rebuilt to real orca anatomy: eyes, a jaw that opens, a female's curved fin`.
+
+### Task A8: Dras' sickness, the real way (black and white stay, lesions and wasting grow with every zombie)
+
+**Files:**
+- Rewrite: `src/dreams/follow-the-river/orca-sick.ts` (+ `orca-sick.test.ts`).
+- Modify: `fish-state.ts:121-127` (per-instance node materials), `fish.ts` (`setSickness`, blow, surfacing, `onEat`), `fish-parts.ts` (`nextSurfacing(rand, sickness)`), `state.ts` (`RunState.eaten`, `normalizeSave`), `phases.ts:93`, `ending.ts:261` (fight sickness), `assemble.ts` (wire `onEat`).
+
+**Interfaces:**
+- Produces:
+```ts
+export const SICK = {
+  /** Sickness never drops below this in a phase (the story), whatever was eaten. */
+  floor: { intro: 0, day1: 0, night1: 0, day2: 0.1, night2: 0.15, day3: 0.35, night3: 0.4, end: 1 } as Record<Phase, number>,
+  /** Each zombie she eats. */
+  perKill: 0.015,
+  /** Until the very end she is never more than this sick. */
+  cap: 0.9,
+  lesion: 0x5e5b57,
+  speck: 0x060606,
+  /** Metres the peanut-head dent sinks at its worst, and how much thinner (share of width). */
+  dent: 0.12,
+  thin: 0.1,
+  mist: { well: 0xd8e2e8, sick: 0xa8463f, redFrom: 0.95 },
+  blow: { seconds: 1.4, rise: 1.6, size: 2.2, opacity: 0.55 },
+  slow: 0.3,
+} as const;
+export function sicknessAt(phase: Phase, eaten: number): number;
+export interface Sickness { readonly k: number; set(k: number): void }
+export function makeSick(body: THREE.Object3D): Sickness; // swaps her materials for node materials driven by one uniform
+export function mistColor(k: number, out: THREE.Color): THREE.Color; // pale until redFrom, then red
+export function blowAt(t: number, k: number, out: Blow): boolean; // weaker and lower the sicker
+```
+`RunState.eaten: number` (save: optional on disk, `normalizeSave` fills 0); `Fish.onEat: (() => void) | null`.
+
+- [ ] **Step 1: failing tests** (`orca-sick.test.ts`, replacing the tint tests):
+```ts
+it('starts healthy and grows with every zombie eaten, above the story floor', () => {
+  expect(sicknessAt('day1', 0)).toBe(0);
+  expect(sicknessAt('night1', 10)).toBeCloseTo(0.15);
+  expect(sicknessAt('night2', 0)).toBe(0.15);
+  expect(sicknessAt('night3', 30)).toBeCloseTo(0.45);
+  expect(sicknessAt('night3', 500)).toBe(0.9);
+  expect(sicknessAt('end', 0)).toBe(1);
+});
+it('her breath stays pale until the very end', () => {
+  const c = new THREE.Color();
+  expect(mistColor(0.9, c).getHex()).toBe(new THREE.Color(SICK.mist.well).getHex());
+  expect(mistColor(1, c).r).toBeGreaterThan(mistColor(0.9, new THREE.Color()).r - 0.0001);
+});
+it('a sick blow is smaller and fainter', () => {
+  const a = { rise: 0, size: 0, opacity: 0 };
+  const b = { rise: 0, size: 0, opacity: 0 };
+  blowAt(0.5, 0, a);
+  blowAt(0.5, 0.9, b);
+  expect(b.size).toBeLessThan(a.size);
+  expect(b.opacity).toBeLessThan(a.opacity);
+});
+it('keeps every material its own base colour (black stays black)', () => {
+  const body = new THREE.Group();
+  for (const [name, hex] of [['orca-black', 0x030303], ['orca-white', 0xe7e9eb], ['orca-grey', 0x6f7276]] as const)
+    body.add(new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial({ name, color: hex })));
+  const sick = makeSick(body);
+  sick.set(0.8);
+  const colours = body.children.map((m) => ((m as THREE.Mesh).material as THREE.MeshStandardNodeMaterial).color.getHex());
+  expect(colours).toEqual([0x030303, 0xe7e9eb, 0x6f7276]);
+});
+it('surfaces more often when sick (logging at the surface)', () => {
+  expect(nextSurfacing(0.5, 0.9)).toBeLessThan(nextSurfacing(0.5, 0));
+});
+```
+- [ ] **Step 2: the shader** (TSL, `orca-sick.ts`; verify each import exists in `node_modules/three/src/nodes/TSL.js` first):
+```ts
+import { color, float, mix, mx_noise_float, normalLocal, positionLocal, smoothstep, step, uniform, vec3 } from 'three/tsl';
+
+function lesions(base: THREE.Color, k: THREE.UniformNode<number>) {
+  const p = positionLocal;
+  const patch = mx_noise_float(p.mul(0.9)).mul(0.5).add(0.5);
+  const blotch = smoothstep(0.42, 0.58, patch).mul(smoothstep(0.1, 0.45, k));
+  const ring = float(1).sub(mx_noise_float(p.mul(3.1)).abs().mul(14)).clamp(0, 1).mul(smoothstep(0.3, 0.7, k));
+  const speck = step(0.8, mx_noise_float(p.mul(28)).mul(0.5).add(0.5)).mul(smoothstep(0.35, 0.8, k));
+  const grey = color(SICK.lesion);
+  const c1 = mix(color(base), grey, blotch.mul(0.6));
+  const c2 = mix(c1, grey, ring.mul(0.5));
+  return mix(c2, color(SICK.speck), speck);
+}
+
+function wasting(k: THREE.UniformNode<number>) {
+  const [z0, z1] = ANATOMY.dentZ;
+  const band = smoothstep(z0 - 0.3, z0, positionLocal.z).mul(smoothstep(z1 + 0.3, z1, positionLocal.z));
+  const top = smoothstep(0.1, 0.5, positionLocal.y);
+  const dent = band.mul(top).mul(smoothstep(0.35, 1, k)).mul(SICK.dent);
+  const thin = float(1).sub(smoothstep(0.5, 1, k).mul(SICK.thin));
+  return positionLocal.mul(vec3(thin, 1, 1)).sub(normalLocal.mul(dent));
+}
+```
+`makeSick(body)`: one `uniform(0)` per call; every mesh's material becomes a `MeshStandardNodeMaterial` with the source's `name`, `color`, `roughness` (keep `makeWet`'s 0.3), `metalness`; the three skin materials get `colorNode = lesions(src.color, k)`; every body material (eye and mouth too) gets `positionNode = wasting(k)` so the dent never tears a seam. `fish-state.ts createState` calls it instead of `material.clone()` (each fish its own uniform: the calf and the young Dras stay healthy because they never call `set`). Positions after skinning: `NodeMaterial.setupPosition` runs `skinning()` before `positionNode` (verified in `node_modules/three/src/materials/nodes/NodeMaterial.js:766-806`), so `positionLocal` is the posed position.
+- [ ] **Step 3: wiring.** `phases.ts`: `fish.setSickness(sicknessAt(save.phase, run.live.eaten))`. `fish.ts`: when a grab's victim drowns, `f.onEat?.()`; `assemble`/`chapter` sets `fish.onEat = () => { run.live.eaten++; fish.setSickness(sicknessAt(run.phase, run.live.eaten)); }`. The fight (`ending.ts`) uses the same path; the strand sets 1. Blow: `blowOut` plays the blow sound at `1 - 0.5 * k` volume and `playbackRate 1 - 0.25 * k` (wheezier); surfacing: `nextSurfacing(rand, k)` = interval × `(1 - 0.45 * k)`, and at k > 0.5 she stays up 1.6× longer (`SURFACE_TIME` × `1 + 0.6 * smoothstep`).
+- [ ] **Step 4:** tests PASS; `pnpm run check`.
+- [ ] **Step 5: Chrome check (the colour Kartik complained about):** for k in 0, 0.15, 0.45, 0.9, 1 call `kdRiver.fish.setSickness(k)` on Night 1 with Dras surfaced beside you (force a surfacing), screenshot side views: black body black, white patches white at every k; blotches, rings and specks appear only from about 0.15 and grow; the dent behind the blowhole shows from about 0.5; at 1 the breath is red. Also `?webgl`. Put the five screenshots side by side in the ledger notes.
+- [ ] **Step 6: commit** `fix: Dras keeps her black and white; sickness shows as lesions and wasting that grow with every zombie she eats`.
