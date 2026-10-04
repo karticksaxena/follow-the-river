@@ -17,23 +17,29 @@ export interface Sounds {
   /** Each gun's shot (CC0 recordings; the generated shot if one is missing). */
   shots: Record<GunKind, AudioBuffer>;
   thud: AudioBuffer;
-  splash: AudioBuffer;
-  /** The orca's breath at the surface (0.6 s). */
-  blow: AudioBuffer;
+  /** Dras' recordings (US Fish and Wildlife, NPS, CC0). Each list is one generated fallback if its files failed to load. */
+  blows: AudioBuffer[];
+  splashes: AudioBuffer[];
+  splashesBig: AudioBuffer[];
+  /** Short calls for when she takes a zombie or a pack; empty if the files failed (no fallback voice). */
+  callsShort: AudioBuffer[];
+  /** Her cry when she strands and her answer to Mom's song (the generated cry if the files failed). */
+  cry: AudioBuffer;
+  answer: AudioBuffer;
+  /** Mom's paddle strokes (empty if the files failed: she rows silently). */
+  paddles: AudioBuffer[];
+  /** Dawn birds (null if the file failed: only the water plays). */
+  birds: AudioBuffer | null;
   sting: AudioBuffer;
   heartbeat: AudioBuffer;
   click: AudioBuffer;
   gunshot: AudioBuffer;
   dryFire: AudioBuffer;
-  /** The orca's sad cry (2.5 s). */
-  orcaCry: AudioBuffer;
-  /** 12 s seamless pad for the ending. */
-  dawn: AudioBuffer;
 }
 
 const sound = (path: string): string => assetUrl(`sounds/${path}.m4a`);
 
-const FILES = {
+export const FILES = {
   groans: Array.from({ length: 24 }, (_, i) =>
     sound(`zombie/groan-${String(i + 1).padStart(2, '0')}`),
   ),
@@ -48,6 +54,16 @@ const FILES = {
     rifle: sound('weapons/rifle'),
     bow: sound('weapons/bow'),
   },
+  dras: {
+    cry: sound('dras/call-cry'),
+    answer: sound('dras/call-answer'),
+    blows: [1, 2, 3, 4].map((n) => sound(`dras/blow-${n}`)),
+    splashes: [1, 2, 3].map((n) => sound(`dras/splash-small-${n}`)),
+    splashesBig: [1, 2, 3].map((n) => sound(`dras/splash-big-${n}`)),
+    callsShort: [1, 2, 3].map((n) => sound(`dras/call-short-${n}`)),
+  },
+  paddles: [1, 2, 3, 4].map((n) => sound(`canoe/paddle-${n}`)),
+  birds: sound('ambience/birds'),
 } as const;
 
 /** Length and loudness of the horde layer. Tuning knobs. */
@@ -209,26 +225,39 @@ export function orcaCrySamples(
   return samples;
 }
 
-/** Notes (Hz) of the dawn chord: C major spread over three octaves. */
-const DAWN_NOTES = [65.41, 130.81, 196, 261.63, 329.63, 392] as const;
-
 /**
- * Dawn: a soft major-chord pad that swells in slowly. Every note is rounded to a whole number of
- * cycles in the buffer and the swell is periodic, so the loop has no seam.
+ * A closure that returns a random item from `list`, never the same one twice in a row (no
+ * allocation per call). Null for an empty list.
  */
-export function dawnSamples(rate: number, seconds: number): Float32Array<ArrayBuffer> {
-  const samples = new Float32Array(Math.floor(rate * seconds));
-  const whole = DAWN_NOTES.map((f) => Math.max(1, Math.round(f * seconds)) / seconds);
-  for (let i = 0; i < samples.length; i++) {
-    const t = i / rate;
-    const swell = 0.4 + 0.6 * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / seconds));
-    let sum = 0;
-    for (const f of whole) {
-      sum += Math.sin(2 * Math.PI * f * t) + 0.5 * Math.sin(2 * Math.PI * (f + 1 / seconds) * t);
+export function picker<T>(list: readonly T[], random: () => number = Math.random): () => T | null {
+  let last = -1;
+  return () => {
+    if (list.length === 0) return null;
+    let i = 0;
+    if (list.length > 1) {
+      i = Math.floor(random() * (list.length - 1));
+      if (i >= last && last >= 0) i++; // skips `last`
     }
-    samples[i] = clamp((sum / (whole.length * 1.5)) * 1.2 * swell);
+    last = i;
+    return list[i] ?? null;
+  };
+}
+
+/** A playback rate in `[lo, hi)` from `random`. */
+export const rateIn = (lo: number, hi: number, random: () => number = Math.random): number =>
+  lo + (hi - lo) * random();
+
+/** Loads every url; if any fails the whole list is `fallback` (so real and generated sounds never mix). */
+export async function loadOr<B, T>(
+  audio: { load(url: string): Promise<B> },
+  urls: readonly string[],
+  fallback: T[],
+): Promise<Array<B | T>> {
+  try {
+    return await Promise.all(urls.map((u) => audio.load(u)));
+  } catch {
+    return fallback;
   }
-  return samples;
 }
 
 /** Overlaps `count` groans at random offsets and gains, low-passed, normalised to a 0.8 peak. */
@@ -270,6 +299,47 @@ function toBuffer(context: BaseAudioContext, samples: Float32Array<ArrayBuffer>)
   return buffer;
 }
 
+type DrasSounds = Pick<
+  Sounds,
+  'blows' | 'splashes' | 'splashesBig' | 'callsShort' | 'cry' | 'answer'
+>;
+
+/** Dras' sounds, the paddles and the birds. Generated sounds stand in only for files that fail. */
+async function loadDras(
+  audio: AudioBus,
+): Promise<{ dras: DrasSounds; paddles: AudioBuffer[]; birds: AudioBuffer | null }> {
+  const context = audio.listener.context;
+  const rate = context.sampleRate;
+  const { dras } = FILES;
+  const cryFallback = toBuffer(context, orcaCrySamples(rate, 2.5, Math.random));
+  const blowFallback = toBuffer(context, blowSamples(rate, 0.6, Math.random));
+  const splashFallback = toBuffer(context, splashSamples(rate, 0.8, Math.random));
+  const [blows, splashes, splashesBig, callsShort, cry, answer, paddles, birds] = await Promise.all(
+    [
+      loadOr(audio, dras.blows, [blowFallback]),
+      loadOr(audio, dras.splashes, [splashFallback]),
+      loadOr(audio, dras.splashesBig, [splashFallback]),
+      loadOr(audio, dras.callsShort, []),
+      loadOr(audio, [dras.cry], [cryFallback]),
+      loadOr(audio, [dras.answer], [cryFallback]),
+      loadOr(audio, FILES.paddles, []),
+      loadOr(audio, [FILES.birds], []),
+    ],
+  );
+  return {
+    dras: {
+      blows,
+      splashes,
+      splashesBig,
+      callsShort,
+      cry: cry[0] ?? cryFallback,
+      answer: answer[0] ?? cryFallback,
+    },
+    paddles,
+    birds: birds[0] ?? null,
+  };
+}
+
 export async function loadSounds(audio: AudioBus): Promise<Sounds> {
   const load = (urls: readonly string[]): Promise<AudioBuffer[]> =>
     Promise.all(urls.map((u) => audio.load(u)));
@@ -295,6 +365,7 @@ export async function loadSounds(audio: AudioBus): Promise<Sounds> {
     or(weapons.rifle, gunshot),
     or(weapons.bow, toBuffer(context, bowShotSamples(rate, Math.random))),
   ]);
+  const { dras, paddles, birds } = await loadDras(audio);
   const horde = mixHorde(
     rate,
     groans.map((g) => g.getChannelData(0)),
@@ -313,14 +384,13 @@ export async function loadSounds(audio: AudioBus): Promise<Sounds> {
     bowShot,
     shots: { pistol, shotgun, rifle },
     thud: toBuffer(context, thudSamples(rate)),
-    splash: toBuffer(context, splashSamples(rate, 0.8, Math.random)),
-    blow: toBuffer(context, blowSamples(rate, 0.6, Math.random)),
+    ...dras,
+    paddles,
+    birds,
     sting: toBuffer(context, stingSamples(rate)),
     heartbeat: toBuffer(context, heartbeatSamples(rate)),
     click: toBuffer(context, clickSamples(rate, Math.random)),
     gunshot,
     dryFire: toBuffer(context, dryFireSamples(rate, Math.random)),
-    orcaCry: toBuffer(context, orcaCrySamples(rate, 2.5, Math.random)),
-    dawn: toBuffer(context, dawnSamples(rate, 12)),
   };
 }

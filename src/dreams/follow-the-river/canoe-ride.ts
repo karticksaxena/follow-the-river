@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { DreamContext } from '../types';
 import { buildCanoeScene, pathSlope, pathX, WATER_LEVEL, type CanoeScene } from './canoe-scene';
 import { CINEMATIC } from './flashback';
-import type { Sounds } from './sounds';
+import { picker, rateIn, type Sounds } from './sounds';
 
 /** Tuning knobs (seconds, metres, m/s). The ride is `seconds` long, then the closing pages. */
 export const RIDE = {
@@ -28,7 +28,16 @@ export const SEAT = {
 } as const;
 /** Calf: side of the canoe (m), pace-keeping drift and how deep it starts. */
 export const CALF = { side: 4.2, ahead: 1.6, hidden: -1.7, cruise: -0.15, blow: 0.35 } as const;
-export const VOLUME = { water: 0.3, dawn: 0.22, blow: 0.3, dawnFade: 4 } as const;
+export const VOLUME = {
+  water: 0.25,
+  birds: 0.3,
+  birdsFade: 6,
+  blow: 0.3,
+  /** The calf's blow is a calf's: higher and quicker than Dras'. */
+  blowRate: 1.25,
+  paddle: 0.5,
+  paddleSpread: 0.1,
+} as const;
 
 export const OPENING_PAGES: readonly string[] = ['Mom pushes off from the shore.'];
 export const CLOSING_PAGES: readonly string[] = [
@@ -36,6 +45,11 @@ export const CLOSING_PAGES: readonly string[] = [
   'Mom: "Look. She wasn\'t alone."',
   'She smiles for the first time since the river.',
 ];
+
+/** Pure: a blade that was above `level` last frame and is at or below it now has just gone in. */
+export function crossedDown(prevY: number, y: number, level: number): boolean {
+  return prevY > level && y <= level;
+}
 
 export interface Pose {
   x: number;
@@ -121,6 +135,51 @@ interface Ride {
   pose: Pose;
   calf: CalfPose;
   spot: { x: number; z: number };
+  /** The paddle's two blades: where each last was (m up) and the sound it makes going in. */
+  blades: Blade[];
+  strokes: () => AudioBuffer | null;
+  blows: () => AudioBuffer | null;
+}
+
+/** Half the paddle's length: its blades sit this far from its middle, along x (see canoe-scene). */
+const BLADE_X = 1.2;
+
+interface Blade {
+  mark: THREE.Object3D;
+  sound: THREE.PositionalAudio;
+  y: number;
+}
+
+const bladeAt = new THREE.Vector3();
+
+/** A stroke: one of Mom's recorded strokes at the blade, a little different every time. */
+function stroke(r: Ride, b: Blade): void {
+  const buffer = r.strokes();
+  if (!buffer) return;
+  if (b.sound.isPlaying) b.sound.stop();
+  b.sound.setBuffer(buffer);
+  b.sound.setVolume(VOLUME.paddle + (Math.random() * 2 - 1) * VOLUME.paddleSpread);
+  b.sound.setPlaybackRate(rateIn(0.95, 1.05));
+  b.sound.play();
+}
+
+/** Plays a stroke whenever a blade goes down through the water, so the sound follows her Row clip. Allocates nothing. */
+function stepPaddles(r: Ride): void {
+  for (const b of r.blades) {
+    const y = b.mark.getWorldPosition(bladeAt).y;
+    if (crossedDown(b.y, y, WATER_LEVEL)) stroke(r, b);
+    b.y = y;
+  }
+}
+
+/** One marker and one positional sound per blade, on the paddle (they move with it). */
+function makeBlades(cs: CanoeScene, ctx: DreamContext): Blade[] {
+  return [-BLADE_X, BLADE_X].map((x) => {
+    const mark = new THREE.Object3D();
+    mark.position.x = x;
+    cs.paddle.add(mark);
+    return { mark, sound: ctx.audio.positional(mark, 3), y: -Infinity };
+  });
 }
 
 /** Puts the canoe, Mom, paddle and the calf where time `t` says; returns nothing, allocates nothing. */
@@ -188,6 +247,7 @@ function frame(r: Ride, dt: number, onEnd: () => void): void {
   }
   placeAll(r);
   cs.canoe.updateMatrixWorld(true);
+  if (live && r.rowing) stepPaddles(r);
   const { camera } = ctx.stage;
   cs.canoe.localToWorld(camera.position.set(...SEAT.eye));
   camera.rotation.y += r.pose.yaw - r.lastYaw; // the view turns with the bend, the mouse adds to it
@@ -196,7 +256,8 @@ function frame(r: Ride, dt: number, onEnd: () => void): void {
   cs.sky.position.copy(camera.position);
   if (!r.blown && r.calf.surfaced > 0.6) {
     r.blown = true;
-    ctx.audio.once(r.sounds.blow, VOLUME.blow);
+    const blow = r.blows();
+    if (blow) ctx.audio.once(blow, VOLUME.blow).setPlaybackRate(VOLUME.blowRate);
   }
   if (!r.closing && r.t >= RIDE.seconds) {
     r.closing = true;
@@ -232,7 +293,7 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
     return ctx.read(CLOSING_PAGES, done);
   }
   const water = ctx.audio.loop(sounds.water, VOLUME.water);
-  const pad = ctx.audio.loop(sounds.dawn, 0);
+  const birds = sounds.birds ? ctx.audio.loop(sounds.birds, 0) : null;
   const graded = ctx.grade('sunrise');
   const r: Ride = {
     ctx,
@@ -248,14 +309,18 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
     pose: { x: 0, y: 0, z: 0, yaw: 0, roll: 0 },
     calf: { x: 0, z: 0, y: 0, pitch: 0, visible: false, surfaced: 0 },
     spot: { x: 0, z: 0 },
+    blades: makeBlades(cs, ctx),
+    strokes: picker(sounds.paddles),
+    blows: picker(sounds.blows),
   };
   let live = true;
   const teardown = (): void => {
     if (!live) return;
     live = false;
     stop();
-    for (const sound of [water, pad]) {
-      sound.stop();
+    const beds = birds ? [water, birds] : [water];
+    for (const sound of [...beds, ...r.blades.map((b) => b.sound)]) {
+      if (sound.isPlaying) sound.stop();
       sound.disconnect();
     }
     ctx.overlay.root.classList.remove(CINEMATIC);
@@ -271,7 +336,7 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
     if (stage.scene !== cs.scene) return teardown(); // someone else took the stage
     try {
       frame(r, dt, onEnd);
-      pad.setVolume(VOLUME.dawn * Math.min(1, r.t / VOLUME.dawnFade));
+      birds?.setVolume(VOLUME.birds * Math.min(1, r.t / VOLUME.birdsFade));
     } catch (error) {
       teardown();
       throw error;

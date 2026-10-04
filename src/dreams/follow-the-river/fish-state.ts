@@ -16,7 +16,7 @@ import {
 import type { Grab, GrabHooks, GrabPose, StrikeStyle } from './orca-grab';
 import { makeMist, makeSick, type Blow, type Sickness } from './orca-sick';
 import type { Strand } from './orca-strand';
-import type { Sounds } from './sounds';
+import { picker, type Sounds } from './sounds';
 
 const CAPACITY = Math.max(32, HORDE_CAPACITY);
 
@@ -45,6 +45,13 @@ export interface FishState {
   readonly splashAt: THREE.Object3D;
   readonly splash: THREE.PositionalAudio;
   readonly blow: THREE.PositionalAudio;
+  /** The low body-thump layered under a big splash, and her short calls (riding on the body). */
+  readonly thump: THREE.PositionalAudio;
+  readonly voice: THREE.PositionalAudio;
+  /** Random recordings, never the same twice running (null while a list is empty). */
+  readonly pick: Record<'blow' | 'splash' | 'big' | 'call', () => AudioBuffer | null>;
+  /** `time` of her last short call (they are rationed). */
+  lastCall: number;
   readonly cruiseY: number;
   readonly surfaceY: number;
   readonly mixer: THREE.AnimationMixer;
@@ -144,11 +151,9 @@ export function createState(
   const mist = makeMist();
   scene.add(splashAt, mist);
   const splash = audio.positional(splashAt, 4);
-  splash.setBuffer(sounds.splash);
-  splash.setVolume(1);
   const blow = audio.positional(splashAt, 4);
-  blow.setBuffer(sounds.blow);
-  blow.setVolume(1);
+  const thump = audio.positional(splashAt, 4);
+  const voice = audio.positional(root, 6);
   const { mixer, swim, lunge } = makeClips(body, asset);
   const buffer = new Float32Array(CAPACITY * 3);
   const f: FishState = {
@@ -160,6 +165,15 @@ export function createState(
     splashAt,
     splash,
     blow,
+    thump,
+    voice,
+    pick: {
+      blow: picker(sounds.blows),
+      splash: picker(sounds.splashes),
+      big: picker(sounds.splashesBig),
+      call: picker(sounds.callsShort),
+    },
+    lastCall: -Infinity,
     cruiseY,
     surfaceY: surfaceYFor(finTop),
     mixer,

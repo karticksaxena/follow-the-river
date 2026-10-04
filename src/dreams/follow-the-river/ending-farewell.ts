@@ -20,8 +20,10 @@ export const FAREWELL = {
   /** Where you lay the pack: at the water's edge beside it, and where it floats. */
   edge: { x: -1.8, z: 1.2, radius: 2.4 },
   float: { x: -1.2, z: -1 },
-  cryVolume: 0.8,
-  answerVolume: 0.35,
+  cryVolume: 0.7,
+  answerVolume: 0.5,
+  /** How far above the pebbles her head is (m), where her voice comes from. */
+  headHeight: 0.6,
 } as const;
 
 export const FAREWELL_PAGES = {
@@ -67,14 +69,30 @@ export function shoreFor(mom: { x: number; z: number }, lakeZ: number): Shore {
   return { noseX: mom.x + FAREWELL.nose.fromMom, noseZ: lakeZ + FAREWELL.nose.upShore, lakeZ };
 }
 
+/** Plays her real call (the cry, the answer) at her head, on the shore. */
+function callAt(s: Script, at: Shore, buffer: AudioBuffer, volume: number): void {
+  const { world, ctx } = s.sys;
+  const head = new THREE.Object3D();
+  head.position.set(at.noseX, shoreY(at.noseZ - at.lakeZ) + FAREWELL.headHeight, at.noseZ);
+  world.scene.add(head);
+  const sound = ctx.audio.positional(head, 6);
+  sound.setBuffer(buffer);
+  sound.setVolume(volume);
+  sound.onEnded = () => {
+    sound.disconnect();
+    world.scene.remove(head);
+  };
+  sound.play();
+}
+
 /** Its last leap onto the pebbles; the zombies still on the bank go into the water with the wave. */
 export async function strand(s: Script, at: Shore): Promise<void> {
-  const { fish, horde, ctx, sounds } = s.sys;
+  const { fish, horde, sounds } = s.sys;
   fish.strand(at.noseX, at.noseZ, (z) => shoreY(z - at.lakeZ), horde);
   horde.forEachAlive((id) => horde.takeByFish(id));
   await s.until(() => fish.beached);
   if (s.cancelled) return;
-  ctx.audio.once(sounds.orcaCry, FAREWELL.cryVolume);
+  callAt(s, at, sounds.cry, FAREWELL.cryVolume);
 }
 
 /** Mom goes to its head and kneels by it. */
@@ -88,10 +106,10 @@ export async function goToIt(s: Script, at: Shore): Promise<void> {
 }
 
 /** The song from the lab, and its answer: a soft cry and one last red breath. */
-export async function song(s: Script): Promise<void> {
+export async function song(s: Script, at: Shore): Promise<void> {
   await s.read(FAREWELL_PAGES.song);
   if (s.cancelled) return;
-  s.sys.ctx.audio.once(s.sys.sounds.orcaCry, FAREWELL.answerVolume);
+  callAt(s, at, s.sys.sounds.answer, FAREWELL.answerVolume);
   await s.read(FAREWELL_PAGES.answer);
 }
 

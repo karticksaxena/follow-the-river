@@ -4,6 +4,7 @@ import {
   calfPose,
   canoePose,
   CLOSING_PAGES,
+  crossedDown,
   RIDE,
   rowAmount,
   toWorld,
@@ -135,5 +136,27 @@ describe('ground under the scenery', () => {
     }
     expect(worst).toBeGreaterThan(0.2); // proves the old placement could float
     expect(worst).toBeLessThan(0.8);
+  });
+});
+
+describe('crossedDown', () => {
+  it('fires once, when a blade goes from above the water to at or below it', () => {
+    expect(crossedDown(0.2, -0.1, 0)).toBe(true);
+    expect(crossedDown(0.2, 0, 0)).toBe(true);
+    expect(crossedDown(0.2, 0.1, 0)).toBe(false); // still above
+    expect(crossedDown(-0.1, -0.3, 0)).toBe(false); // already in
+    expect(crossedDown(-0.1, 0.2, 0)).toBe(false); // coming out
+    expect(crossedDown(-Infinity, -0.2, 0)).toBe(false); // the first frame never counts
+  });
+
+  it('counts one stroke per dip of a rowing blade', () => {
+    let prev = Infinity;
+    let strokes = 0;
+    for (let i = 0; i < 400; i++) {
+      const y = Math.sin(i * 0.1) * 0.3; // 6 dips in 40 s of 0.1 s steps
+      if (i > 0 && crossedDown(prev, y, 0)) strokes++;
+      prev = y;
+    }
+    expect(strokes).toBe(6);
   });
 });

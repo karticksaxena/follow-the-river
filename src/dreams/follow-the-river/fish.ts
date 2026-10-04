@@ -18,6 +18,7 @@ import {
   turnToward,
   WAKE_SIZE,
 } from './fish-parts';
+import { callOut, playBlow, playSplash } from './fish-sound';
 import { createState, type Finale, type FishState, type Rise } from './fish-state';
 import { characterUrl, propUrl } from './kits';
 import { newGrab, stepGrab, type GrabHooks, type StrikeStyle } from './orca-grab';
@@ -78,24 +79,8 @@ export interface Fish {
   dispose(): void;
 }
 
-function playSplash(f: FishState, x: number, z: number): void {
-  f.splashAt.position.set(x, WATER_Y, z);
-  if (f.splash.isPlaying) f.splash.stop();
-  f.splash.play();
-}
-
-/** Plays at `splashAt`, which playSplash has just placed. */
-function playBlow(f: FishState): void {
-  if (f.blow.isPlaying) f.blow.stop();
-  f.blow.play();
-}
-
-/** It breathes out: the blow's sound (fainter and wheezier the sicker it is) and its mist. */
+/** It breathes out: the blow's sound and its mist. */
 function blowOut(f: FishState): void {
-  const { x, y, z } = f.root.position;
-  f.splashAt.position.set(x, y, z);
-  f.blow.setVolume(1 - 0.5 * f.sickness);
-  f.blow.setPlaybackRate(1 - 0.25 * f.sickness);
   playBlow(f);
   f.mistT = 0;
   f.mist.visible = true;
@@ -201,7 +186,7 @@ function grabHooks(f: FishState): GrabHooks {
   return {
     breach: (z) => {
       f.onBreach(z);
-      playSplash(f, EDGE_X + 0.5, z);
+      playSplash(f, EDGE_X + 0.5, z, true);
     },
     splash: (x, z) => playSplash(f, x, z),
   };
@@ -222,7 +207,10 @@ function stepOrcaGrab(f: FishState, dt: number, horde: Horde | null): void {
     f.lunge.crossFadeFrom(f.swim, FADE, false);
   }
   if (!going) {
-    if (g.bitten && g.victim >= 0) f.onEat?.(); // stepGrab has just drowned it
+    if (g.bitten && g.victim >= 0) {
+      callOut(f); // an excited call
+      f.onEat?.(); // stepGrab has just drowned it
+    }
     endGrab(f);
   }
 }
@@ -260,6 +248,7 @@ function placeWake(f: FishState): void {
 
 function startTake(f: FishState): void {
   f.takePending = false;
+  callOut(f); // a soft one: the pack reached her
   startRise(f, {
     toX: f.packTo.x + 1.2,
     toZ: f.packTo.z + 1.5,
@@ -312,7 +301,7 @@ function stepStrand(f: FishState, s: Strand, dt: number): void {
     f.lunge.reset().play();
     f.lunge.crossFadeFrom(f.swim, FADE, false);
   }
-  if (!was && beached(s)) playSplash(f, pose.x, pose.z - 3);
+  if (!was && beached(s)) playSplash(f, pose.x, pose.z - 3, true);
 }
 
 function updateFish(
@@ -372,7 +361,7 @@ function resetFish(f: FishState): void {
   f.packT = -1;
   f.takePending = false;
   f.packModel.visible = false;
-  if (f.splash.isPlaying) f.splash.stop();
+  for (const a of [f.splash, f.thump, f.voice]) if (a.isPlaying) a.stop();
   if (f.grab || f.strand) {
     f.lunge.stop();
     f.swim.reset().play();
@@ -391,8 +380,9 @@ function resetFish(f: FishState): void {
 /** Frees the orca's own resources, including its wake plane's geometry, material and texture. */
 function disposeFish(f: FishState): void {
   if (f.splash.isPlaying) f.splash.stop();
-  if (f.blow.isPlaying) f.blow.stop();
-  f.splashAt.remove(f.splash, f.blow);
+  for (const a of [f.blow, f.thump, f.voice]) if (a.isPlaying) a.stop();
+  f.splashAt.remove(f.splash, f.blow, f.thump);
+  f.root.remove(f.voice);
   f.mixer.stopAllAction();
   f.mixer.uncacheRoot(f.body);
   f.sick.dispose();

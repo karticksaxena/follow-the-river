@@ -163,7 +163,8 @@ interface State {
   scene: EndingScene | null;
   /** The fish pack you lay on the water at the end (loaded with Mom). */
   pack: THREE.Object3D | null;
-  pad: { stop(): unknown; setVolume(v: number): unknown; disconnect(): unknown } | null;
+  /** The dawn's looping beds (birds, water), stopped at the end. */
+  beds: Array<{ stop(): unknown; setVolume(v: number): unknown; disconnect(): unknown }>;
 }
 
 const until = (st: State, pred: Wait['pred']): Promise<void> =>
@@ -277,11 +278,13 @@ function nightPreset(area: AreaDef): LightPreset {
   return { ...night, fog: { ...night.fog, far: area.nightFog ?? night.fog.far } };
 }
 
-/** Night to sunrise over `DAWN.seconds` (the moon sets, the sun rises, every frame), the pad swelling in with it. */
+/** Night to sunrise over `DAWN.seconds` (the moon sets, the sun rises, every frame), the birds swelling in with it over the water's lapping. */
 async function dawn(h: EndingHost, st: State): Promise<void> {
   const { world, ctx, sounds } = h.sys;
-  const pad = ctx.audio.loop(sounds.dawn, 0);
-  st.pad = pad;
+  const birds = sounds.birds ? ctx.audio.loop(sounds.birds, 0) : null;
+  const water = ctx.audio.loop(sounds.water, DAWN.water);
+  st.beds.push(water);
+  if (birds) st.beds.push(birds);
   const { lights } = world;
   const sky = createDawn(lights, nightPreset(h.sys.area), h.lantern);
   await precompileSky(ctx.stage.renderer, world.scene, ctx.stage.camera, lights.physical);
@@ -298,7 +301,7 @@ async function dawn(h: EndingHost, st: State): Promise<void> {
       st.scene?.actor.faceTo(cam.x, cam.z); // then back to you
     }
     const k = Math.min(1, t / DAWN.seconds);
-    pad.setVolume(DAWN.volume * k);
+    birds?.setVolume(DAWN.volume * k);
     sky.step(k, t);
     return k >= 1;
   });
@@ -365,7 +368,7 @@ async function runStep(h: EndingHost, st: State, step: EndingStep, at: Shore): P
     armForLastStand(h.run, DIFFICULTY[h.sys.ctx.difficulty()].bag);
   } else if (step === 'fight') await fight(h, st);
   else if (step === 'strand') await stranded(h, st, s, at);
-  else if (step === 'song') await song(s);
+  else if (step === 'song') await song(s, at);
   else if (step === 'hand') await hand(s, at);
   else if (step === 'pack' && st.pack) await lastPack(s, at, st.pack);
   else if (step === 'dawn') await dawnAndHome(h, st);
@@ -389,11 +392,12 @@ async function play(h: EndingHost, st: State): Promise<void> {
   if (!st.cancelled) h.sys.ctx.finish();
 }
 
-function stopPad(st: State): void {
-  if (!st.pad) return;
-  st.pad.stop();
-  st.pad.disconnect();
-  st.pad = null;
+function stopBeds(st: State): void {
+  for (const bed of st.beds) {
+    bed.stop();
+    bed.disconnect();
+  }
+  st.beds.length = 0;
 }
 
 const freshState = (scene: EndingScene | null, pack: THREE.Object3D | null): State => ({
@@ -402,7 +406,7 @@ const freshState = (scene: EndingScene | null, pack: THREE.Object3D | null): Sta
   wait: null,
   scene,
   pack,
-  pad: null,
+  beds: [],
 });
 
 export function createEnding(h: EndingHost): Ending {
@@ -410,7 +414,7 @@ export function createEnding(h: EndingHost): Ending {
   const stand = (): void => {
     st.cancelled = true; // the running `play` sees this after its next await and stops
     st.wait = null;
-    stopPad(st);
+    stopBeds(st);
     stopVoice();
   };
   return {

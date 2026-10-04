@@ -16,7 +16,7 @@ import {
  * fades and sinks); then the physical sky takes over and the sun rises, warm, over the dam.
  * (The brief's `sunUp` is left out: the sun's rise is one linear climb, nothing needs a second mark.)
  */
-export const DAWN = { seconds: 14, moonSets: 0.35, volume: 0.35 } as const;
+export const DAWN = { seconds: 14, moonSets: 0.35, volume: 0.3, water: 0.25 } as const;
 
 /**
  * The sun's path: elevation when the physical sky takes over (about -2 degrees) and when the dawn

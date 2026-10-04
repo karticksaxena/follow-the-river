@@ -3,12 +3,15 @@ import {
   blowSamples,
   bowShotSamples,
   clickSamples,
-  dawnSamples,
   dryFireSamples,
+  FILES,
   gunshotSamples,
   heartbeatSamples,
+  loadOr,
   mixHorde,
   orcaCrySamples,
+  picker,
+  rateIn,
   splashSamples,
   thudSamples,
 } from './sounds';
@@ -29,7 +32,6 @@ describe('procedural sounds', () => {
     ['heartbeat', () => heartbeatSamples(RATE)],
     ['gunshot', () => gunshotSamples(RATE, seeded())],
     ['orca cry', () => orcaCrySamples(RATE, 2.5, seeded())],
-    ['dawn', () => dawnSamples(RATE, 12)],
   ])('%s stays in range and is not silent', (_, make) => {
     const samples = make();
     expect(samples.length).toBeGreaterThan(RATE * 0.1);
@@ -51,17 +53,9 @@ describe('procedural sounds', () => {
     expect(Math.abs(s[s.length - 1] ?? 1)).toBeLessThan(0.01);
   });
 
-  it('gunshot is 0.6 s, orca cry 2.5 s, dawn 12 s', () => {
+  it('gunshot is 0.6 s, orca cry 2.5 s', () => {
     expect(gunshotSamples(RATE, seeded()).length).toBe(RATE * 0.6);
     expect(orcaCrySamples(RATE, 2.5, seeded()).length).toBe(RATE * 2.5);
-    expect(dawnSamples(RATE, 12).length).toBe(RATE * 12);
-  });
-
-  it('dawn loops without a click and stays soft', () => {
-    const s = dawnSamples(RATE, 12);
-    const step = s.reduce((m, v, i) => Math.max(m, Math.abs(v - (s[i - 1] ?? v))), 0);
-    expect(Math.abs((s[0] ?? 0) - (s[s.length - 1] ?? 0))).toBeLessThanOrEqual(step);
-    expect(peak(s)).toBeLessThan(0.9);
   });
 
   it('orca cry fades in and out (no click at either end)', () => {
@@ -105,5 +99,50 @@ describe('mixHorde', () => {
 
   it('returns silence when there are no groans', () => {
     expect(peak(mixHorde(RATE, [], 1, 5, seeded()))).toBe(0);
+  });
+});
+
+describe('real recordings', () => {
+  it('lists every orca, paddle and bird file', () => {
+    expect(FILES.dras.blows).toHaveLength(4);
+    expect(FILES.dras.splashes).toHaveLength(3);
+    expect(FILES.dras.splashesBig).toHaveLength(3);
+    expect(FILES.dras.callsShort).toHaveLength(3);
+    expect(FILES.dras.cry).toContain('dras/call-cry');
+    expect(FILES.dras.answer).toContain('dras/call-answer');
+    expect(FILES.paddles).toHaveLength(4);
+    expect(FILES.birds).toContain('ambience/birds');
+  });
+
+  it('picks at random and never the same buffer twice in a row', () => {
+    const list = [{ n: 1 }, { n: 2 }, { n: 3 }];
+    const pick = picker(list, seeded(3));
+    let last = pick();
+    const seen = new Set([last]);
+    for (let i = 0; i < 200; i++) {
+      const next = pick();
+      expect(next).not.toBe(last);
+      seen.add(next);
+      last = next;
+    }
+    expect(seen.size).toBe(3);
+    expect(picker([])()).toBeNull();
+    const one = list.slice(0, 1);
+    expect(picker(one)()).toBe(one[0]);
+  });
+
+  it('rates stay in range', () => {
+    expect(rateIn(0.9, 1.1, () => 0)).toBeCloseTo(0.9);
+    expect(rateIn(0.9, 1.1, () => 0.999)).toBeLessThan(1.1);
+  });
+
+  it('a failed file turns the whole list into the fallback, so generated and real never mix', async () => {
+    const good = { id: 'good' };
+    const audio = {
+      load: (u: string) => (u === 'bad' ? Promise.reject(new Error('404')) : Promise.resolve(good)),
+    };
+    expect(await loadOr(audio, ['a', 'b'], ['fallback'])).toEqual([good, good]);
+    expect(await loadOr(audio, ['a', 'bad'], ['fallback'])).toEqual(['fallback']);
+    expect(await loadOr(audio, ['bad'], [])).toEqual([]);
   });
 });
