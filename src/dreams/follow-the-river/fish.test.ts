@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { canThrow, cruiseHeading, FISH, pickStrike, strikesFor } from './fish';
-import { nearestTo, sinkPose } from './fish-parts';
+import {
+  cruiseTargetX,
+  cruiseYFor,
+  nearestTo,
+  nextSurfacing,
+  sinkPose,
+  SURFACE_MAX,
+  SURFACE_MIN,
+  surfaceYFor,
+} from './fish-parts';
+import { EDGE_X, WATER_Y } from './river';
 
 describe('fish', () => {
   it('gets stronger with every pack thrown in by day', () => {
@@ -42,5 +52,27 @@ describe('fish', () => {
     expect(sinkPose(3).roll).toBeCloseTo(Math.PI);
     expect(sinkPose(3).depth).toBeCloseTo(0.5);
     expect(sinkPose(60)).toEqual({ depth: 1, roll: Math.PI });
+  });
+
+  it('cruises in a lane beside the player bank, all through the weave', () => {
+    for (let t = 0; t < 60; t += 0.5) {
+      const x = cruiseTargetX(EDGE_X, t);
+      expect(x).toBeGreaterThanOrEqual(EDGE_X + 2.5);
+      expect(x).toBeLessThanOrEqual(EDGE_X + 5.5);
+    }
+  });
+
+  it('cruises with the fin above the water and the back under it', () => {
+    const finTop = 2; // any measured fin top
+    expect(cruiseYFor(finTop) + finTop).toBeGreaterThan(WATER_Y);
+    expect(cruiseYFor(finTop) + finTop - 1.45).toBeLessThan(WATER_Y);
+    expect(surfaceYFor(finTop) + finTop - 1.45).toBeGreaterThan(WATER_Y);
+  });
+
+  it('surfaces every 18 to 30 seconds', () => {
+    expect(nextSurfacing(0)).toBe(SURFACE_MIN);
+    expect(nextSurfacing(0.999)).toBeLessThan(SURFACE_MAX);
+    expect(SURFACE_MIN).toBe(18);
+    expect(SURFACE_MAX).toBe(30);
   });
 });

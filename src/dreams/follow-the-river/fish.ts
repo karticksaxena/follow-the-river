@@ -3,74 +3,51 @@ import * as THREE from 'three/webgpu';
 import type { AudioBus } from '../../engine/audio';
 import { loadModel, loadSkinned, type SkinnedAsset } from '../../engine/models';
 import type { Vec3 } from '../../engine/ray';
-import { makeShadow, nearestTo, SINK_TIME, sinkPose } from './fish-parts';
+import {
+  cruiseHeading,
+  cruiseTargetX,
+  cruiseYFor,
+  findClip,
+  FISH,
+  makeWake,
+  makeWet,
+  nearestTo,
+  nextSurfacing,
+  pickStrike,
+  SINK_TIME,
+  sinkPose,
+  smooth,
+  SURFACE_TIME,
+  surfaceRoll,
+  surfaceYFor,
+  topOf,
+  turnToward,
+  WAKE_SIZE,
+} from './fish-parts';
 import { characterUrl, propUrl } from './kits';
-import { EDGE_X, RIVER_X } from './river';
+import { EDGE_X, WATER_Y } from './river';
 import type { Sounds } from './sounds';
 import type { Horde } from './zombies/horde';
 import { SPAWNER } from './zombies/spawner';
+export { canThrow, cruiseHeading, FISH, pickStrike, strikesFor } from './fish-parts';
 
-export const FISH = {
-  strikesPerPack: 3,
-  baseStrikes: 2,
-  reach: 3.5,
-  cooldown: 1.4,
-  follow: 2.5,
-};
-
-// Tuning knobs (metres, seconds).
-const WATER_Y = -0.15;
-const CRUISE_Y = -1.1; // only the ~1.45 m dorsal fin clears the water
-const STRIKE_PEAK_Y = 0.4;
-const TAKE_PEAK_Y = -0.2;
+// Tuning knobs (metres, seconds); heights are relative to the river's WATER_Y.
+const STRIKE_PEAK_Y = WATER_Y + 0.55;
+const TAKE_PEAK_Y = WATER_Y - 0.05;
+const WAKE_HIDE_Y = WATER_Y + 0.35; // the orca is airborne above this: no shadow
 const STRIKE_TIME = 1;
 const TAKE_TIME = 2.6;
 const FADE = 0.25;
-const LAG_Z = 4;
-const WEAVE_X = 1.5;
-const THROW_RANGE = 1.5;
+const LAG_Z = 6;
 const PACK_DISTANCE = 4;
 const PACK_TIME = 1;
 const PACK_ARC = 1.2;
 const CAPACITY = Math.max(32, SPAWNER.cap);
-const MIN_SWIM_SPEED = 0.3; // m/s along the river before the heading follows motion
-const MAX_LEAN = 0.25;
 // The ending: the last lunge takes this many at once, then the orca rolls over and sinks.
 const FINALE_TAKES = 3;
-const SINK_Y = -4;
+const SINK_Y = WATER_Y - 3.85;
+const SURFACE_DRIFT = 1.5; // metres downstream while surfacing
 const SINK_DRIFT = 0.3; // m/s downstream while sinking
-
-export function strikesFor(fed: number): number {
-  return FISH.baseStrikes + fed * FISH.strikesPerPack;
-}
-
-/** The zombie to take: alive, within `reach` of the edge, nearest to the player. */
-export function pickStrike(
-  candidates: ArrayLike<number>,
-  count: number,
-  player: { x: number; z: number },
-  edgeX: number,
-): number | null {
-  let best: number | null = null;
-  let bestDist = Infinity;
-  for (let i = 0; i < count; i++) {
-    const x = candidates[i * 3 + 1];
-    if (edgeX - x > FISH.reach) continue;
-    const dx = x - player.x;
-    const dz = candidates[i * 3 + 2] - player.z;
-    const dist = dx * dx + dz * dz;
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = candidates[i * 3];
-    }
-  }
-  return best;
-}
-
-/** Within 1.5 m of the edge and holding a pack. */
-export function canThrow(x: number, edgeX: number, fishPacks: number): boolean {
-  return fishPacks > 0 && edgeX - x <= THROW_RANGE;
-}
 
 /** Where the ending has the orca: cruising/striking as usual, the last lunge, sinking, or gone. */
 export type Finale = 'no' | 'lunge' | 'sink' | 'gone';
@@ -91,26 +68,6 @@ export interface Fish {
   dispose(): void;
 }
 
-/** Yaw for velocity (vx, vz): along the river while swimming, else resting downstream (-Z). */
-export function cruiseHeading(vx: number, vz: number): number {
-  if (Math.abs(vz) < MIN_SWIM_SPEED) return 0;
-  const lean = Math.max(-MAX_LEAN, Math.min(MAX_LEAN, Math.atan2(vx, Math.abs(vz))));
-  return vz < 0 ? -lean : Math.PI + lean;
-}
-
-const smooth = (s: number): number => s * s * (3 - 2 * s);
-
-function turnToward(current: number, target: number, amount: number): number {
-  const diff = Math.atan2(Math.sin(target - current), Math.cos(target - current));
-  return current + diff * Math.min(1, amount);
-}
-
-function findClip(clips: readonly THREE.AnimationClip[], name: string): THREE.AnimationClip {
-  const clip = clips.find((c) => c.name === name);
-  if (!clip) throw new Error(`orca.glb has no ${name} clip`);
-  return clip;
-}
-
 interface Rise {
   t: number;
   dur: number;
@@ -122,6 +79,7 @@ interface Rise {
   lunge: boolean;
   victim: number; // horde id, or -1 when taking a pack
   done: boolean; // the mid-rise effect has fired
+  surface: boolean; // a surfacing: blow at the top, slow roll
 }
 
 /** All mutable orca state; the functions below operate on it (keeps each under 50 lines). */
@@ -129,10 +87,13 @@ interface FishState {
   readonly scene: THREE.Scene;
   readonly root: THREE.Group;
   readonly body: THREE.Object3D;
-  readonly shadow: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  readonly wake: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   readonly packModel: THREE.Object3D;
   readonly splashAt: THREE.Object3D;
   readonly splash: THREE.PositionalAudio;
+  readonly blow: THREE.PositionalAudio;
+  readonly cruiseY: number;
+  readonly surfaceY: number;
   readonly mixer: THREE.AnimationMixer;
   readonly swim: THREE.AnimationAction;
   readonly lunge: THREE.AnimationAction;
@@ -142,6 +103,7 @@ interface FishState {
   readonly collect: (id: number, x: number, z: number) => void;
   count: number;
   time: number;
+  surfaceIn: number; // seconds until the next surfacing
   strikes: number;
   cooldown: number;
   placed: boolean;
@@ -162,6 +124,12 @@ function playSplash(f: FishState, x: number, z: number): void {
   f.splash.play();
 }
 
+/** Plays at `splashAt`, which playSplash has just placed. */
+function playBlow(f: FishState): void {
+  if (f.blow.isPlaying) f.blow.stop();
+  f.blow.play();
+}
+
 function startRise(
   f: FishState,
   r: Partial<Rise> & { toX: number; toZ: number; dur: number; peak: number },
@@ -173,6 +141,7 @@ function startRise(
     lunge: false,
     victim: -1,
     done: false,
+    surface: false,
     ...r,
   };
   f.rise = rise;
@@ -183,6 +152,7 @@ function startRise(
 }
 
 function endRise(f: FishState): void {
+  f.root.rotation.z = 0;
   if (f.rise?.lunge) {
     f.swim.enabled = true;
     f.swim.crossFadeFrom(f.lunge, FADE, false);
@@ -199,13 +169,15 @@ function stepRise(f: FishState, r: Rise, dt: number, horde: Horde | null): void 
   const dx = x - f.root.position.x;
   const dz = z - f.root.position.z;
   if (dx * dx + dz * dz > 1e-6) f.yaw = turnToward(f.yaw, Math.atan2(-dx, -dz), 6 * dt);
-  f.root.position.set(x, CRUISE_Y + (r.peak - CRUISE_Y) * Math.sin(Math.PI * s), z);
+  f.root.position.set(x, f.cruiseY + (r.peak - f.cruiseY) * Math.sin(Math.PI * s), z);
+  if (r.surface) f.root.rotation.z = surfaceRoll(s);
   if (!r.done && s >= 0.5) {
     r.done = true;
     if (r.victim >= 0) horde?.takeByFish(r.victim);
     for (const id of f.victims) horde?.takeByFish(id);
     f.victims.length = 0;
     playSplash(f, x, z);
+    if (r.surface) playBlow(f);
   }
   if (s >= 1) endRise(f);
 }
@@ -213,13 +185,13 @@ function stepRise(f: FishState, r: Rise, dt: number, horde: Horde | null): void 
 function cruise(f: FishState, dt: number, player: { x: number; z: number }): void {
   const pos = f.root.position;
   const targetZ = player.z - LAG_Z;
-  const targetX = RIVER_X - 2 + Math.sin(f.time * 0.4) * WEAVE_X;
+  const targetX = cruiseTargetX(EDGE_X, f.time);
   const dz = targetZ - pos.z;
   const stepZ = Math.sign(dz) * Math.min(Math.abs(dz), FISH.follow * dt);
   const x = pos.x + (targetX - pos.x) * Math.min(1, 2 * dt);
   const dx = x - pos.x;
   f.yaw = turnToward(f.yaw, cruiseHeading(dx / dt, stepZ / dt), 3 * dt);
-  const y = pos.y + (CRUISE_Y - pos.y) * Math.min(1, 3 * dt);
+  const y = pos.y + (f.cruiseY - pos.y) * Math.min(1, 3 * dt);
   pos.set(x, y, pos.z + stepZ);
 }
 
@@ -261,10 +233,13 @@ function stepPack(f: FishState, dt: number): void {
   f.takePending = true;
 }
 
-function placeShadow(f: FishState): void {
-  f.shadow.position.set(f.root.position.x, WATER_Y + 0.02, f.root.position.z);
-  f.shadow.rotation.set(-Math.PI / 2, f.yaw, 0, 'YXZ');
-  f.shadow.visible = f.root.position.y < 0.2 && f.finale !== 'gone';
+function placeWake(f: FishState): void {
+  // The V's tip sits by the fin and opens out behind the orca (its back is +z turned by yaw).
+  const behind = WAKE_SIZE.length / 2 - 1;
+  const { x, z } = f.root.position;
+  f.wake.position.set(x + Math.sin(f.yaw) * behind, WATER_Y + 0.02, z + Math.cos(f.yaw) * behind);
+  f.wake.rotation.set(-Math.PI / 2, f.yaw, 0, 'YXZ');
+  f.wake.visible = f.root.position.y < WAKE_HIDE_Y && f.finale !== 'gone';
 }
 
 function startTake(f: FishState): void {
@@ -274,6 +249,18 @@ function startTake(f: FishState): void {
     toZ: f.packTo.z + 1.5,
     dur: TAKE_TIME,
     peak: TAKE_PEAK_Y,
+  });
+}
+
+function startSurface(f: FishState): void {
+  const { x, z } = f.root.position;
+  f.surfaceIn = nextSurfacing(Math.random());
+  startRise(f, {
+    toX: x,
+    toZ: z - SURFACE_DRIFT,
+    dur: SURFACE_TIME,
+    peak: f.surfaceY,
+    surface: true,
   });
 }
 
@@ -313,16 +300,20 @@ function updateFish(
   horde: Horde | null,
   night: boolean,
 ): void {
+  // A zero-length frame (the first one, or right after a pause) would make cruise() divide 0 by 0:
+  // the heading turned NaN for good and the orca was never drawn again.
+  if (!(dt > 0)) return;
   f.time += dt;
   f.mixer.update(dt);
   if (!f.placed) {
     f.placed = true;
-    f.root.position.set(RIVER_X - 2, CRUISE_Y, player.z - LAG_Z);
+    f.root.position.set(cruiseTargetX(EDGE_X, 0), f.cruiseY, player.z - LAG_Z);
+    f.surfaceIn = nextSurfacing(Math.random());
   }
   f.cooldown = Math.max(0, f.cooldown - dt);
   if (f.finale === 'sink') {
     stepSink(f, dt);
-    placeShadow(f);
+    placeWake(f);
     return;
   }
   if (f.packT >= 0) stepPack(f, dt);
@@ -334,10 +325,14 @@ function updateFish(
   } else {
     if (f.takePending) startTake(f);
     else if (night && f.strikes > 0 && f.cooldown === 0 && horde) tryStrike(f, player, horde);
-    if (!f.rise) cruise(f, dt, player);
+    if (!f.rise) {
+      f.surfaceIn -= dt;
+      if (f.surfaceIn <= 0 && f.finale === 'no') startSurface(f);
+      else cruise(f, dt, player);
+    }
   }
   if (f.finale !== 'sink') f.root.rotation.y = f.yaw;
-  placeShadow(f);
+  placeWake(f);
 }
 
 function feedFish(f: FishState, from: Vec3): void {
@@ -361,22 +356,25 @@ function resetFish(f: FishState): void {
     f.swim.reset().play();
   }
   f.rise = null;
+  f.root.rotation.z = 0;
   f.finale = 'no';
+  f.surfaceIn = nextSurfacing(Math.random());
   f.victims.length = 0;
   f.root.visible = true;
   f.root.rotation.set(0, f.yaw, 0);
 }
 
-/** Frees the orca's own resources, including its shadow plane's geometry, material and texture. */
+/** Frees the orca's own resources, including its wake plane's geometry, material and texture. */
 function disposeFish(f: FishState): void {
   if (f.splash.isPlaying) f.splash.stop();
-  f.splashAt.remove(f.splash);
+  if (f.blow.isPlaying) f.blow.stop();
+  f.splashAt.remove(f.splash, f.blow);
   f.mixer.stopAllAction();
   f.mixer.uncacheRoot(f.body);
-  f.scene.remove(f.root, f.shadow, f.packModel, f.splashAt);
-  f.shadow.geometry.dispose();
-  f.shadow.material.map?.dispose();
-  f.shadow.material.dispose();
+  f.scene.remove(f.root, f.wake, f.packModel, f.splashAt);
+  f.wake.geometry.dispose();
+  f.wake.material.map?.dispose();
+  f.wake.material.dispose();
 }
 
 function makeClips(
@@ -410,9 +408,12 @@ function createState(
   const root = new THREE.Group();
   const body = clone(asset.scene);
   body.traverse((n) => (n.frustumCulled = false));
+  makeWet(body);
+  const finTop = topOf(body);
+  const cruiseY = cruiseYFor(finTop);
   root.add(body);
-  const shadow = makeShadow();
-  scene.add(root, shadow);
+  const wake = makeWake();
+  scene.add(root, wake);
   packModel.visible = false;
   scene.add(packModel);
   const splashAt = new THREE.Object3D();
@@ -420,16 +421,22 @@ function createState(
   const splash = audio.positional(splashAt, 4);
   splash.setBuffer(sounds.splash);
   splash.setVolume(1);
+  const blow = audio.positional(splashAt, 4);
+  blow.setBuffer(sounds.blow);
+  blow.setVolume(1);
   const { mixer, swim, lunge } = makeClips(body, asset);
   const buffer = new Float32Array(CAPACITY * 3);
   const f: FishState = {
     scene,
     root,
     body,
-    shadow,
+    wake,
     packModel,
     splashAt,
     splash,
+    blow,
+    cruiseY,
+    surfaceY: surfaceYFor(finTop),
     mixer,
     swim,
     lunge,
@@ -439,6 +446,7 @@ function createState(
     collect: (id, x, z) => collectZombie(f, id, x, z),
     count: 0,
     time: 0,
+    surfaceIn: nextSurfacing(Math.random()),
     strikes: 0,
     cooldown: 0,
     placed: false,
@@ -448,7 +456,7 @@ function createState(
     takePending: false,
     finale: 'no',
     sinkT: 0,
-    sinkFromY: CRUISE_Y,
+    sinkFromY: cruiseY,
     victims: [],
   };
   return f;

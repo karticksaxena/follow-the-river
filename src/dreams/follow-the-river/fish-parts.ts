@@ -1,6 +1,13 @@
 import * as THREE from 'three/webgpu';
+import { WATER_Y } from './river';
 
-const SHADOW_OPACITY = 0.35;
+const THROW_RANGE = 1.5;
+const MIN_SWIM_SPEED = 0.3; // m/s along the river before the heading follows motion
+const MAX_LEAN = 0.25;
+/** The wake behind the fin: dim, pale blue-grey (never bright). */
+const WAKE_OPACITY = 0.3;
+const WAKE_COLOR = 0x9fb4bf;
+export const WAKE_SIZE = { width: 2.4, length: 6 } as const;
 /** Seconds the orca takes to roll over and sink at the end. */
 export const SINK_TIME = 6;
 
@@ -32,27 +39,145 @@ export function sinkPose(t: number): { depth: number; roll: number } {
   return { depth: s * s * (3 - 2 * s), roll: Math.PI * Math.min(1, s * 2) };
 }
 
-export function makeShadow(): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
+/**
+ * A faint pale V of broken water trailing the fin: on black water at night the fin alone is easy
+ * to miss, the wake is what catches the eye. The V's tip sits at the plane's +Y edge (canvas top).
+ */
+export function makeWake(): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 64;
+  canvas.width = 64;
+  canvas.height = 128;
   const g = canvas.getContext('2d');
   if (g) {
-    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    grad.addColorStop(0, '#000');
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, 64, 64);
+    const fade = g.createLinearGradient(0, 0, 0, 128);
+    fade.addColorStop(0, 'rgba(255,255,255,0.9)');
+    fade.addColorStop(1, 'rgba(255,255,255,0)');
+    g.strokeStyle = fade;
+    g.lineWidth = 5;
+    g.lineCap = 'round';
+    for (const side of [-1, 1]) {
+      g.beginPath();
+      g.moveTo(32, 4);
+      g.lineTo(32 + side * 28, 124);
+      g.stroke();
+    }
   }
   const material = new THREE.MeshBasicMaterial({
     map: new THREE.CanvasTexture(canvas),
-    color: 0x000000,
+    color: WAKE_COLOR,
     transparent: true,
-    opacity: SHADOW_OPACITY,
+    opacity: WAKE_OPACITY,
     depthWrite: false,
   });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.scale.set(3, 8, 1); // rotated by yaw below: long axis follows the orca's body (z)
+  mesh.scale.set(WAKE_SIZE.width, WAKE_SIZE.length, 1);
   mesh.renderOrder = 1;
   return mesh;
+}
+
+// Heights (metres). orca.py: LENGTH 7, dorsal fin outline rises 1.45 above the back.
+/** Height of the dorsal fin above the back (tools/blender/orca.py `fins`). */
+const FIN_HEIGHT = 1.45;
+const FIN_CLEARANCE = 0.8; // fin top above the water while cruising (most of the fin shows)
+const BACK_CLEARANCE = 0.25; // back above the water while surfacing
+const WET_ROUGHNESS = 0.3;
+/** Seconds between surfacings: random in [18, 30]. */
+export const SURFACE_MIN = 18;
+export const SURFACE_MAX = 30;
+export const SURFACE_TIME = 2.5;
+const SURFACE_ROLL = 0.35;
+/** The cruise lane: this far out from the bank edge, weaving by `WEAVE_X`. */
+export const LANE_OFFSET = 4;
+export const WEAVE_X = 1.5;
+
+/** Root y while cruising: the fin top (`finTop`, measured above the root) clears the water. */
+export const cruiseYFor = (finTop: number): number => WATER_Y + FIN_CLEARANCE - finTop;
+
+/** Root y at the top of a surfacing: back (finTop - fin height) just out of the water. */
+export const surfaceYFor = (finTop: number): number =>
+  WATER_Y + BACK_CLEARANCE - (finTop - FIN_HEIGHT);
+
+/** Seconds until the next surfacing; `rand` is in [0, 1). */
+export const nextSurfacing = (rand: number): number =>
+  SURFACE_MIN + rand * (SURFACE_MAX - SURFACE_MIN);
+
+/** Cruise lane x at `time`: beside the player's bank, weaving. */
+export const cruiseTargetX = (edgeX: number, time: number): number =>
+  edgeX + LANE_OFFSET + Math.sin(time * 0.4) * WEAVE_X;
+
+/** Slow roll while surfacing, s in 0..1. */
+export const surfaceRoll = (s: number): number => Math.sin(Math.PI * s) * SURFACE_ROLL;
+
+/** Height of the model's highest point above its origin (the dorsal fin), measured at load. */
+export function topOf(body: THREE.Object3D): number {
+  return new THREE.Box3().setFromObject(body).max.y;
+}
+
+/** A wet sheen so moon and flashlight catch the orca (still dark). */
+export function makeWet(body: THREE.Object3D): void {
+  body.traverse((n) => {
+    if (!(n instanceof THREE.Mesh)) return;
+    const m: unknown = n.material;
+    if (m instanceof THREE.MeshStandardMaterial) m.roughness = WET_ROUGHNESS;
+  });
+}
+
+export const FISH = {
+  strikesPerPack: 3,
+  baseStrikes: 2,
+  reach: 3.5,
+  cooldown: 1.4,
+  follow: 2.5,
+};
+
+export function strikesFor(fed: number): number {
+  return FISH.baseStrikes + fed * FISH.strikesPerPack;
+}
+
+/** The zombie to take: alive, within `reach` of the edge, nearest to the player. */
+export function pickStrike(
+  candidates: ArrayLike<number>,
+  count: number,
+  player: { x: number; z: number },
+  edgeX: number,
+): number | null {
+  let best: number | null = null;
+  let bestDist = Infinity;
+  for (let i = 0; i < count; i++) {
+    const x = candidates[i * 3 + 1];
+    if (edgeX - x > FISH.reach) continue;
+    const dx = x - player.x;
+    const dz = candidates[i * 3 + 2] - player.z;
+    const dist = dx * dx + dz * dz;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = candidates[i * 3];
+    }
+  }
+  return best;
+}
+
+/** Within 1.5 m of the edge and holding a pack. */
+export function canThrow(x: number, edgeX: number, fishPacks: number): boolean {
+  return fishPacks > 0 && edgeX - x <= THROW_RANGE;
+}
+
+/** Yaw for velocity (vx, vz): along the river while swimming, else resting downstream (-Z). */
+export function cruiseHeading(vx: number, vz: number): number {
+  if (Math.abs(vz) < MIN_SWIM_SPEED) return 0;
+  const lean = Math.max(-MAX_LEAN, Math.min(MAX_LEAN, Math.atan2(vx, Math.abs(vz))));
+  return vz < 0 ? -lean : Math.PI + lean;
+}
+
+export const smooth = (s: number): number => s * s * (3 - 2 * s);
+
+export function turnToward(current: number, target: number, amount: number): number {
+  const diff = Math.atan2(Math.sin(target - current), Math.cos(target - current));
+  return current + diff * Math.min(1, amount);
+}
+
+export function findClip(clips: readonly THREE.AnimationClip[], name: string): THREE.AnimationClip {
+  const clip = clips.find((c) => c.name === name);
+  if (!clip) throw new Error(`orca.glb has no ${name} clip`);
+  return clip;
 }

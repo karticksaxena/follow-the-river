@@ -14,6 +14,8 @@ export interface Sounds {
   twang: AudioBuffer;
   thud: AudioBuffer;
   splash: AudioBuffer;
+  /** The orca's breath at the surface (0.6 s). */
+  blow: AudioBuffer;
   sting: AudioBuffer;
   heartbeat: AudioBuffer;
   tapeVoice: AudioBuffer;
@@ -80,6 +82,27 @@ export function splashSamples(
     low += onePole(3000 * Math.exp(-t * 4) + 300, rate) * (random() * 2 - 1 - low);
     const attack = Math.min(1, t / 0.03);
     samples[i] = clamp(low * 3 * attack * Math.exp(-t * 5));
+  }
+  return samples;
+}
+
+/** The orca's breath: 0.6 s of band-passed noise (300 Hz to 2.2 kHz) swelling and fading to silence. */
+export function blowSamples(
+  rate: number,
+  seconds: number,
+  random: () => number,
+): Float32Array<ArrayBuffer> {
+  const samples = new Float32Array(Math.floor(rate * seconds));
+  const high = onePole(2200, rate);
+  const low = onePole(300, rate);
+  let a = 0;
+  let b = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const noise = random() * 2 - 1;
+    a += high * (noise - a);
+    b += low * (noise - b);
+    const swell = Math.sin((Math.PI * i) / samples.length) ** 2; // 0 at both ends: no click
+    samples[i] = clamp((a - b) * 4 * swell);
   }
   return samples;
 }
@@ -286,6 +309,7 @@ export async function loadSounds(audio: AudioBus): Promise<Sounds> {
     twang: toBuffer(context, pluckSamples(rate, 110, 0.8, Math.random)),
     thud: toBuffer(context, thudSamples(rate)),
     splash: toBuffer(context, splashSamples(rate, 0.8, Math.random)),
+    blow: toBuffer(context, blowSamples(rate, 0.6, Math.random)),
     sting: toBuffer(context, stingSamples(rate)),
     heartbeat: toBuffer(context, heartbeatSamples(rate)),
     tapeVoice: toBuffer(context, tapeVoiceSamples(rate, 6, Math.random)),

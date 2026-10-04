@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  blowSamples,
   clickSamples,
   dawnSamples,
   dryFireSamples,
@@ -24,6 +25,7 @@ describe('procedural sounds', () => {
   it.each([
     ['pluck', () => pluckSamples(RATE, 110, 0.6, seeded())],
     ['splash', () => splashSamples(RATE, 0.8, seeded())],
+    ['blow', () => blowSamples(RATE, 0.6, seeded())],
     ['thud', () => thudSamples(RATE)],
     ['heartbeat', () => heartbeatSamples(RATE)],
     ['tape voice', () => tapeVoiceSamples(RATE, 2, seeded())],
@@ -42,6 +44,13 @@ describe('procedural sounds', () => {
     expect(samples.length).toBe(RATE * 0.025);
     expect(peak(samples)).toBeLessThanOrEqual(1);
     expect(peak(samples)).toBeGreaterThan(0.05);
+  });
+
+  it('blow is 0.6 s and fades in and out (no click)', () => {
+    const s = blowSamples(RATE, 0.6, seeded());
+    expect(s.length).toBe(RATE * 0.6);
+    expect(Math.abs(s[0] ?? 1)).toBeLessThan(0.01);
+    expect(Math.abs(s[s.length - 1] ?? 1)).toBeLessThan(0.01);
   });
 
   it('gunshot is 0.6 s, orca cry 2.5 s, dawn 12 s', () => {
