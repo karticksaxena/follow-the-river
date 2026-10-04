@@ -15,3 +15,9 @@ describe('mistDensity', () => {
     expect(mistDensity(1, 0)).toBeGreaterThan(0);
   });
 });
+
+describe('the mist ceiling (it was once a white wall)', () => {
+  it('keeps the density low', () => {
+    expect(MIST.density).toBeLessThanOrEqual(0.2);
+  });
+});

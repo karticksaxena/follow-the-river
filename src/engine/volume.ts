@@ -13,9 +13,9 @@ export const VOLUME = {
   blurRadius: 0.6,
   blurSigma: 4,
   /** How much of the blurred mist is added to the scene colour. */
-  strength: 1,
+  strength: 0.6,
   /** Cap on the added light per channel (HDR): a lamp right next to the ray cannot blow out. */
-  cap: 0.6,
+  cap: 0.15,
 } as const;
 
 /** Raymarch steps for a tier. Pure. WebGL 2 is untested for the volume material, so it gets none. */
@@ -29,14 +29,14 @@ export const SHAFTS = {
   skyFrom: 0.8,
   samples: 12,
   /** How far toward the sun each pixel marches (share of the way to the sun on screen). */
-  reach: 0.85,
+  reach: 0.95,
   /** Per-sample falloff. */
-  decay: 0.93,
+  decay: 0.95,
   /** Peak brightness added (HDR, before bloom). Keep low: the 14 s frame must stay readable. */
-  peak: 0.35,
+  peak: 0.6,
   /** Share of the dawn (0..1) the rays fade in over, and out over. */
-  fadeIn: [0.4, 0.62] as readonly [number, number],
-  fadeOut: [0.78, 0.97] as readonly [number, number],
+  fadeIn: [0.5, 0.6] as readonly [number, number],
+  fadeOut: [0.82, 0.97] as readonly [number, number],
 } as const;
 
 const smooth = (a: number, b: number, x: number): number => {

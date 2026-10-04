@@ -12,7 +12,7 @@ export const MIST = {
   /** Height (m) over which the mist falls to 1/e. */
   height: 2.5,
   /** Scales how much light the mist scatters. */
-  density: 1,
+  density: 0.1,
   /** How much the drifting noise modulates it (0 = flat, 1 = from nothing to double). */
   noiseAmount: 0.6,
   /** Noise feature size (1 / m) and drift speed (m/s along x; z drifts at 0.6 of it). */

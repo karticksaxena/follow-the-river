@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shaftEnvelope, shaftFacing, volumeSteps } from './volume';
+import { shaftEnvelope, shaftFacing, VOLUME, volumeSteps } from './volume';
 
 describe('volumeSteps', () => {
   it('is off on Low, 8 on Medium and 12 on High (WebGPU)', () => {
@@ -26,5 +26,12 @@ describe('shaftFacing', () => {
     expect(shaftFacing(1)).toBe(1);
     expect(shaftFacing(0)).toBe(0);
     expect(shaftFacing(-1)).toBe(0);
+  });
+});
+
+describe('the mist ceiling (it was once a white wall)', () => {
+  it('adds at most a small cap per channel', () => {
+    expect(VOLUME.strength).toBeLessThanOrEqual(1);
+    expect(VOLUME.cap).toBeLessThanOrEqual(0.2);
   });
 });

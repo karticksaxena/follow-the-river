@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { createDawn, DAWN, dawnFades, type Fades } from './dawn';
+import { createDawn, DAWN, dawnFades, dawnSun, type Fades } from './dawn';
 import { createWorldLights, LIGHTING } from './lighting';
 
 const fades = (k: number): Fades => dawnFades(k, { dome: 0, stars: 0, moon: 0 });
@@ -53,5 +53,21 @@ describe('createDawn', () => {
       true,
       true,
     ]);
+  });
+});
+
+describe('one sun', () => {
+  it('lights from where the sky draws the sun, at every moment after the moon sets', () => {
+    const lights = createWorldLights(new THREE.Scene());
+    const dawn = createDawn(lights, LIGHTING.night, new THREE.PointLight());
+    const out = { x: 0, y: 0, z: 0 };
+    for (const k of [0.4, 0.6, 0.8, 1]) {
+      dawn.step(k, k * DAWN.seconds);
+      expect(dawnSun(k, out)).not.toBeNull();
+      const dir = lights.key.position.clone().normalize();
+      expect(dir.x).toBeCloseTo(out.x, 5);
+      expect(dir.y).toBeCloseTo(out.y, 5);
+      expect(dir.z).toBeCloseTo(out.z, 5);
+    }
   });
 });

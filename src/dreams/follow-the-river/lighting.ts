@@ -196,9 +196,9 @@ export function applyLighting(
   const d = skyDirection(preset.key.elevation, preset.key.azimuth, sunScratch);
   key.color.set(c?.key ?? preset.key.color);
   applyDim(lights, preset, 0);
-  key.position.set(d.x * KEY_DISTANCE, d.y * KEY_DISTANCE, d.z * KEY_DISTANCE);
+  const aim = frame.sun ?? d; // the sun you see is the sun that lights and shadows
+  key.position.set(aim.x * KEY_DISTANCE, aim.y * KEY_DISTANCE, aim.z * KEY_DISTANCE);
   setShadowStrength(key, preset.shadow);
-  const aim = frame.sun ?? d;
   const night = preset.stars ? 1 : 0;
   const moonAmount = frame.moon ?? night;
   paintSkyDome(sky, c?.skyTop ?? preset.skyTop, c?.skyHorizon ?? preset.skyHorizon);

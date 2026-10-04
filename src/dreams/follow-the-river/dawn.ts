@@ -47,6 +47,14 @@ export function dawnFades(k: number, out: Fades): Fades {
   return out;
 }
 
+/** The sun's direction `k` (0..1) through the dawn, or null while the moon is still up. One source for the key light, the sky and the god rays. */
+export function dawnSun(k: number, out: { x: number; y: number; z: number }): typeof out | null {
+  if (k < DAWN.moonSets) return null;
+  const u = Math.min(1, (k - DAWN.moonSets) / (1 - DAWN.moonSets));
+  const elevation = SUN_START + (LIGHTING.sunrise.key.elevation - SUN_START) * u;
+  return skyDirection(elevation, LIGHTING.sunrise.key.azimuth, out);
+}
+
 export interface Dawn {
   /** One frame: `k` 0..1 through the dawn, `t` seconds in. Allocation-free. */
   step(k: number, t: number): void;
@@ -86,8 +94,7 @@ export function createDawn(
         const u = Math.min(1, (k - DAWN.moonSets) / (1 - DAWN.moonSets));
         mixPresetInto(LIGHTING.predawn, sunrise, u, scratch);
         mixColorsInto(LIGHTING.predawn, sunrise, u, colors);
-        const elevation = SUN_START + (sunrise.key.elevation - SUN_START) * u;
-        frame.sun = skyDirection(elevation, sunrise.key.azimuth, sun); // pinned over the dam
+        frame.sun = dawnSun(k, sun); // pinned over the dam
       }
       applyLighting(lights, scratch, frame);
     },

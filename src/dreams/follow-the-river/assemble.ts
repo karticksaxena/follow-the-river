@@ -80,6 +80,21 @@ function loadBodies(
 }
 
 /** Frees what a cancelled build made. Only touches the camera if the scene still owns it. */
+/** `compileAsync` skips objects off the camera's layers, so compile the mist box with only its layer on. */
+async function compileMist(
+  renderer: THREE.WebGPURenderer,
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+): Promise<void> {
+  const mask = camera.layers.mask;
+  camera.layers.set(VOLUME_LAYER);
+  try {
+    await renderer.compileAsync(scene, camera);
+  } finally {
+    camera.layers.mask = mask;
+  }
+}
+
 function free(scene: THREE.Scene, camera: THREE.Camera, parts?: Partial<Systems>): void {
   // Scene first (as in the chapter teardown), while the viewmodels still hang off the camera.
   disposeScene(scene);
@@ -156,6 +171,7 @@ export async function assemble(
   horde.spawn(0, 0, 0, DAY_TUNING);
   attachKeyShadows(world.lights.key, ctx.stage.tier); // cascaded moon/sun shadows (none on Low)
   await ctx.stage.renderer.compileAsync(scene, camera);
+  await compileMist(ctx.stage.renderer, scene, camera); // the mist's own layer, behind the loading screen
   if (isCancelled()) {
     ctx.stage.mist(null);
     free(scene, camera, { ...bodies, flashlight, scares });
