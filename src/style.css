@@ -208,6 +208,19 @@ h1.title {
   background: rgba(8, 8, 14, 0.55);
   line-height: 1.5;
 }
+.hud-health {
+  color: #a8323a;
+  letter-spacing: 0.15em;
+}
+/* One hit left: the last heart beats. */
+.hud-health.low {
+  animation: hud-beat 0.9s ease-in-out infinite;
+}
+@keyframes hud-beat {
+  50% {
+    opacity: 0.45;
+  }
+}
 .hud-prompt {
   position: absolute;
   left: 50%;

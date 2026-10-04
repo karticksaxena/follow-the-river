@@ -4,6 +4,7 @@ import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
 import type { AreaDef, PropPlacement } from './areas/types';
 import { addBanks, groundEndX } from './banks';
+import { addCampfire } from './campfire';
 import { KIT_SCALE, kitUrl } from './kits';
 import { createWorldLights, type WorldLights } from './lighting';
 import { addLake, addRiver, EDGE_X, LAKE, OVERRUN, plane, RIVER_WIDTH } from './river';
@@ -94,12 +95,14 @@ export async function buildWorld(area: AreaDef): Promise<World> {
   const lights = createWorldLights(scene);
   addGround(scene, area);
   const colliders = stripBlockers(area);
-  const [props] = await Promise.all([
+  const [props, fire] = await Promise.all([
     Promise.all(area.props.map(loadProp)),
+    addCampfire(scene, area.waitSpot.x, area.waitSpot.z),
     addWaters(scene, area),
     ...area.shacks.map((shack) => addShack(scene, shack)),
   ]);
   for (const { collider } of props) if (collider) colliders.push(collider);
+  colliders.push(fire);
   addBatched(
     scene,
     props.map((p) => p.model),

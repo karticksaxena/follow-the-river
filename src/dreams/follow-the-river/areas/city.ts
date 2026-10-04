@@ -127,7 +127,6 @@ const PROPS: readonly PropPlacement[] = [
   ...backdrop(),
   ...barricade(),
   ...outskirts(),
-  { kit: 'survival', model: 'campfire-pit', x: 0.3, z: -113 },
   { kit: 'survival', model: 'bedroll', x: -0.9, z: -113.5, yaw: 0.5 },
 ];
 

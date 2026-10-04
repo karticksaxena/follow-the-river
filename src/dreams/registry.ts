@@ -13,7 +13,7 @@ export const DREAMS: readonly DreamInfo[] = [
       'Press Esc any time to pause. The pause menu has every rule.',
     ],
     howToPlay: [
-      'W A S D: move. Mouse: look. Shift: run. E: use / pick up. F: flashlight. Click: shoot the bow.',
+      'W A S D: move. Mouse: look. Shift: run. Space: jump. E: use / pick up. F: flashlight. Click: shoot the bow.',
       'By day: search the area for batteries, arrows and fish packs. Zombies are slow, and hide in the dark.',
       "Throw fish packs into the river (E at the water's edge). The more you feed it, the more it protects you at night.",
       'Rest by the campfire to wait for dark. You cannot go back.',

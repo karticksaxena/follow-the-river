@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveCircle } from '../../../engine/collide';
+import { CAMPFIRE } from '../campfire';
 import { EDGE_X } from '../river';
 import { shackBounds, shackColliders } from '../shack';
 import { CITY } from './city';
@@ -34,13 +35,9 @@ describe('CITY', () => {
     expect(CITY.safeZ).toBeGreaterThan(CITY.endZ);
   });
 
-  it('puts the wait spot at the campfire, not at the throwing edge', () => {
-    const fire = CITY.props.find((p) => p.model === 'campfire-pit');
-    expect(fire).toBeDefined();
-    expect(
-      Math.hypot(CITY.waitSpot.x - (fire?.x ?? 0), CITY.waitSpot.z - (fire?.z ?? 0)),
-    ).toBeLessThan(1);
+  it('lights the campfire (the wait spot) clear of the throwing edge, with room to pass', () => {
     expect(EDGE_X - CITY.waitSpot.x).toBeGreaterThan(1);
+    expect(EDGE_X - (CITY.waitSpot.x + CAMPFIRE.solid / 2)).toBeGreaterThan(1);
   });
 
   it('places day pickups and lurkers before the barricade, not inside shack walls', () => {

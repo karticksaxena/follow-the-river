@@ -17,7 +17,7 @@ const RECOVER_RADIUS = 1.1;
 const KICK = 0.06;
 const KICK_TIME = 0.25;
 const SPAWN_AHEAD = 0.3;
-const VOLUME = { twang: 0.6, thud: 0.7, click: 0.4 } as const;
+const VOLUME = { shot: 0.7, thud: 0.7, click: 0.4 } as const;
 
 export interface Arrow {
   x: number;
@@ -143,7 +143,7 @@ function fireArrow(s: BowState, eye: Vec3, look: Vec3): void {
   a.vz = look.z * BOW.speed;
   a.age = 0;
   a.state = 'flying';
-  s.audio.once(s.sounds.twang, VOLUME.twang);
+  s.audio.once(s.sounds.bowShot, VOLUME.shot);
   s.cooldown = BOW.cooldown;
   s.kick = KICK_TIME;
 }

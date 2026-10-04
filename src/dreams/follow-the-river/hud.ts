@@ -1,4 +1,6 @@
 import { el } from '../../engine/ui';
+import { MAX_HEALTH } from './flow';
+import { ATTACK } from './zombies/brain';
 
 export interface HudState {
   battery: number;
@@ -26,9 +28,17 @@ export function batteryCells(battery: number): string {
   return '▮'.repeat(full) + '▯'.repeat(CELLS - full);
 }
 
+/** Hits you can take: "♥♥♡" after one (a zombie blow takes ATTACK.damage of MAX_HEALTH). */
+export function hearts(health: number): string {
+  const total = Math.ceil(MAX_HEALTH / ATTACK.damage);
+  const left = Math.max(0, Math.min(total, Math.ceil(health / ATTACK.damage)));
+  return '♥'.repeat(left) + '♡'.repeat(total - left);
+}
+
 interface HudEls {
   readonly hud: HTMLElement;
   readonly hurtEl: HTMLElement;
+  readonly health: HTMLElement;
   readonly battery: HTMLElement;
   readonly arrows: HTMLElement;
   readonly fish: HTMLElement;
@@ -48,6 +58,7 @@ function buildHud(root: HTMLElement): HudEls {
   const hurtEl = el('div', 'hud-hurt');
   const dot = el('div', 'hud-dot');
   const stats = el('div', 'hud-stats');
+  const health = el('div', 'hud-health');
   const [battery, arrows, fish, ammo] = [el('div'), el('div'), el('div'), el('div')];
   const promptEl = el('div', 'hud-prompt');
   const weapons = { bow: el('span'), gun: el('span') };
@@ -58,7 +69,7 @@ function buildHud(root: HTMLElement): HudEls {
   // Hidden until the first set() says the gun is owned (a chapter can be built during the intro).
   ammo.hidden = true;
   weaponRow.hidden = true;
-  stats.append(battery, arrows, fish, ammo, weaponRow);
+  stats.append(health, battery, arrows, fish, ammo, weaponRow);
   hud.append(hurtEl, dot, stats, promptEl);
   root.append(hud);
   hurtEl.addEventListener('animationend', () => hurtEl.classList.remove('flash'));
@@ -74,6 +85,7 @@ function buildHud(root: HTMLElement): HudEls {
   return {
     hud,
     hurtEl,
+    health,
     battery,
     arrows,
     fish,
@@ -102,6 +114,8 @@ function writeStats(h: HudEls, s: HudState): void {
     h.weapons.gun.style.opacity = s.weapon === 'gun' ? '1' : '0.4';
   }
   if (fresh || last.health !== s.health) {
+    h.health.textContent = hearts(s.health);
+    h.health.classList.toggle('low', s.health <= ATTACK.damage);
     h.hurtEl.style.opacity = String(Math.max(0, Math.min(1, 1 - s.health / 100)));
   }
 }

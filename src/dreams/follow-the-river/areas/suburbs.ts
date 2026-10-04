@@ -87,7 +87,6 @@ function streetProps(): PropPlacement[] {
     solid('survival', 'barrel', -9.5, -22),
     solid('survival', 'box-large', -9.5, -80),
     solid('roads', 'dumpster', -9.3, -8, Math.PI / 2),
-    { kit: 'survival', model: 'campfire-pit', x: 0.3, z: -113 },
     { kit: 'survival', model: 'bedroll', x: -0.9, z: -113.5, yaw: 0.5 },
     // Hay behind which the barn's lying zombie waits.
     { kit: 'survival', model: 'box-large', x: -16.5, z: -94.5 },

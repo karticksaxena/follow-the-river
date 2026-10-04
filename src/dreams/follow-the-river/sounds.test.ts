@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   blowSamples,
+  bowShotSamples,
   clickSamples,
   dawnSamples,
   dryFireSamples,
@@ -8,7 +9,6 @@ import {
   heartbeatSamples,
   mixHorde,
   orcaCrySamples,
-  pluckSamples,
   splashSamples,
   thudSamples,
 } from './sounds';
@@ -22,7 +22,7 @@ const RATE = 8000;
 
 describe('procedural sounds', () => {
   it.each([
-    ['pluck', () => pluckSamples(RATE, 110, 0.6, seeded())],
+    ['bow shot', () => bowShotSamples(RATE, seeded())],
     ['splash', () => splashSamples(RATE, 0.8, seeded())],
     ['blow', () => blowSamples(RATE, 0.6, seeded())],
     ['thud', () => thudSamples(RATE)],
@@ -81,9 +81,10 @@ describe('procedural sounds', () => {
     expect(splashSamples(RATE, 0.3, seeded(4))).toEqual(splashSamples(RATE, 0.3, seeded(4)));
   });
 
-  it('plucks fade out (a bow string, not a drone)', () => {
-    const s = pluckSamples(RATE, 110, 1, seeded());
-    expect(peak(s.subarray(s.length - RATE / 10))).toBeLessThan(peak(s.subarray(0, RATE / 10)) / 4);
+  it('a bow shot is a quick slap that fades out (not a ringing string)', () => {
+    const s = bowShotSamples(RATE, seeded());
+    expect(s.length).toBeLessThan(RATE / 2);
+    expect(peak(s.subarray(s.length - RATE / 20))).toBeLessThan(peak(s.subarray(0, RATE / 20)) / 4);
   });
 });
 

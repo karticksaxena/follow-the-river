@@ -11,7 +11,8 @@ export interface Sounds {
   alarm: AudioBuffer;
   /** 8 s loop: many distant groans mixed (the "group" sound). */
   horde: AudioBuffer;
-  twang: AudioBuffer;
+  /** String slap and arrow whoosh (0.45 s). */
+  bowShot: AudioBuffer;
   thud: AudioBuffer;
   splash: AudioBuffer;
   /** The orca's breath at the surface (0.6 s). */
@@ -47,23 +48,31 @@ const HORDE_COUNT = 14;
 const clamp = (v: number): number => Math.max(-1, Math.min(1, v));
 const onePole = (hz: number, rate: number): number => 1 - Math.exp((-2 * Math.PI * hz) / rate);
 
-/** Karplus–Strong plucked string: a noise-filled delay line, averaged and damped, then faded. */
-export function pluckSamples(
-  rate: number,
-  frequency: number,
-  seconds: number,
-  random: () => number,
-): Float32Array<ArrayBuffer> {
-  const samples = new Float32Array(Math.floor(rate * seconds));
-  const line = new Float32Array(Math.max(2, Math.round(rate / frequency)));
-  for (let i = 0; i < line.length; i++) line[i] = random() * 2 - 1;
-  let at = 0;
+/**
+ * A bow shot: the string's dull slap (a 90 Hz thump and a short mid-band snap, gone in ~60 ms),
+ * then the arrow's whoosh: band-passed noise whose band falls as it flies away.
+ */
+export function bowShotSamples(rate: number, random: () => number): Float32Array<ArrayBuffer> {
+  const samples = new Float32Array(Math.floor(rate * 0.45));
+  const snapHigh = onePole(1400, rate);
+  const snapLow = onePole(250, rate);
+  const airLow = onePole(500, rate);
+  let a = 0;
+  let b = 0;
+  let c = 0;
+  let d = 0;
   for (let i = 0; i < samples.length; i++) {
-    const next = (at + 1) % line.length;
-    const out = line[at] ?? 0;
-    line[at] = 0.996 * 0.5 * (out + (line[next] ?? 0));
-    at = next;
-    samples[i] = clamp(out * Math.exp(-(i / rate) * 4));
+    const t = i / rate;
+    const noise = random() * 2 - 1;
+    a += snapHigh * (noise - a);
+    b += snapLow * (noise - b);
+    c += onePole(2600 * Math.exp(-t * 3) + 700, rate) * (noise - c);
+    d += airLow * (noise - d);
+    const thump = Math.sin(2 * Math.PI * 90 * t) * Math.exp(-t * 45) * 0.7;
+    const snap = (a - b) * 2.2 * Math.exp(-t * 70);
+    const fade = 1 - i / samples.length; // 0 at the end: no click
+    const whoosh = (c - d) * 1.2 * Math.min(1, t / 0.03) * Math.exp(-t * 6) * fade;
+    samples[i] = clamp(thump + snap + whoosh);
   }
   return samples;
 }
@@ -281,7 +290,7 @@ export async function loadSounds(audio: AudioBus): Promise<Sounds> {
     weird,
     alarm,
     horde: toBuffer(context, horde),
-    twang: toBuffer(context, pluckSamples(rate, 110, 0.8, Math.random)),
+    bowShot: toBuffer(context, bowShotSamples(rate, Math.random)),
     thud: toBuffer(context, thudSamples(rate)),
     splash: toBuffer(context, splashSamples(rate, 0.8, Math.random)),
     blow: toBuffer(context, blowSamples(rate, 0.6, Math.random)),

@@ -40,3 +40,24 @@ export function moveDelta(
     dz: (fz * intent.forward + rz * intent.right) * speed,
   };
 }
+
+/** Jump take-off speed (m/s) and gravity (m/s²): a ~0.55 m hop. Tuning knobs. */
+export const JUMP_SPEED = 4;
+export const GRAVITY = 14;
+
+export interface Air {
+  /** Feet above the ground (m), 0 when standing. */
+  height: number;
+  /** Upward speed (m/s). */
+  speed: number;
+}
+
+/** One frame of a jump, in place: rise, fall under gravity, land at 0. */
+export function fall(air: Air, dt: number): void {
+  if (air.height <= 0 && air.speed <= 0) return;
+  air.speed -= GRAVITY * dt;
+  air.height += air.speed * dt;
+  if (air.height > 0) return;
+  air.height = 0;
+  air.speed = 0;
+}

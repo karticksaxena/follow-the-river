@@ -179,7 +179,6 @@ const PROPS: readonly PropPlacement[] = [
     clearOfShacks,
   ),
   ...barricade(),
-  { kit: 'survival', model: 'campfire-pit', x: 0.3, z: -113 },
   { kit: 'survival', model: 'bedroll', x: -0.9, z: -113.5, yaw: 0.5 },
 ];
 

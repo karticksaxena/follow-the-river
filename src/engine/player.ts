@@ -4,7 +4,7 @@ import { resolveCircle, type Box } from './collide';
 import { createBoxGrid } from './grid';
 import type { KeyState } from './input';
 import type { LockEvent } from './lock';
-import { moveDelta, moveIntent } from './movement';
+import { fall, JUMP_SPEED, moveDelta, moveIntent } from './movement';
 
 export const EYE_HEIGHT = 1.6;
 export const PLAYER_RADIUS = 0.3;
@@ -24,7 +24,7 @@ export interface Player {
   dispose(): void;
 }
 
-/** First-person walker: mouse look via Pointer Lock, WASD + Shift on the ground plane. */
+/** First-person walker: mouse look via Pointer Lock, WASD + Shift on the ground plane, Space jumps. */
 export function createPlayer(
   camera: THREE.PerspectiveCamera,
   dom: HTMLElement,
@@ -41,14 +41,25 @@ export function createPlayer(
   document.addEventListener('pointerlockerror', onError);
   let grid = createBoxGrid([]);
   const scratch = { x: 0, z: 0 };
+  const air = { height: 0, speed: 0 };
+  // Space must be let go before the next jump: no bunny-hopping, and the Space that closed a page
+  // (still held as play resumes) doesn't jump.
+  let spaceHeld = true;
   const moveBy = (dx: number, dz: number): void => {
     const x = camera.position.x + dx;
     const z = camera.position.z + dz;
     const next = resolveCircle(x, z, PLAYER_RADIUS, grid.near(x, z, PLAYER_RADIUS + 0.5), scratch);
-    camera.position.set(next.x, EYE_HEIGHT, next.z);
+    camera.position.set(next.x, EYE_HEIGHT + air.height, next.z);
+  };
+  const jump = (dt: number): void => {
+    const down = keys.isDown('Space');
+    if (down && !spaceHeld && air.height === 0) air.speed = JUMP_SPEED;
+    spaceHeld = down;
+    fall(air, dt);
   };
   const player: Player = {
     lock() {
+      spaceHeld = true;
       // Ask the browser directly so a refusal can't become an unhandled rejection; refusals
       // still fire 'pointerlockerror'. Safari before 18.4 returns undefined, not a promise.
       const request: unknown = dom.requestPointerLock();
@@ -56,9 +67,12 @@ export function createPlayer(
     },
     unlock: () => controls.unlock(),
     freeLook(on) {
+      spaceHeld = true;
       controls.isLocked = on;
     },
     teleport(x, z, yaw) {
+      air.height = 0;
+      air.speed = 0;
       camera.position.set(x, EYE_HEIGHT, z);
       camera.rotation.set(0, yaw, 0, 'YXZ');
     },
@@ -72,6 +86,7 @@ export function createPlayer(
       moveBy(dx, dz);
     },
     update(dt) {
+      jump(dt);
       camera.getWorldDirection(forward);
       forward.y = 0;
       forward.normalize();
