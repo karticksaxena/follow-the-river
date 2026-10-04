@@ -11,13 +11,16 @@ import {
   edgePickups,
   fallbackSpot,
   inCone,
+  isPlaced,
   newWaveState,
   objective,
+  passedBy,
   placeOk,
   spawnSpot,
   stepWaves,
   WAVE,
   waveCrates,
+  wavesWake,
   waveTotal,
   type WaveEvent,
 } from './waves';
@@ -296,6 +299,35 @@ describe('fallback and ambush placement', () => {
     const e = stepWaves(w, [placed], -151, 2, 0.1, N, r);
     expect(e).toMatchObject({ kind: 'spawn' });
     expect(w.toSpawn).toBe(1); // the lying trigger took nothing
+  });
+
+  it('wakes a wave corpse when you pass it or come within 9 m, otherwise not', () => {
+    const c = { x: -4, z: -200 };
+    expect(wavesWake({ x: -4, z: -210 }, c)).toBe(true); // passed, 10 m downstream
+    expect(wavesWake({ x: 2, z: -203.5 }, c)).toBe(true); // passed (6 m to the side)
+    expect(wavesWake({ x: -4, z: -192 }, c)).toBe(true); // 8 m short: within 9 m
+    expect(wavesWake({ x: -4, z: -190 }, c)).toBe(false); // 10 m short, not passed
+    expect(wavesWake({ x: 2, z: -190 }, c)).toBe(false); // 6 m across, 10 short: 11.7 m, not passed
+
+    expect(passedBy({ x: -4, z: -203.5 }, c)).toBe(true);
+  });
+
+  it('every corpse of a wave is awake by the time you are past all of their spots', () => {
+    const r = rng(21);
+    for (const area of [CITY, SUBURBS, FOREST])
+      for (const w of area.waves) {
+        const spots = w.ambushes
+          .filter((a) => isPlaced(a))
+          .flatMap((a) =>
+            Array.from({ length: a.count }, () =>
+              ambushSpot(a, { x: -4, z: a.z }, w.gateZ, -17, 2.5, r),
+            ),
+          );
+        const past = Math.min(...spots.map((s) => s.z)) - 3.01;
+        const asleep = spots.filter((s) => !wavesWake({ x: 2.5, z: past }, s));
+        expect(asleep).toEqual([]); // the gate (spots end 2 m short of it) is always beyond reach
+        expect(past).toBeGreaterThan(w.gateZ - 3 - 3.01);
+      }
   });
 
   it('places lying zombies only out of view or far off', () => {

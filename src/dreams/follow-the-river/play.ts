@@ -15,10 +15,12 @@ import {
   ambushSpot,
   isPlaced,
   objective,
+  passedBy,
   placeOk,
   reservedFrom,
   spawnSpot,
   stepWaves,
+  wavesWake,
   type SpawnView,
 } from './waves';
 import type { Tuning } from './zombies/brain';
@@ -40,6 +42,8 @@ const AMBUSH_ALERT = 6;
 const RETRY_SPAWN = 0.5;
 /** Most lying and cover zombies one wave puts down at its start. */
 const MAX_PENDING = 16;
+/** An alert this wide (m) wakes the one body at a spot. */
+const WAKE_ALERT = 1.5;
 
 export interface Play {
   update(dt: number): void;
@@ -63,6 +67,9 @@ interface State {
   /** Lying and cover zombies of the wave in play waiting for their spot to be out of sight. */
   pending: { x: number; z: number; lying: boolean }[];
   pendingN: number;
+  /** Where the lying and cover zombies put down for this wave wait: they wake when you pass or come near. */
+  tracked: { x: number; z: number }[];
+  trackedN: number;
   controls: Controls;
   look: THREE.Vector3;
   /** Seconds the torch has been off (it recharges after a moment). */
@@ -109,6 +116,8 @@ function createState(sys: Systems, run: Run, events: Events): State {
     view: { lookX: 0, lookZ: -1, fogFar: 55 },
     pending: Array.from({ length: MAX_PENDING }, () => ({ x: 0, z: 0, lying: false })),
     pendingN: 0,
+    tracked: Array.from({ length: MAX_PENDING }, () => ({ x: 0, z: 0 })),
+    trackedN: 0,
     controls: createControls(sys, run, events, sense),
     look: new THREE.Vector3(),
     offFor: 0,
@@ -207,16 +216,57 @@ function freeAmbushSpot(p: State, ambush: AmbushDef): { x: number; z: number } |
   return null;
 }
 
-/** Puts down the waiting lying and cover zombies whose spot is out of sight (or far off), the rest stay queued. */
+/** An awake zombie out of sight, hunting at once (the continuous spawner's rule). False if every spot was blocked. */
+function spawnAwake(p: State): boolean {
+  const { sys, sense, zone, view } = p;
+  for (let tries = 0; tries < 6; tries++) {
+    const at = spawnSpot(sense, zone, view, Math.random);
+    if (p.blocked(at.x, at.z)) continue;
+    sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), p.waveTuning, false);
+    sys.horde.alert(at.x, at.z, 2);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Puts down the waiting lying and cover zombies whose spot is out of sight (or far off); the rest
+ * stay queued. One whose spot you have already passed is not laid down: it comes awake instead.
+ */
 function flushPending(p: State): void {
-  const { sys, sense, view } = p;
+  const { sys, sense, view, run } = p;
   for (let i = p.pendingN - 1; i >= 0; i--) {
     const q = p.pending[i];
-    if (!q || !placeOk(sense, q, view)) continue;
-    sys.horde.spawn(q.x, q.z, Math.atan2(sense.x - q.x, sense.z - q.z), p.waveTuning, q.lying);
+    if (!q) continue;
+    const passed = passedBy(sense, q);
+    if (!passed && !placeOk(sense, q, view)) continue;
+    if (passed) {
+      if (!spawnAwake(p)) run.waves.toSpawn++; // owed: the continuous spawner sends it
+    } else {
+      sys.horde.spawn(q.x, q.z, Math.atan2(sense.x - q.x, sense.z - q.z), p.waveTuning, q.lying);
+      const t = p.tracked[p.trackedN];
+      if (t && p.trackedN < p.tracked.length) {
+        t.x = q.x;
+        t.z = q.z;
+        p.trackedN++;
+      }
+    }
     p.pendingN--;
     const last = p.pending[p.pendingN];
     if (last) Object.assign(q, last); // ponytail: swap-remove keeps the queue allocation-free
+  }
+}
+
+/** The body you passed (or came within 9 m of) gets up and comes after you: wakes by an alert on its spot. */
+function wakeTracked(p: State): void {
+  const { sys, sense } = p;
+  for (let i = p.trackedN - 1; i >= 0; i--) {
+    const t = p.tracked[i];
+    if (!t || !wavesWake(sense, t)) continue;
+    sys.horde.alert(t.x, t.z, WAKE_ALERT);
+    p.trackedN--;
+    const last = p.tracked[p.trackedN];
+    if (last) Object.assign(t, last);
   }
 }
 
@@ -230,6 +280,7 @@ function startWave(p: State, wave: number): void {
   p.zone.startZ = def.z;
   p.zone.gateZ = def.gateZ;
   p.pendingN = 0;
+  p.trackedN = 0;
   for (const a of def.ambushes) {
     if (!isPlaced(a)) continue;
     for (let i = 0; i < a.count && p.pendingN < p.pending.length; i++) {
@@ -288,9 +339,12 @@ function springAmbush(p: State, ambush: AmbushDef): void {
 function tickWaves(p: State, dt: number): void {
   const { sys, run, sense } = p;
   if (!run.waves.fighting) p.waveD = DIFFICULTY[sys.ctx.difficulty()];
-  else if (p.pendingN > 0) {
-    refreshView(p);
-    flushPending(p);
+  else {
+    if (p.pendingN > 0) {
+      refreshView(p);
+      flushPending(p);
+    }
+    if (p.trackedN > 0) wakeTracked(p);
   }
   const event = stepWaves(
     run.waves,
@@ -441,6 +495,7 @@ export function createPlay(sys: Systems, run: Run, events: Events): Play {
       p.torchBefore = false;
       p.sys.hud.setHidden(false);
       p.pendingN = 0;
+      p.trackedN = 0;
       p.toldAboutWait = false;
       p.wasInShack = false;
       p.hitPause = false;

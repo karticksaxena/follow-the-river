@@ -162,6 +162,18 @@ function seen(player: Spot, s: Spot, v: SpawnView): boolean {
   );
 }
 
+/** A wave's corpse (or idle cover zombie) wakes when you come this close (m), wider than the day's WAKE. */
+export const WAVE_WAKE = 9;
+/** ...or once you are this far downstream of it (m): the body you passed gets up. */
+export const PASSED_BY = 3;
+
+/** True when the player has walked past the spot (downstream of it). */
+export const passedBy = (player: Spot, s: Spot): boolean => player.z < s.z - PASSED_BY;
+
+/** Pure: a wave's lying or cover zombie at `s` starts hunting: you passed it, or you are within WAVE_WAKE. */
+export const wavesWake = (player: Spot, s: Spot): boolean =>
+  passedBy(player, s) || Math.hypot(player.x - s.x, player.z - s.z) < WAVE_WAKE;
+
 /** Lying and cover zombies placed at a wave's start may appear in view only this far away (m). */
 export const PLACE_FAR = 30;
 
