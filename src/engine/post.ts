@@ -1,6 +1,7 @@
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import { film } from 'three/addons/tsl/display/FilmNode.js';
+import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import { traa } from 'three/addons/tsl/display/TRAANode.js';
@@ -23,6 +24,8 @@ import {
 import * as THREE from 'three/webgpu';
 import { createGrading, type GradePreset } from './grade';
 import type { Tier } from './quality';
+import { createShafts, type Shafts } from './shafts';
+import { VOLUME, VOLUME_LAYER, volumeSteps, type ShaftSource } from './volume';
 
 /** Horror look. Tuning knobs. */
 export const POST = {
@@ -56,6 +59,13 @@ export interface Post {
   setTier(tier: Tier): Tier;
   /** Depth of field on/off for cutscenes; the first `on` compiles it (call behind a black fade). */
   focus(on: boolean, distance?: number): void;
+  /**
+   * The raymarched mist (Medium and High on WebGPU): its box is in the scene on `VOLUME_LAYER`;
+   * the graph rebuilds once. `null` takes the pass out again.
+   */
+  mist(material: THREE.VolumeNodeMaterial | null): void;
+  /** God rays toward the sun: set `source` each frame (level 0 = off); the graph rebuilds once. `null` removes them. */
+  shafts(source: ShaftSource | null): void;
   /** Colour grade, blended over `seconds`; returns the preset it left. */
   grade(preset: GradePreset, seconds?: number): GradePreset;
   dispose(): void;
@@ -75,9 +85,13 @@ interface Graph {
   passes: ReturnType<typeof pass>[];
   color: THREE.Node<'vec4'>;
   viewZ: THREE.Node<'float'>;
+  /** The pre-pass depth (Medium and High): the mist and the god rays read it. */
+  depth?: THREE.TextureNode;
   /** Low has no TRAA, so SMAA runs on the tone-mapped picture. */
   smaa: boolean;
   owned: Disposable[];
+  /** Set by `addLight` when the god rays are in the graph. */
+  shafts?: Shafts;
 }
 
 interface Built {
@@ -126,6 +140,7 @@ function aoGraph(
     passes: [prePass, scenePass],
     color: resolved,
     viewZ: scenePass.getViewZNode(),
+    depth,
     smaa: false,
     owned: [prePass, scenePass, occlusion, resolved],
   };
@@ -148,6 +163,12 @@ export function createPost(
   const grading = createGrading('night', POST.bloomStrength);
   const focusAt = uniform(3);
   const webgpu = 'isWebGPUBackend' in renderer.backend;
+  const noMist = import.meta.env.DEV && new URLSearchParams(location.search).has('nomist');
+  const volumeLayers = new THREE.Layers();
+  volumeLayers.disableAll();
+  volumeLayers.enable(VOLUME_LAYER);
+  let mistMaterial: THREE.VolumeNodeMaterial | null = null;
+  let shaftSource: ShaftSource | null = null;
   const edge = smoothstep(float(0.75), float(0.2), screenUV.sub(0.5).length());
   const dark = float(1).sub(float(POST.vignette).mul(float(1).sub(edge)));
   const grain = uniform(POST.grain);
@@ -173,6 +194,29 @@ export function createPost(
     return film(grading.node(shown), grain);
   };
 
+  /** The mist and the god rays, added to the resolved HDR colour (they have nothing on Low). */
+  const addLight = (g: Graph, steps: number, owned: Disposable[]): void => {
+    if (!g.depth) return;
+    let extra: THREE.Node<'vec3'> | null = null;
+    if (mistMaterial && steps > 0) {
+      const volume = pass(new THREE.Scene(), camera, { depthBuffer: false });
+      volume.setLayers(volumeLayers);
+      volume.setResolutionScale(VOLUME.resolutionScale);
+      mistMaterial.steps = steps;
+      mistMaterial.depthNode = g.depth.sample(screenUV);
+      mistMaterial.needsUpdate = true;
+      const blurred = gaussianBlur(volume, float(VOLUME.blurRadius), VOLUME.blurSigma);
+      g.passes.push(volume);
+      owned.push(volume, blurred);
+      extra = blurred.rgb.mul(VOLUME.strength).min(VOLUME.cap);
+    }
+    if (shaftSource) {
+      g.shafts = createShafts(g.depth);
+      extra = extra ? extra.add(g.shafts.node) : g.shafts.node;
+    }
+    if (extra) g.color = g.color.add(vec4(extra, 0));
+  };
+
   // High is only trusted on WebGPU: the WebGL 2 backend gets the Medium graph instead.
   const allowed = (t: Tier): Tier => (!webgpu && t === 'high' ? 'medium' : t);
   let tier = allowed(start);
@@ -183,6 +227,7 @@ export function createPost(
     if (!b) {
       const graph = BUILD[tier](camera);
       const owned = [...graph.owned];
+      addLight(graph, noMist ? 0 : volumeSteps(tier, webgpu), owned);
       b = { graph, owned, gameplay: finish(graph, false, owned), cinematic: null };
       built.set(tier, b);
     }
@@ -196,12 +241,20 @@ export function createPost(
   const release = (old: Built | undefined): void => {
     if (old) disposeOwned(old.owned);
   };
+  /** Builds every graph again (the mist or the rays came or went), then frees the old ones. */
+  const rebuild = (): void => {
+    const old = [...built.values()];
+    built.clear();
+    apply();
+    for (const b of old) release(b);
+  };
   let warming = 0;
   apply();
 
   return {
     render(scene) {
       for (const p of current().graph.passes) p.scene = scene;
+      if (shaftSource) current().graph.shafts?.update(shaftSource, camera);
       pipeline.render();
       if (warming > 0 && --warming === 0) {
         cinematic = false;
@@ -223,6 +276,19 @@ export function createPost(
       apply();
       release(old);
       return tier;
+    },
+    mist(material) {
+      if (material === mistMaterial) return;
+      mistMaterial = material;
+      rebuild();
+    },
+    shafts(source) {
+      if ((source === null) === (shaftSource === null)) {
+        shaftSource = source;
+        return;
+      }
+      shaftSource = source;
+      rebuild();
     },
     focus(on, distance) {
       if (distance !== undefined) focusAt.value = distance;

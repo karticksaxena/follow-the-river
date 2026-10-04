@@ -1,7 +1,25 @@
 import * as THREE from 'three/webgpu';
+import { VOLUME_LAYER } from '../../engine/volume';
 
-/** Brightness (candela), reach (m) and cone half-angle (rad). Tuning knobs. */
-export const FLASHLIGHT = { intensity: 80, distance: 22, angle: 0.45, penumbra: 0.5 } as const;
+/**
+ * Brightness (candela), reach (m), cone half-angle (rad), edge softness, falloff exponent and how far
+ * below the view the axis points (rad). Tuning knobs. Ground ahead is hit at a grazing angle, so
+ * real inverse-square (decay 2) leaves the bank 3-12 m ahead black; a gentler decay lights it.
+ */
+export const FLASHLIGHT = {
+  intensity: 90,
+  distance: 24,
+  angle: 0.5,
+  penumbra: 0.7,
+  decay: 1.1,
+  pitch: 0.2,
+} as const;
+
+/** Where the torch points, in camera space: slightly inward, `FLASHLIGHT.pitch` below the view. Writes `out`. */
+export function torchAim<T extends { set(x: number, y: number, z: number): unknown }>(out: T): T {
+  out.set(-0.05, -0.12 - Math.tan(FLASHLIGHT.pitch), -1);
+  return out;
+}
 
 /**
  * The torch's charge is 0..100. It drains while on; once it has been off for `rechargeDelay` s it
@@ -50,14 +68,15 @@ export function createFlashlight(camera: THREE.Camera): Flashlight {
     FLASHLIGHT.distance,
     FLASHLIGHT.angle,
     FLASHLIGHT.penumbra,
-    2,
+    FLASHLIGHT.decay,
   );
   // Held in the left hand, so its cone misses the bow in the right (it blew the bow out to white).
   light.position.set(-0.25, -0.12, 0);
   light.castShadow = true;
   light.shadow.mapSize.set(1024, 1024);
   light.shadow.bias = -0.0005;
-  light.target.position.set(-0.05, -0.3, -1);
+  torchAim(light.target.position);
+  light.layers.enable(VOLUME_LAYER); // the beam shows in the mist
   camera.add(light, light.target);
   return {
     light,

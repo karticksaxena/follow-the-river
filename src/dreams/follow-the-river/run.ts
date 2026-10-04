@@ -2,6 +2,7 @@ import type { BoxGrid } from '../../engine/grid';
 import type { DreamContext } from '../types';
 import type { Ambience } from './ambience';
 import type { AreaDef, PickupDef } from './areas/types';
+import type { Atmosphere } from './atmosphere';
 import type { Bow } from './bow';
 import type { Fish } from './fish';
 import type { Flashlight } from './flashlight';
@@ -34,6 +35,8 @@ export interface Systems {
   scares: Scares;
   /** The night's barricades, one per wave. */
   gates: Gates;
+  /** The mist box that follows the player. */
+  atmosphere: Atmosphere;
 }
 
 export type Dying = 'no' | 'anim' | 'wait';

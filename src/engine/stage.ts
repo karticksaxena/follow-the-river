@@ -14,6 +14,7 @@ import {
 import { CAMERA_FAR } from './sky';
 import { clampDelta } from './time';
 import { runUpdaters, type Updater } from './updaters';
+import type { ShaftSource } from './volume';
 
 export type Backend = 'webgpu' | 'webgl2';
 export type { Updater } from './updaters';
@@ -30,6 +31,10 @@ export interface Stage {
   setGraphics(graphics: Graphics): void;
   /** Colour grade for the scene, blended over `seconds`; returns the preset it left. */
   grade(preset: GradePreset, seconds?: number): GradePreset;
+  /** The mist box's material (its box is in the scene on the volume layer), or `null` to drop the pass. */
+  mist(material: THREE.VolumeNodeMaterial | null): void;
+  /** God rays toward a sun you update every frame, or `null` to drop them. */
+  shafts(source: ShaftSource | null): void;
   /** Depth of field for cutscenes (first `on` compiles: do it behind a black fade). */
   focus(on: boolean, distance?: number): void;
   /** Compiles the depth-of-field graph for one frame; call behind a black fade before a cutscene. */
@@ -89,6 +94,8 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
       quality.since = 0;
     },
     grade: (preset, seconds) => post.grade(preset, seconds),
+    mist: (material) => post.mist(material),
+    shafts: (source) => post.shafts(source),
     focus: (on, distance) => post.focus(on, distance),
     warmFocus: () => post.warm(),
     addUpdater(fn) {

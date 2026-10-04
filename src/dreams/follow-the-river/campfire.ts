@@ -13,6 +13,7 @@ import {
 import * as THREE from 'three/webgpu';
 import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
+import { VOLUME_LAYER } from '../../engine/volume';
 import { KIT_SCALE, kitUrl } from './kits';
 
 /** The camp's fire: tuning knobs. A low, warm glow (never bright). */
@@ -82,6 +83,7 @@ export async function addCampfire(scene: THREE.Scene, x: number, z: number): Pro
   const { light: l } = CAMPFIRE;
   const light = new THREE.PointLight(l.color, l.intensity, l.distance, 2);
   light.position.y = l.height;
+  light.layers.enable(VOLUME_LAYER); // the fire lights the mist
   group.add(light);
   // The flames draw every frame the fire is in view: flicker the light there, no updater needed.
   addFlames(group).onBeforeRender = () => {

@@ -1,6 +1,34 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { BATTERY, beamLevel, chargeBattery, createFlashlight } from './flashlight';
+import {
+  BATTERY,
+  beamLevel,
+  chargeBattery,
+  createFlashlight,
+  FLASHLIGHT,
+  torchAim,
+} from './flashlight';
+
+const lux = (d: number): number => {
+  const r = Math.hypot(d, 1.6);
+  return (FLASHLIGHT.intensity * (1.6 / r)) / r ** FLASHLIGHT.decay;
+};
+
+describe('aim', () => {
+  it('points a few degrees below the view, so the pool lies 3-12 m ahead on the ground', () => {
+    const from = new THREE.Vector3(-0.25, -0.12, 0);
+    const to = torchAim(new THREE.Vector3());
+    const down = Math.atan2(from.y - to.y, -(to.z - from.z));
+    expect(down).toBeGreaterThan(0.1);
+    expect(down).toBeLessThan(0.3);
+    const hit = 1.6 / Math.tan(down);
+    expect(hit).toBeGreaterThan(3);
+    expect(hit).toBeLessThan(12);
+  });
+  it('lights the ground 8 m ahead at least 0.15x as hard as 3 m ahead', () => {
+    expect(lux(8) / lux(3)).toBeGreaterThan(0.15);
+  });
+});
 
 describe('shadow', () => {
   it('skips the shadow pass while dark and forces one render on the way back on', () => {

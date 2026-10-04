@@ -61,6 +61,7 @@ function newRun(save: RunSave): Run {
 function teardown(sys: Systems, stop: () => void): void {
   const { camera } = sys.ctx.stage;
   stop();
+  sys.ctx.stage.mist(null);
   // Free the scene first: the systems below remove their own nodes (alarm box, fish shadow plane).
   disposeScene(sys.world.scene);
   if (import.meta.env.DEV) {
@@ -138,9 +139,11 @@ export async function startChapter(
   };
   beginPhase(f);
   ctx.stage.scene = sys.world.scene;
+  const { camera } = ctx.stage;
   const checkpointOf = (): { phase: RunSave['phase']; wave: number } => f.save;
   const again = (): void => restart(f);
   const stop = ctx.stage.addUpdater((dt) => {
+    sys.atmosphere.follow(camera);
     if (run.dying === 'no') {
       play.update(dt);
       ending.update(dt);

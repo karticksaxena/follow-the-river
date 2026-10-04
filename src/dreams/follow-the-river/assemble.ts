@@ -3,9 +3,11 @@ import { disposeScene } from '../../engine/dispose';
 import { createBoxGrid } from '../../engine/grid';
 import { loadModel } from '../../engine/models';
 import { attachKeyShadows } from '../../engine/shadows';
+import { VOLUME_LAYER } from '../../engine/volume';
 import type { DreamContext } from '../types';
 import { createAmbience } from './ambience';
 import type { AreaDef } from './areas/types';
+import { createAtmosphere } from './atmosphere';
 import { groundAt, waterlineX } from './banks';
 import { createBow, type Bow } from './bow';
 import { DIFFICULTY, HORDE_CAPACITY } from './difficulty';
@@ -130,6 +132,10 @@ export async function assemble(
   if (area.meetAt) lantern.position.set(area.meetAt.x + 0.5, MOM_LANTERN.height, area.meetAt.z);
   else lantern.position.set(safe?.x ?? 0, LANTERN_HEIGHT, safe ? safe.z + 2 : area.safeZ);
   scene.add(boathouse, lantern);
+  lantern.layers.enable(VOLUME_LAYER); // Mom's lantern shows in the mist
+  const atmosphere = createAtmosphere();
+  scene.add(atmosphere.mesh);
+  ctx.stage.mist(atmosphere.mesh.material);
   const flashlight = createFlashlight(camera);
   const scares = await createScares(
     ctx,
@@ -141,6 +147,7 @@ export async function assemble(
     area.shacks,
   );
   if (isCancelled()) {
+    ctx.stage.mist(null);
     free(scene, camera, { ...bodies, flashlight, scares });
     return null;
   }
@@ -150,6 +157,7 @@ export async function assemble(
   attachKeyShadows(world.lights.key, ctx.stage.tier); // cascaded moon/sun shadows (none on Low)
   await ctx.stage.renderer.compileAsync(scene, camera);
   if (isCancelled()) {
+    ctx.stage.mist(null);
     free(scene, camera, { ...bodies, flashlight, scares });
     return null;
   }
@@ -172,6 +180,7 @@ export async function assemble(
     ambience,
     scares,
     gates,
+    atmosphere,
   };
   return { sys, lantern };
 }
