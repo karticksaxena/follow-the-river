@@ -6,7 +6,6 @@ import type { Tier } from '../../engine/quality';
 import { attachKeyShadows } from '../../engine/shadows';
 import { surfaceMaterial, texturesReady } from '../../engine/surfaces';
 import { canoePlants } from './canoe-vegetation';
-import { DAWN_BANK } from './ground';
 import { createCharacter, type Character } from './intro-scene';
 import { characterUrl, KIT_SCALE, kitUrl } from './kits';
 import { applyLighting, createWorldLights, LIGHTING, SKY_NAME } from './lighting';
@@ -67,13 +66,20 @@ export function rng(seed: number): () => number {
 
 const WATER_LOOK: WaterLook = { speed: 1.6, deep: 0x2b5750, streak: 0x9cc2b0, glow: 0x1d4a3c };
 
+/**
+ * The canoe's banks at sunrise: the pink low sun on the grass and mud read as snow (A16 round 2),
+ * so the ground is darker and richer than ground.ts's DAWN_BANK (gain 0.6, saturation 1.35). Tuning knobs.
+ */
+const CANOE_BANK = { gain: 0.36, saturation: 1.7 } as const;
+
 /** Canoe, wood and ground colours (sRGB hex). Tuning knobs. */
 const COLORS = {
   leaves: [0x74ae3e],
   bark: 0x5b4331,
   canoe: 0x8a5a36,
-  mud: 0x7a6a45,
-  meadow: [0x5f9a36, 0x4a8630],
+  mud: 0x4f3e26,
+  meadow: [0x4c7d2a, 0x3d6b25],
+  hullFloor: 0x2a1c12,
 } as const;
 
 export interface CanoeScene {
@@ -177,7 +183,7 @@ function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
   geometry.computeVertexNormals();
   const terrain = new THREE.Mesh(
     geometry,
-    surfaceMaterial({ base: 'grass', blend: 'mud', vertexColors: true, grade: DAWN_BANK }),
+    surfaceMaterial({ base: 'grass', blend: 'mud', vertexColors: true, grade: CANOE_BANK }),
   );
   terrain.receiveShadow = true;
   return terrain;
@@ -216,12 +222,48 @@ function makePaddle(): THREE.Group {
   return group;
 }
 
+/**
+ * The hull's inner floor in canoe-local metres: the water is a plane, so without a floor it shows
+ * between the thwarts and the canoe reads as flooded. It lies `above` the water (0.12 above the
+ * canoe's origin), a lens a little narrower than the hull's inside, with no z-fight at the waterline.
+ */
+export const HULL = { half: 1.9, width: 0.36, y: 0.18 } as const;
+
+/** Pure: the floor's half-width (m) at `z` along the canoe: full amidships, closing to a point at the ends. */
+export function hullHalfWidth(z: number): number {
+  const k = Math.min(1, Math.abs(z) / HULL.half);
+  return HULL.width * Math.sqrt(1 - k * k * k * k);
+}
+
+function makeHullFloor(): THREE.Mesh {
+  const steps = 24;
+  const pos: number[] = [];
+  const index: number[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const z = -HULL.half + (2 * HULL.half * i) / steps;
+    const w = hullHalfWidth(z);
+    pos.push(-w, HULL.y, z, w, HULL.y, z);
+    if (i < steps) index.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geometry.setIndex(index);
+  geometry.computeVertexNormals();
+  const material = new THREE.MeshLambertMaterial({
+    color: COLORS.hullFloor,
+    side: THREE.DoubleSide,
+  });
+  const floor = new THREE.Mesh(geometry, material);
+  floor.receiveShadow = true;
+  return floor;
+}
+
 async function makeCanoe(): Promise<THREE.Group> {
   const group = new THREE.Group();
   const model = await loadModel(kitUrl('nature', 'canoe'));
   model.scale.setScalar(CANOE_SCALE);
   tinter()(model, (n) => (isLeaf(n) ? COLORS.leaves[0] : isWood(n) ? COLORS.canoe : null));
-  group.add(model);
+  group.add(model, makeHullFloor());
   return group;
 }
 

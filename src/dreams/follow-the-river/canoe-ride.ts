@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import type { DreamContext } from '../types';
+import { findArms, gripPaddle, type Arm } from './canoe-paddle';
 import { buildCanoeScene, pathSlope, pathX, WATER_LEVEL, type CanoeScene } from './canoe-scene';
 import { createShot, SHOT } from './canoe-shot';
 import {
@@ -119,8 +120,10 @@ interface Ride {
   heads: { mom: THREE.Object3D; kartik: THREE.Object3D };
   /** The ride has been torn down: late page callbacks do nothing. */
   over: boolean;
-  /** Mom's hands: the paddle's shaft is held between them (null if the rig has none). */
-  hands: { left: THREE.Object3D; right: THREE.Object3D } | null;
+  /** Mom's arms: the paddle's shaft is held between the hands, the arms reach to its grips (null if the rig has none). */
+  arms: [Arm, Arm] | null;
+  /** The paddle has been placed once (a paused frame must not tilt it again). */
+  paddled: boolean;
   lastYaw: number;
   pose: Pose;
   calf: CalfPose;
@@ -215,7 +218,7 @@ const SHAFT = new THREE.Vector3(1, 0, 0); // the paddle model lies along x
 
 /** The paddle's shaft runs from her left hand to her right, so it follows the rowing exactly. */
 function holdPaddle(r: Ride): void {
-  const { cs, hands } = r;
+  const { cs, arms } = r;
   if (!r.rowing) {
     // She has let go: it settles across the canoe.
     const k = 1 - Math.exp(-r.dt * 5);
@@ -223,24 +226,20 @@ function holdPaddle(r: Ride): void {
     cs.paddle.quaternion.slerp(NO_TURN, k);
     return;
   }
-  if (!hands) {
+  if (!arms) {
     cs.paddle.position.set(...SEAT.paddle);
     return;
   }
+  if (r.dt === 0 && r.paddled) return; // paused: the arms are already on it
+  r.paddled = true;
   cs.canoe.updateMatrixWorld(true);
-  cs.canoe.worldToLocal(hands.left.getWorldPosition(handL));
-  cs.canoe.worldToLocal(hands.right.getWorldPosition(handR));
+  cs.canoe.worldToLocal(arms[0].hand.getWorldPosition(handL));
+  cs.canoe.worldToLocal(arms[1].hand.getWorldPosition(handR));
   cs.paddle.position.addVectors(handL, handR).multiplyScalar(0.5);
   along.subVectors(handR, handL).normalize();
   dipPaddle(along, cs.paddle.position);
   if (along.lengthSq() > 0) cs.paddle.quaternion.setFromUnitVectors(SHAFT, along);
-}
-
-/** Her wrist bones (GLTFLoader strips the '.' from Wrist.L / Wrist.R). */
-function findHands(mom: THREE.Object3D): Ride['hands'] {
-  const left = mom.getObjectByName('WristL');
-  const right = mom.getObjectByName('WristR');
-  return left && right ? { left, right } : null;
+  gripPaddle(arms, cs.canoe, cs.paddle.position, along); // her palms on the shaft, not beside it
 }
 
 function placeCalf(r: Ride): void {
@@ -389,7 +388,8 @@ function makeRide(ctx: DreamContext, sounds: Sounds, cs: CanoeScene): Ride {
     over: false,
     blown: false,
     rowing: true,
-    hands: findHands(cs.mom.group),
+    arms: findArms(cs.mom.group),
+    paddled: false,
     lastYaw: 0,
     pose: { x: 0, y: 0, z: 0, yaw: 0, roll: 0 },
     calf: { x: 0, z: 0, y: 0, pitch: 0, visible: false, surfaced: 0 },

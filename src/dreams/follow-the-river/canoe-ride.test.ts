@@ -22,7 +22,17 @@ import {
   type Cue,
   type Pose,
 } from './canoe-ride';
-import { meshY, pathSlope, pathX, RIVER_HALF, rng, terrainY, WATER_LEVEL } from './canoe-scene';
+import {
+  HULL,
+  hullHalfWidth,
+  meshY,
+  pathSlope,
+  pathX,
+  RIVER_HALF,
+  rng,
+  terrainY,
+  WATER_LEVEL,
+} from './canoe-scene';
 
 const blank = (): Pose => ({ x: 0, y: 0, z: 0, yaw: 0, roll: 0 });
 const calfBlank = (): CalfPose => ({ x: 0, z: 0, y: 0, pitch: 0, visible: false, surfaced: 0 });
@@ -298,5 +308,18 @@ describe('rideLive', () => {
     expect(rideLive(false, true, false)).toBe(true);
     expect(rideLive(true, true, true)).toBe(true);
     expect(rideLive(false, false, false)).toBe(false);
+  });
+});
+
+describe('the hull floor', () => {
+  it('is a lens inside the 1 m wide hull, widest amidships, closing at the ends, above the water', () => {
+    expect(hullHalfWidth(0)).toBeCloseTo(HULL.width);
+    expect(HULL.width).toBeLessThan(0.5); // the hull is about 1.05 m wide
+    expect(hullHalfWidth(HULL.half)).toBeCloseTo(0);
+    for (let z = 0; z < HULL.half; z += 0.1) {
+      expect(hullHalfWidth(z + 0.1)).toBeLessThanOrEqual(hullHalfWidth(z) + 1e-9);
+      expect(hullHalfWidth(-z)).toBeCloseTo(hullHalfWidth(z));
+    }
+    expect(HULL.y).toBeGreaterThan(0.12 + 0.03); // clear of the water (origin -0.12) and its bob
   });
 });
