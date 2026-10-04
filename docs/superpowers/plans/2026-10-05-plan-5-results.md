@@ -16,7 +16,7 @@
   - The last tape: Mom on the moonlit bank below the dam as the orca slips away.
   - The HUD hides during each flashback, and your view comes back exactly where it was.
 - **The orca:**
-  - Its nose and tail always stay in the water. This was checked every frame through a whole night: the closest it came was 0.6 m off the bank.
+  - Its nose and tail stay in the water while it swims; it leaves the water only to take a zombie (see the polish notes below).
   - It helps more each night: 4 strikes plus 4 per fish pack, every 1.1 s, reaching 4.5 m up the bank.
   - In the ending's last stand it strikes every 0.6 s and reaches 7 m.
 - **Balance:**
@@ -47,6 +47,18 @@
 - How the voices and the orca's blow sound.
 - Pointer lock (the dev link is `?nolock`; the real game is `http://localhost:5173/`).
 - Safari.
+
+## Polish after Plan 5 (Kartik's play-test)
+
+- **Quit to dreams:** the home screen showed the last game frame. Leaving home had freed the one geometry three.js shares between every sprite, so each frame failed on the next home visit.
+- **Mouse:** the dev `?nolock` link now also takes the real pointer lock on a click (endless 360° turning).
+- **Campfire:** the wait spot has a burning fire (flame tongues, a flickering warm light) you sit beside, not in.
+- **Jump** on Space; **hearts** in the HUD for the three hits you can take; a **bow shot** that sounds like a string and an arrow, not a pluck.
+- **The orca takes zombies off the bank**, like orcas snatching seals off a beach:
+  - It rushes in under the water and bursts out over the edge; in the city the railing breaks and flies onto the road.
+  - It bites, thrashes with the zombie kicking in its jaws, then crawls back over the ground and drags it under.
+  - Feeding still means more grabs a night: 4, plus 4 per fish pack.
+  - In the ending's last stand it grabs faster, and its body knocks the zombies beside its jaws into the river. Measured against the old snaps, a player who just stands there still comes through the wave untouched.
 
 ## Later
 

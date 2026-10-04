@@ -130,6 +130,14 @@ export const FISH = {
   follow: 2.5,
 };
 
+/** A normal night's strikes (orca-grab.ts StrikeStyle). */
+export const NIGHT_STRIKE = {
+  cooldown: FISH.cooldown,
+  reach: FISH.reach,
+  pace: 1,
+  sweep: 0,
+} as const;
+
 export function strikesFor(fed: number): number {
   return FISH.baseStrikes + fed * FISH.strikesPerPack;
 }

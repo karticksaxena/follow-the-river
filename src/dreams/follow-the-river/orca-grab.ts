@@ -2,7 +2,22 @@ import { EDGE_X, WATER_Y } from './river';
 import type { Horde } from './zombies/horde';
 
 /** All a grab needs from the horde. */
-export type Prey = Pick<Horde, 'locate' | 'seize' | 'hold' | 'drown'>;
+export type Prey = Pick<
+  Horde,
+  'locate' | 'seize' | 'hold' | 'drown' | 'forEachAlive' | 'takeByFish'
+>;
+
+/**
+ * How the orca strikes: seconds between grabs, reach from the water (m), pace (1 normal, below 1
+ * faster) and sweep: zombies this close to its jaws when it lands are knocked into the river too
+ * (0 = only the one it bites). The ending's last stand is far, fast and sweeping.
+ */
+export interface StrikeStyle {
+  cooldown: number;
+  reach: number;
+  pace: number;
+  sweep: number;
+}
 
 /**
  * The orca taking a zombie, like orcas snatching seals off a beach: it rushes in under the water,
@@ -16,7 +31,13 @@ export const GRAB = {
   approachMax: 1.6,
   burst: 0.5,
   shake: 1.1,
-  back: 0.9,
+  back: 1.6,
+  /** The way back: this share of it is a crawl over the ground (wriggling side to side, heaving),
+   * the rest the drop off the edge into the water. */
+  crawlShare: 0.7,
+  crawlWriggles: 3,
+  crawlYaw: 0.14,
+  crawlHeave: 0.08,
   /** Distance off the edge where it starts the burst, and how far below cruise depth it comes in. */
   launchOut: 4,
   dive: 0.8,
@@ -59,7 +80,9 @@ export interface Grab {
   fromYaw: number;
   cruiseY: number;
   reach: number;
-  /** Seconds of thrash and of sliding back (shorter in the ending's frenzy). */
+  sweep: number;
+  /** Seconds of the leap, the thrash and the slide back (all shorter in the ending's frenzy). */
+  burst: number;
   shake: number;
   back: number;
   bitten: boolean;
@@ -87,9 +110,9 @@ export function newGrab(
   vx: number,
   vz: number,
   cruiseY: number,
-  reach: number,
-  pace = 1,
+  style: StrikeStyle,
 ): Grab {
+  const { reach, pace, sweep } = style;
   const distance = Math.hypot(EDGE_X + GRAB.launchOut - from.x, vz - from.z);
   const approach = Math.min(
     GRAB.approachMax,
@@ -107,6 +130,8 @@ export function newGrab(
     fromYaw: from.yaw,
     cruiseY,
     reach,
+    sweep,
+    burst: GRAB.burst * pace,
     shake: GRAB.shake * pace,
     back: GRAB.back * pace,
     bitten: false,
@@ -115,7 +140,7 @@ export function newGrab(
   };
 }
 
-export const grabSeconds = (g: Grab): number => g.approach + GRAB.burst + g.shake + g.back;
+export const grabSeconds = (g: Grab): number => g.approach + g.burst + g.shake + g.back;
 
 /** Root x when beached: the jaws reach the victim, at most `reach` inland. */
 export function landX(vx: number, reach: number): number {
@@ -130,13 +155,44 @@ function beached(x: number, ground: (x: number) => number, out: GrabPose): void 
   out.y = nose + GRAB.lift - GRAB.jawAhead * Math.sin(out.pitch);
 }
 
+/**
+ * Back to the river with the zombie: it wriggles backwards over the ground (its belly following
+ * the land, never sinking into it) until its jaws reach the edge, then drops off into the water.
+ */
+function crawlBack(
+  g: Grab,
+  u: number,
+  land: number,
+  ground: (x: number) => number,
+  out: GrabPose,
+): void {
+  // Root x with the jaws still just on the land at the edge.
+  const edge = EDGE_X - 0.05 + GRAB.jawAhead;
+  out.yaw = FACE_LAND;
+  if (u < GRAB.crawlShare) {
+    const s = u / GRAB.crawlShare;
+    out.x = lerp(land, Math.max(edge, land), smooth(s));
+    beached(out.x, ground, out);
+    const wriggle = Math.sin(2 * Math.PI * GRAB.crawlWriggles * s);
+    out.yaw += GRAB.crawlYaw * wriggle;
+    out.y += GRAB.crawlHeave * Math.abs(wriggle);
+    return;
+  }
+  const s = smooth((u - GRAB.crawlShare) / (1 - GRAB.crawlShare));
+  const from = Math.max(edge, land);
+  beached(from, ground, out);
+  out.x = lerp(from, EDGE_X + GRAB.launchOut, s);
+  out.y = lerp(out.y, g.cruiseY - GRAB.sink, s);
+  out.pitch = lerp(out.pitch, -0.35, s);
+}
+
 /** Pure: the orca's pose `g.t` seconds into a grab. `ground(x)` is the bank or water height. */
 export function grabPose(g: Grab, ground: (x: number) => number, out: GrabPose): GrabPose {
   const land = landX(g.vx, g.reach);
   const launch = EDGE_X + GRAB.launchOut;
   const deep = g.cruiseY - GRAB.dive;
   const t1 = g.approach;
-  const t2 = t1 + GRAB.burst;
+  const t2 = t1 + g.burst;
   const t3 = t2 + g.shake;
   out.z = g.vz;
   if (g.t < t1) {
@@ -153,7 +209,7 @@ export function grabPose(g: Grab, ground: (x: number) => number, out: GrabPose):
   const restY = out.y;
   const restPitch = out.pitch;
   if (g.t < t2) {
-    const s = clamp01((g.t - t1) / GRAB.burst);
+    const s = clamp01((g.t - t1) / g.burst);
     const ease = 1 - (1 - s) * (1 - s);
     out.x = lerp(launch, land, ease);
     out.y = lerp(deep, restY, ease) + GRAB.arc * Math.sin(Math.PI * s);
@@ -165,12 +221,7 @@ export function grabPose(g: Grab, ground: (x: number) => number, out: GrabPose):
     out.yaw = FACE_LAND + GRAB.shakeYaw * swing;
     // Head up fast, held high through the thrash, back down at the end.
     out.pitch = restPitch + GRAB.shakeLift * smooth(Math.min(1, u * 4, (1 - u) * 4));
-  } else {
-    const s = smooth(clamp01((g.t - t3) / g.back));
-    out.x = lerp(land, launch, s);
-    out.y = lerp(restY, g.cruiseY - GRAB.sink, s);
-    out.pitch = lerp(restPitch, -0.35, s);
-  }
+  } else crawlBack(g, clamp01((g.t - t3) / g.back), land, ground, out);
   return out;
 }
 
@@ -198,6 +249,14 @@ function bite(g: Grab, horde: Prey): boolean {
   if (!horde.locate(g.victim, spot)) return false;
   if (Math.hypot(spot.x - jaw.x, spot.z - jaw.z) > GRAB.biteRange) return false;
   return horde.seize(g.victim);
+}
+
+/** The orca lands among them: the ones beside its jaws are knocked into the river. Allocates: rare. */
+function sweepAside(g: Grab, horde: Prey): void {
+  if (g.sweep <= 0) return;
+  horde.forEachAlive((id, x, z) => {
+    if (id !== g.victim && Math.hypot(x - jaw.x, z - jaw.z) <= g.sweep) horde.takeByFish(id);
+  });
 }
 
 /**
@@ -229,14 +288,15 @@ export function stepGrab(
   g.t += dt;
   grabPose(g, ground, out);
   jawOf(out, jaw);
-  const bites = g.approach + GRAB.burst;
-  if (!g.breached && g.t >= g.approach + GRAB.burst * 0.35) {
+  const bites = g.approach + g.burst;
+  if (!g.breached && g.t >= g.approach + g.burst * 0.35) {
     g.breached = true;
     hooks.breach(g.vz);
   }
   if (!g.bitten && g.t >= bites) {
     g.bitten = true;
     if (!horde || !bite(g, horde)) g.victim = -1; // it got away: back in empty-mouthed
+    if (horde) sweepAside(g, horde);
   }
   if (horde && g.victim >= 0 && g.bitten) holdVictim(g, out, horde);
   if (!g.underAgain && jaw.y < WATER_Y && g.t > bites + g.shake) {

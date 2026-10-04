@@ -5,14 +5,14 @@ import type { SkinnedAsset } from '../../engine/models';
 import {
   cruiseYFor,
   findClip,
-  FISH,
   makeWake,
   makeWet,
   nextSurfacing,
+  NIGHT_STRIKE,
   surfaceYFor,
   topOf,
 } from './fish-parts';
-import type { Grab, GrabHooks, GrabPose } from './orca-grab';
+import type { Grab, GrabHooks, GrabPose, StrikeStyle } from './orca-grab';
 import type { Sounds } from './sounds';
 import { SPAWNER } from './zombies/spawner';
 
@@ -60,10 +60,8 @@ export interface FishState {
   strikes: number;
   cooldown: number;
   /** Seconds between strikes while armed, and how far from the water (m) it can take one. */
-  strikeCooldown: number;
-  strikeReach: number;
-  /** Grab speed: 1 a normal night, below 1 a frenzy (see orca-grab.ts). */
-  strikePace: number;
+  /** How it strikes this night (see orca-grab.ts). */
+  style: StrikeStyle;
   placed: boolean;
   yaw: number;
   rise: Rise | null;
@@ -159,9 +157,7 @@ export function createState(
     surfaceIn: nextSurfacing(Math.random()),
     strikes: 0,
     cooldown: 0,
-    strikeCooldown: FISH.cooldown,
-    strikeReach: FISH.reach,
-    strikePace: 1,
+    style: { ...NIGHT_STRIKE },
     placed: false,
     yaw: 0,
     rise: null,

@@ -9,6 +9,7 @@ import {
   inWaterX,
   nearestTo,
   nextSurfacing,
+  NIGHT_STRIKE,
   pickStrike,
   SINK_TIME,
   sinkPose,
@@ -20,7 +21,7 @@ import {
 } from './fish-parts';
 import { createState, type Finale, type FishState, type Rise } from './fish-state';
 import { characterUrl, propUrl } from './kits';
-import { newGrab, stepGrab, type GrabHooks } from './orca-grab';
+import { newGrab, stepGrab, type GrabHooks, type StrikeStyle } from './orca-grab';
 import { EDGE_X, WATER_Y } from './river';
 import type { Sounds } from './sounds';
 import type { Horde } from './zombies/horde';
@@ -51,11 +52,8 @@ export interface Fish {
   lastLunge(horde: Horde, player: { x: number; z: number }): void;
   /** Night: strikes left this phase. */
   readonly strikes: number;
-  /**
-   * Arms `strikes` for the night; `cooldown` (s) between them, `reach` (m) from the water and the
-   * grab's `pace` (1 normal, below 1 faster): the finale goes further and faster.
-   */
-  arm(strikes: number, cooldown?: number, reach?: number, pace?: number): void;
+  /** Arms `strikes` for the night, struck in `style` (a normal night's by default). */
+  arm(strikes: number, style?: StrikeStyle): void;
   /** Throw a pack: arc into the water, splash, the orca surfaces once to take it. */
   feed(from: Vec3): void;
   /** Swims alongside the player (fin just breaking the surface); strikes zombies at night. */
@@ -145,7 +143,7 @@ function cruise(f: FishState, dt: number, player: { x: number; z: number }): voi
 function tryStrike(f: FishState, player: { x: number; z: number }, horde: Horde): void {
   f.count = 0;
   horde.forEachAlive(f.collect);
-  const id = pickStrike(f.buffer, f.count, player, EDGE_X, f.strikeReach);
+  const id = pickStrike(f.buffer, f.count, player, EDGE_X, f.style.reach);
   if (id === null) return;
   let zx = 0;
   let zz = 0;
@@ -156,10 +154,10 @@ function tryStrike(f: FishState, player: { x: number; z: number }, horde: Horde)
     }
   }
   f.strikes--;
-  f.cooldown = f.strikeCooldown;
+  f.cooldown = f.style.cooldown;
   const { x, y, z } = f.root.position;
   const from = { x, y, z, yaw: f.yaw, pitch: 0 };
-  f.grab = newGrab(from, id, zx, zz, f.cruiseY, f.strikeReach, f.strikePace);
+  f.grab = newGrab(from, id, zx, zz, f.cruiseY, f.style);
 }
 
 /** Bursting out at z: the railing there breaks and the water explodes. */
@@ -387,11 +385,9 @@ export async function createFish(
     get strikes() {
       return f.strikes;
     },
-    arm(n, cooldown = FISH.cooldown, reach = FISH.reach, pace = 1) {
+    arm(n, style = NIGHT_STRIKE) {
       f.strikes = n;
-      f.strikeCooldown = cooldown;
-      f.strikeReach = reach;
-      f.strikePace = pace;
+      f.style = { ...style };
     },
     // A second feed() before the first pack lands replaces it (one pack in flight at a time).
     feed: (from) => feedFish(f, from),

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { NIGHT_STRIKE } from './fish-parts';
 import {
   FACE_LAND,
   GRAB,
@@ -17,21 +18,37 @@ const ground = (x: number): number => (x < EDGE_X ? 0 : WATER_Y);
 const pose = (): GrabPose => ({ x: 0, y: 0, z: 0, yaw: 0, pitch: 0 });
 const CRUISE_Y = WATER_Y - 0.5;
 const start = (vx: number, vz = -40): ReturnType<typeof newGrab> =>
-  newGrab({ x: EDGE_X + 5, y: CRUISE_Y, z: vz + 6, yaw: 0, pitch: 0 }, 7, vx, vz, CRUISE_Y, 4.5);
+  newGrab(
+    { x: EDGE_X + 5, y: CRUISE_Y, z: vz + 6, yaw: 0, pitch: 0 },
+    7,
+    vx,
+    vz,
+    CRUISE_Y,
+    NIGHT_STRIKE,
+  );
 
 interface FakePrey extends Prey {
   seized: number;
   held: number;
   drowned: number[];
+  swept: number[];
 }
 
-/** A horde with one zombie (id 7) at (x, z) that stays put. */
+/** A horde with one zombie (id 7) at (x, z) that stays put, and a bystander (id 8) beside it. */
 function fakePrey(x: number, z: number): FakePrey {
   let alive = true;
   const prey: FakePrey = {
     seized: 0,
     held: 0,
     drowned: [],
+    swept: [],
+    forEachAlive(fn) {
+      if (alive) fn(7, x, z);
+      fn(8, x, z + 1.5);
+    },
+    takeByFish(id) {
+      prey.swept.push(id);
+    },
     locate(id, out) {
       if (id !== 7 || !alive) return false;
       out.x = x;
@@ -81,6 +98,21 @@ describe('the orca grab', () => {
     expect(jaw.y).toBeGreaterThan(0); // above the road, not in it
   });
 
+  it('crawls back over the road (never into it) and only drops once its jaws are past the edge', () => {
+    for (const vx of [EDGE_X - 4.5, EDGE_X - 2, EDGE_X - 0.3]) {
+      const g = start(vx);
+      const out = pose();
+      const jaw = { x: 0, y: 0, z: 0 };
+      let deepest = Infinity; // jaws' height above the ground while over the land, after landing
+      for (g.t = g.approach + g.burst; g.t < grabSeconds(g); g.t += 1 / 60) {
+        grabPose(g, ground, out);
+        jawOf(out, jaw);
+        if (jaw.x < EDGE_X - 0.1) deepest = Math.min(deepest, jaw.y - ground(jaw.x));
+      }
+      expect(deepest).toBeGreaterThan(-0.05);
+    }
+  });
+
   it('never goes further inland than its reach', () => {
     expect(landX(-50, 4.5)).toBeCloseTo(EDGE_X - 4.5 + GRAB.jawAhead);
   });
@@ -91,9 +123,27 @@ describe('the orca grab', () => {
     expect(prey.seized).toBe(1);
     expect(prey.held).toBeGreaterThan(30);
     expect(prey.drowned).toEqual([7]);
+    expect(prey.swept).toEqual([]); // a normal night takes only the one it bites
     expect([breaches, splashes]).toEqual([1, 1]);
     expect(out.y).toBeLessThan(WATER_Y);
     expect(frames).toBeLessThan(Math.ceil(grabSeconds(start(0)) * 60) + 2);
+  });
+
+  it('in the last stand, also knocks the zombies beside its jaws into the river', () => {
+    const prey = fakePrey(EDGE_X - 2, -40);
+    const g = newGrab(
+      { x: EDGE_X + 5, y: CRUISE_Y, z: -34, yaw: 0, pitch: 0 },
+      7,
+      EDGE_X - 2,
+      -40,
+      CRUISE_Y,
+      { ...NIGHT_STRIKE, sweep: 2.5 },
+    );
+    const hooks = { breach: (): void => undefined, splash: (): void => undefined };
+    const out = pose();
+    while (stepGrab(g, 1 / 60, prey, ground, hooks, out));
+    expect(prey.swept).toEqual([8]);
+    expect(prey.drowned).toEqual([7]);
   });
 
   it('comes back empty-mouthed if the zombie ran out of reach', () => {
@@ -110,7 +160,7 @@ describe('the orca grab', () => {
       0,
       -40,
       CRUISE_Y,
-      4.5,
+      NIGHT_STRIKE,
     );
     expect(near.approach).toBe(GRAB.approachMin);
   });
