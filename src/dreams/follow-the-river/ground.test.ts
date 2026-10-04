@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CITY } from './areas/city';
 import { FOREST } from './areas/forest';
 import { SUBURBS } from './areas/suburbs';
-import { groundSurfaces } from './ground';
+import { DAWN_BANK, groundSurfaces } from './ground';
 
 describe('groundSurfaces', () => {
   it('city streets are asphalt, suburbs grass, the forest leaf litter', () => {
@@ -15,5 +15,11 @@ describe('groundSurfaces', () => {
     expect(groundSurfaces(SUBURBS).far).toBe('grass');
     expect(groundSurfaces(FOREST).far).toBe('leaves');
     expect(groundSurfaces(CITY).kerb).toBe('pavement');
+  });
+
+  it('sunrise banks are darkened and more saturated: wet earth, not snow', () => {
+    expect(DAWN_BANK.gain).toBeLessThan(1);
+    expect(DAWN_BANK.gain).toBeGreaterThan(0.3);
+    expect(DAWN_BANK.saturation).toBeGreaterThan(1);
   });
 });

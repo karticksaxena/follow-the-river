@@ -17,3 +17,9 @@ const BY_AREA: Record<AreaDef['id'], GroundSurfaces> = {
 };
 
 export const groundSurfaces = (area: AreaDef): GroundSurfaces => BY_AREA[area.id];
+
+/**
+ * The canoe ride's banks at sunrise: the pink low sun on gain 2.5 grass and mud read as snow.
+ * Darken them and enrich the green and brown. Tuning knobs.
+ */
+export const DAWN_BANK = { gain: 0.6, saturation: 1.35 } as const;

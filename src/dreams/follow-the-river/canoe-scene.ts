@@ -6,6 +6,7 @@ import type { Tier } from '../../engine/quality';
 import { attachKeyShadows } from '../../engine/shadows';
 import { surfaceMaterial, texturesReady } from '../../engine/surfaces';
 import { canoePlants } from './canoe-vegetation';
+import { DAWN_BANK } from './ground';
 import { createMom, type Mom } from './intro-scene';
 import { characterUrl, KIT_SCALE, kitUrl } from './kits';
 import { applyLighting, createWorldLights, LIGHTING, SKY_NAME } from './lighting';
@@ -174,7 +175,7 @@ function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
   geometry.computeVertexNormals();
   const terrain = new THREE.Mesh(
     geometry,
-    surfaceMaterial({ base: 'grass', blend: 'mud', vertexColors: true }),
+    surfaceMaterial({ base: 'grass', blend: 'mud', vertexColors: true, grade: DAWN_BANK }),
   );
   terrain.receiveShadow = true;
   return terrain;

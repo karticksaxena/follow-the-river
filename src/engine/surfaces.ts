@@ -3,13 +3,16 @@ import {
   attribute,
   cameraViewMatrix,
   color,
+  float,
   mix,
   mx_noise_float,
   normalWorldGeometry,
   positionWorld,
+  saturation,
   select,
   smoothstep,
   texture,
+  uv,
   vec2,
   vec3,
 } from 'three/tsl';
@@ -56,6 +59,34 @@ export function tierMaps(tier: Tier): { normal: boolean; arm: boolean; puddles: 
   return { normal: true, arm: rich, puddles: rich };
 }
 
+/**
+ * Kenney's road tile is one flat colour per part, read from its palette texture (sRGB 0..255):
+ * the road quad, the raised kerb tops and sides, and the painted lines. The road becomes asphalt,
+ * the kerb concrete, and the lines keep their palette colour.
+ */
+export const WALKWAY_PALETTE = [
+  { rgb: [157, 164, 196], kind: 'asphalt' },
+  { rgb: [189, 198, 238], kind: 'concrete' },
+  { rgb: [102, 107, 128], kind: 'concrete' },
+  { rgb: [125, 130, 156], kind: 'concrete' },
+  { rgb: [142, 149, 179], kind: 'marking' },
+  { rgb: [81, 85, 102], kind: 'marking' },
+] as const;
+export type WalkwayKind = (typeof WALKWAY_PALETTE)[number]['kind'];
+/** Linear colour distance within which a texel counts as a palette entry (a smooth edge to 2x this). */
+const WALKWAY_TOLERANCE = 0.03;
+
+/** Pure: which surface a palette colour (sRGB 0..255) gets: the nearest palette entry's kind. */
+export function walkwayClass(rgb: readonly [number, number, number]): WalkwayKind {
+  let best: WalkwayKind = 'marking';
+  let bestD = Infinity;
+  for (const p of WALKWAY_PALETTE) {
+    const d = (p.rgb[0] - rgb[0]) ** 2 + (p.rgb[1] - rgb[1]) ** 2 + (p.rgb[2] - rgb[2]) ** 2;
+    if (d < bestD) [best, bestD] = [p.kind, d];
+  }
+  return best;
+}
+
 export interface SurfaceLook {
   base: SurfaceName;
   /** A second set that the geometry's `blend` attribute (0 base .. 1 this) fades to. */
@@ -66,6 +97,13 @@ export interface SurfaceLook {
   vertexColors?: boolean;
   /** Wet puddle patches (asphalt); Medium and High only. */
   puddles?: boolean;
+  /**
+   * The Kenney road tile's palette texture: `base` (asphalt) goes on the road colour, `blend`
+   * (concrete) on the kerb colours, and the painted lines keep their palette colour.
+   */
+  walkway?: THREE.Texture;
+  /** A colour grade over the textured ground: gain darkens, saturation (1 = none) enriches. */
+  grade?: { gain: number; saturation: number };
 }
 
 // Textures are cached for the whole session (marked `cached`, so `disposeScene` keeps them) and
@@ -116,20 +154,34 @@ function sample(
   nor: THREE.Node<'vec3'>;
   arm: THREE.Node<'vec3'> | null;
 } {
-  const uv = worldUV.div(SURFACES[name].metres);
+  const coord = worldUV.div(SURFACES[name].metres);
   return {
-    rgb: texture(map(name, 'diff'), uv).rgb.mul(SURFACES[name].gain),
-    nor: texture(map(name, 'nor'), uv).rgb.mul(2).sub(1),
-    arm: maps.arm ? texture(map(name, 'arm'), uv).rgb : null,
+    rgb: texture(map(name, 'diff'), coord).rgb.mul(SURFACES[name].gain),
+    nor: texture(map(name, 'nor'), coord).rgb.mul(2).sub(1),
+    arm: maps.arm ? texture(map(name, 'arm'), coord).rgb : null,
   };
 }
 
-/** The base set's maps, faded to the second set by the geometry's `blend` attribute. */
-function sampleLook(look: SurfaceLook, maps: Maps): Sample {
+const linear = new THREE.Color();
+
+/** 0..1 where the walkway palette texel is (near) one of `kind`'s colours. */
+function walkwayMask(paint: THREE.Node<'vec3'>, kind: WalkwayKind): THREE.Node<'float'> {
+  let mask: THREE.Node<'float'> = float(0);
+  for (const p of WALKWAY_PALETTE) {
+    if (p.kind !== kind) continue;
+    linear.setRGB(p.rgb[0] / 255, p.rgb[1] / 255, p.rgb[2] / 255, THREE.SRGBColorSpace);
+    const d = paint.sub(vec3(linear.r, linear.g, linear.b)).length();
+    mask = mask.max(smoothstep(WALKWAY_TOLERANCE * 2, WALKWAY_TOLERANCE, d));
+  }
+  return mask;
+}
+
+/** The base set's maps, faded to the second set by `w` (default: the geometry's `blend` attribute). */
+function sampleLook(look: SurfaceLook, maps: Maps, w?: THREE.Node<'float'>): Sample {
   const a = sample(look.base, maps);
   if (!look.blend) return a;
   const b = sample(look.blend, maps);
-  const w = attribute('blend', 'float');
+  w ??= attribute('blend', 'float');
   return {
     rgb: mix(a.rgb, b.rgb, w),
     nor: mix(a.nor, b.nor, w),
@@ -146,7 +198,10 @@ const puddles = smoothstep(
 
 function apply(material: THREE.MeshStandardNodeMaterial, look: SurfaceLook, tier: Tier): void {
   const maps = tierMaps(tier);
-  const { rgb, nor, arm } = sampleLook(look, maps);
+  const paint = look.walkway ? texture(look.walkway, uv()).rgb : null;
+  const road = paint ? walkwayMask(paint, 'asphalt') : null;
+  const kerb = paint ? walkwayMask(paint, 'concrete') : null;
+  const { rgb, nor, arm } = sampleLook(look, maps, kerb ?? undefined);
   // The normal map tilts the world normal along the world x/z axes it is mapped to; steep faces keep theirs.
   const flat = smoothstep(0.6, 0.9, normalWorldGeometry.y);
   const tilt = vec2(nor.x, nor.y).mul(NORMAL_STRENGTH).mul(flat);
@@ -164,10 +219,16 @@ function apply(material: THREE.MeshStandardNodeMaterial, look: SurfaceLook, tier
     material.aoNode = arm.r;
     material.roughnessNode = arm.g;
     if (look.puddles && maps.puddles) {
-      material.roughnessNode = mix(arm.g, PUDDLE.roughness, puddles);
-      colour = colour.mul(mix(1, PUDDLE.darken, puddles));
+      const wet = road ? puddles.mul(road) : puddles;
+      material.roughnessNode = mix(arm.g, PUDDLE.roughness, wet);
+      colour = colour.mul(mix(1, PUDDLE.darken, wet));
     }
   }
+  if (look.grade) {
+    colour = saturation(colour.mul(look.grade.gain), look.grade.saturation);
+  }
+  // Painted lines: wherever the texel is neither road nor kerb, the tile's own colour shows.
+  if (paint && road && kerb) colour = mix(paint, colour, road.max(kerb));
   material.colorNode = colour;
   material.needsUpdate = true;
 }

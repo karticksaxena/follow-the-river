@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { PUDDLE, puddleAmount, repeatPerMetre, SURFACES, tierMaps } from './surfaces';
+import {
+  PUDDLE,
+  puddleAmount,
+  repeatPerMetre,
+  SURFACES,
+  tierMaps,
+  WALKWAY_PALETTE,
+  walkwayClass,
+} from './surfaces';
 
 const files = Object.keys(import.meta.glob('/public/assets/textures/*/*.jpg'));
 
@@ -36,5 +44,13 @@ describe('surfaces', () => {
     expect(tierMaps('low')).toEqual({ normal: true, arm: false, puddles: false });
     expect(tierMaps('medium')).toEqual({ normal: true, arm: true, puddles: true });
     expect(tierMaps('high')).toEqual({ normal: true, arm: true, puddles: true });
+  });
+
+  it('Kenney road tile: road to asphalt, kerb tops to concrete, the painted lines keep their colour', () => {
+    expect(walkwayClass([157, 164, 196])).toBe('asphalt'); // the road quad
+    expect(walkwayClass([189, 198, 238])).toBe('concrete'); // the raised kerb tops
+    expect(walkwayClass([142, 149, 179])).toBe('marking'); // centre line
+    expect(walkwayClass([81, 85, 102])).toBe('marking'); // edge lines
+    expect(WALKWAY_PALETTE.some((p) => p.kind === 'marking')).toBe(true);
   });
 });

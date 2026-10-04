@@ -3,7 +3,7 @@ import { addBatched } from '../../engine/batch';
 import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
 import type { Tier } from '../../engine/quality';
-import { texturesReady } from '../../engine/surfaces';
+import { surfaceMaterial, texturesReady } from '../../engine/surfaces';
 import type { AreaDef, PropPlacement } from './areas/types';
 import { addBanks, groundEndX } from './banks';
 import { addCampfire } from './campfire';
@@ -36,8 +36,29 @@ const box3 = new THREE.Box3();
 const size = new THREE.Vector3();
 const centre = new THREE.Vector3();
 
-async function loadProp(p: PropPlacement): Promise<{ model: THREE.Object3D; collider?: Box }> {
+/** Kenney road tiles: asphalt on the road, concrete on the kerbs, the painted lines keep their colour. */
+function paveRoad(model: THREE.Object3D, memo: Map<THREE.Texture, THREE.Material>): void {
+  model.traverse((node) => {
+    if (!(node instanceof THREE.Mesh) || !(node.material instanceof THREE.MeshStandardMaterial)) {
+      return;
+    }
+    const walkway = node.material.map;
+    if (!walkway) return;
+    let paved = memo.get(walkway);
+    if (!paved) {
+      paved = surfaceMaterial({ base: 'asphalt', blend: 'pavement', walkway, puddles: true });
+      memo.set(walkway, paved);
+    }
+    node.material = paved;
+  });
+}
+
+async function loadProp(
+  p: PropPlacement,
+  paved: Map<THREE.Texture, THREE.Material>,
+): Promise<{ model: THREE.Object3D; collider?: Box }> {
   const model = await loadModel(kitUrl(p.kit, p.model));
+  if (p.kit === 'roads' && p.model.startsWith('road-')) paveRoad(model, paved);
   model.position.set(p.x, p.y ?? 0, p.z);
   model.rotation.y = p.yaw ?? 0;
   model.scale.setScalar(KIT_SCALE[p.kit] * (p.scale ?? 1));
@@ -127,8 +148,9 @@ export async function buildWorld(area: AreaDef, tier: Tier = 'high'): Promise<Wo
   const lights = createWorldLights(scene);
   addGround(scene, area);
   const colliders = stripBlockers(area);
+  const paved = new Map<THREE.Texture, THREE.Material>();
   const [props, fire, railing] = await Promise.all([
-    Promise.all(area.props.filter((p) => p.kit !== 'megakit').map(loadProp)),
+    Promise.all(area.props.filter((p) => p.kit !== 'megakit').map((p) => loadProp(p, paved))),
     addCampfire(scene, area.waitSpot.x, area.waitSpot.z),
     addWaters(scene, area),
     addPlants(scene, area, tier),
