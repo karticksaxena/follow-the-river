@@ -11,6 +11,7 @@ import { applyDim, LIGHTING } from './lighting';
 import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
 import { addSupply, AMMO_OF, chapterOf, isNight } from './state';
+import { setWaterTier } from './water';
 import {
   ambushPlace,
   ambushSpot,
@@ -188,6 +189,7 @@ function tickWorld(p: State, dt: number): void {
   p.offFor = sys.flashlight.on ? 0 : p.offFor + dt;
   supplies.battery = chargeBattery(supplies.battery, sys.flashlight.on, p.offFor, dt);
   if (supplies.battery <= 0) sys.flashlight.on = false; // dead: off, so it starts recharging
+  setWaterTier(sys.ctx.stage.tier);
   sys.flashlight.clearWatch(WATCH.horde);
   sys.horde.forEachAlive(p.watchZombie);
   sys.flashlight.apply(supplies.battery, run.time, dt);

@@ -14,6 +14,7 @@ import {
   REFLECTION,
   RIVER_FLOW,
   setWaterAttribute,
+  setWaterTier,
   waterReflection,
 } from './water';
 
@@ -125,5 +126,20 @@ describe('setWaterAttribute', () => {
       expect(w.getX(i)).toBeCloseTo(15 - Math.abs(p.getX(i)));
       expect(w.getY(i)).toBeCloseTo(p.getX(i));
     }
+  });
+});
+
+describe('setWaterTier', () => {
+  it('rebuilds live water shaders only when the tier changes', () => {
+    const mesh = createWaterMesh(10, 10);
+    const v = mesh.material.version;
+    setWaterTier('high');
+    expect(mesh.material.version).toBe(v);
+    setWaterTier('low');
+    expect(mesh.material.version).toBe(v + 1);
+    setWaterTier('high');
+    mesh.material.dispose();
+    setWaterTier('low');
+    setWaterTier('high'); // a disposed material is no longer rebuilt
   });
 });
