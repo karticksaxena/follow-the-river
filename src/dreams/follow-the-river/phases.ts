@@ -6,7 +6,7 @@ import { strikesFor, styleFor } from './fish';
 import { MAX_HEALTH, phaseTitle, spawnFor, waitQuestion } from './flow';
 import { HINTS, type HintId } from './hints';
 import { applyLighting, LIGHTING, setFogFar } from './lighting';
-import { SICKNESS } from './orca-sick';
+import { sicknessAt } from './orca-sick';
 import type { Run, Systems } from './run';
 import { shackAt } from './scares';
 import {
@@ -93,7 +93,12 @@ export function beginPhase(f: Flow): void {
   const cleared = night ? save.wave : 0;
   run.waves = newWaveState(cleared);
   run.interact = null;
-  fish.setSickness(SICKNESS[save.phase]);
+  // Every zombie she takes sickens her (the fight too); the story floor keeps her declining.
+  fish.onEat = () => {
+    run.live.eaten++;
+    fish.setSickness(sicknessAt(run.phase, run.live.eaten));
+  };
+  fish.setSickness(sicknessAt(save.phase, run.live.eaten));
   sys.gates.set(cleared);
   run.pickups = night ? [...waveCrates(area), ...edgePickups(area)] : area.pickups;
   pickups.place(run.pickups, run.taken);

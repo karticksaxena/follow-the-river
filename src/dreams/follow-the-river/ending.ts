@@ -26,7 +26,6 @@ import {
 } from './ending-scene';
 import { atSafeSpot } from './flow';
 import { LIGHTING, type LightPreset } from './lighting';
-import { SICKNESS } from './orca-sick';
 import { EDGE_X } from './river';
 import type { Run, Systems } from './run';
 import { addSupply, AMMO_OF, SUPPLY_LIMITS, type SupplyKind } from './state';
@@ -248,7 +247,7 @@ export function armForLastStand(run: Pick<Run, 'live'>, share: number): void {
 
 /**
  * The last stand: you and the orca against a horde too big for you. It ends when the horde is
- * dead (or after WAVE.seconds); the orca gets sicker with every one it takes.
+ * dead (or after WAVE.seconds); the orca gets sicker with every one it takes (`fish.onEat`).
  */
 async function fight(h: EndingHost, st: State): Promise<void> {
   const { fish, horde, ctx } = h.sys;
@@ -263,7 +262,6 @@ async function fight(h: EndingHost, st: State): Promise<void> {
     if (fish.strikes < left) {
       left = fish.strikes;
       st.scene?.mom.play('HitRecieve', true); // the orca struck: she flinches
-      fish.setSickness(SICKNESS.night3 + ((1 - SICKNESS.night3) * (WAVE.strikes - left)) / 12);
     }
     spawnWave(h, spawned, t);
     horde.alert(cam.x, cam.z, WAVE.hearing);

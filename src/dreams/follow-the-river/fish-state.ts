@@ -14,7 +14,7 @@ import {
   topOf,
 } from './fish-parts';
 import type { Grab, GrabHooks, GrabPose, StrikeStyle } from './orca-grab';
-import { makeMist, type Blow } from './orca-sick';
+import { makeMist, makeSick, type Blow, type Sickness } from './orca-sick';
 import type { Strand } from './orca-strand';
 import type { Sounds } from './sounds';
 
@@ -72,6 +72,10 @@ export interface FishState {
   strand: Strand | null;
   /** 0 well .. 1 dying (see orca-sick.ts). */
   sickness: number;
+  /** Her skin and wasting, driven by `sickness` (see orca-sick.ts). */
+  readonly sick: Sickness;
+  /** Called when a zombie she took drowns (the run counts it). */
+  onEat: (() => void) | null;
   /** The blow's mist, seconds into it (-1: none), and its reused pose. */
   readonly mist: THREE.Sprite;
   mistT: number;
@@ -123,11 +127,12 @@ export function createState(
   const body = clone(asset.scene);
   body.traverse((n) => {
     n.frustumCulled = false;
-    // Its own materials: the sickness tint must not reach another orca (the calf at the end).
+    // Its own materials: makeWet must not reach another orca (the calf at the end).
     if (n instanceof THREE.Mesh && n.material instanceof THREE.Material)
       n.material = n.material.clone();
   });
   makeWet(body);
+  const sick = makeSick(body); // swaps those clones for node materials of her own
   const finTop = topOf(body);
   const cruiseY = cruiseYFor(finTop);
   root.add(body);
@@ -178,6 +183,8 @@ export function createState(
     finale: 'no',
     strand: null,
     sickness: 0,
+    sick,
+    onEat: null,
     mist,
     mistT: -1,
     blowOut: { rise: 0, size: 0, opacity: 0 },

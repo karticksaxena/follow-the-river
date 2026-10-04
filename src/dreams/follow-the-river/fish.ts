@@ -13,15 +13,15 @@ import {
   NIGHT_STRIKE,
   pickStrike,
   smooth,
-  SURFACE_TIME,
   surfaceRoll,
+  surfaceTime,
   turnToward,
   WAKE_SIZE,
 } from './fish-parts';
 import { createState, type Finale, type FishState, type Rise } from './fish-state';
 import { characterUrl, propUrl } from './kits';
 import { newGrab, stepGrab, type GrabHooks, type StrikeStyle } from './orca-grab';
-import { blowAt, mistColor, SICK, tintSick } from './orca-sick';
+import { blowAt, mistColor, SICK } from './orca-sick';
 import {
   beached,
   newStrand,
@@ -64,6 +64,8 @@ export interface Fish {
   breatheOut(): void;
   /** How sick it is (0 well .. 1 dying): duller, blotched, slower, a redder blow. */
   setSickness(k: number): void;
+  /** Called when a zombie she took drowns (the run counts it and sickens her). */
+  onEat: (() => void) | null;
   /** Night: strikes left this phase. */
   readonly strikes: number;
   /** Arms `strikes` for the night, struck in `style` (a normal night's by default). */
@@ -88,10 +90,12 @@ function playBlow(f: FishState): void {
   f.blow.play();
 }
 
-/** It breathes out: the blow's sound and its mist (redder the sicker it is). */
+/** It breathes out: the blow's sound (fainter and wheezier the sicker it is) and its mist. */
 function blowOut(f: FishState): void {
   const { x, y, z } = f.root.position;
   f.splashAt.position.set(x, y, z);
+  f.blow.setVolume(1 - 0.5 * f.sickness);
+  f.blow.setPlaybackRate(1 - 0.25 * f.sickness);
   playBlow(f);
   f.mistT = 0;
   f.mist.visible = true;
@@ -102,7 +106,7 @@ function stepMist(f: FishState, dt: number): void {
   if (f.mistT < 0) return;
   f.mistT += dt;
   const b = f.blowOut;
-  if (!blowAt(f.mistT, b)) {
+  if (!blowAt(f.mistT, f.sickness, b)) {
     f.mistT = -1;
     f.mist.visible = false;
     return;
@@ -217,7 +221,10 @@ function stepOrcaGrab(f: FishState, dt: number, horde: Horde | null): void {
     f.lunge.reset().play();
     f.lunge.crossFadeFrom(f.swim, FADE, false);
   }
-  if (!going) endGrab(f);
+  if (!going) {
+    if (g.bitten && g.victim >= 0) f.onEat?.(); // stepGrab has just drowned it
+    endGrab(f);
+  }
 }
 
 function endGrab(f: FishState): void {
@@ -263,11 +270,11 @@ function startTake(f: FishState): void {
 
 function startSurface(f: FishState): void {
   const { x, z } = f.root.position;
-  f.surfaceIn = nextSurfacing(Math.random());
+  f.surfaceIn = nextSurfacing(Math.random(), f.sickness);
   startRise(f, {
     toX: x,
     toZ: z - SURFACE_DRIFT,
-    dur: SURFACE_TIME,
+    dur: surfaceTime(f.sickness),
     peak: f.surfaceY,
     surface: true,
   });
@@ -324,7 +331,7 @@ function updateFish(
     f.placed = true;
     f.root.visible = true; // hidden until placed, so it never flashes at the origin
     f.root.position.set(cruiseTargetX(f.waterline, 0), f.cruiseY, player.z - LAG_Z);
-    f.surfaceIn = nextSurfacing(Math.random());
+    f.surfaceIn = nextSurfacing(Math.random(), f.sickness);
   }
   f.cooldown = Math.max(0, f.cooldown - dt);
   stepMist(f, dt);
@@ -377,7 +384,7 @@ function resetFish(f: FishState): void {
   f.finale = 'no';
   f.mistT = -1;
   f.mist.visible = false;
-  f.surfaceIn = nextSurfacing(Math.random());
+  f.surfaceIn = nextSurfacing(Math.random(), f.sickness);
   f.root.rotation.set(0, f.yaw, 0);
 }
 
@@ -388,6 +395,7 @@ function disposeFish(f: FishState): void {
   f.splashAt.remove(f.splash, f.blow);
   f.mixer.stopAllAction();
   f.mixer.uncacheRoot(f.body);
+  f.sick.dispose();
   f.scene.remove(f.root, f.wake, f.packModel, f.splashAt, f.mist);
   f.mist.material.map?.dispose();
   f.mist.material.dispose();
@@ -435,8 +443,14 @@ export async function createFish(
     },
     setSickness(k) {
       f.sickness = Math.min(1, Math.max(0, k));
-      tintSick(f.body, f.sickness);
+      f.sick.set(f.sickness);
       mistColor(f.sickness, f.mist.material.color);
+    },
+    set onEat(fn) {
+      f.onEat = fn;
+    },
+    get onEat() {
+      return f.onEat;
     },
     get strikes() {
       return f.strikes;

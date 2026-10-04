@@ -68,9 +68,15 @@ export const cruiseYFor = (finTop: number): number => WATER_Y + FIN_CLEARANCE - 
 export const surfaceYFor = (finTop: number): number =>
   WATER_Y + BACK_CLEARANCE - (finTop - FIN_HEIGHT);
 
-/** Seconds until the next surfacing; `rand` is in [0, 1). */
-export const nextSurfacing = (rand: number): number =>
-  SURFACE_MIN + rand * (SURFACE_MAX - SURFACE_MIN);
+/** Seconds until the next surfacing; `rand` is in [0, 1). The sicker (`k`) she is, the oftener she logs at the surface. */
+export const nextSurfacing = (rand: number, k = 0): number =>
+  (SURFACE_MIN + rand * (SURFACE_MAX - SURFACE_MIN)) * (1 - 0.45 * k);
+
+/** Seconds she stays up: 1.6x longer past half sick, easing in. */
+export const surfaceTime = (k: number): number => {
+  const s = Math.min(1, Math.max(0, (k - 0.5) / 0.5));
+  return SURFACE_TIME * (1 + 0.6 * s * s * (3 - 2 * s));
+};
 
 /** Cruise lane x at `time`: `water` m (the waterline) plus the lane, weaving. */
 export const cruiseTargetX = (water: number, time: number): number =>

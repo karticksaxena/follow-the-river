@@ -112,6 +112,8 @@ export interface RunState {
   supplies: Supplies;
   /** Fish packs thrown into the river this chapter (powers that night's strikes). */
   fed: number;
+  /** Zombies the orca has eaten (her sickness grows with them; see orca-sick.ts). */
+  eaten: number;
   /** Pickup ids already collected (they never respawn). */
   taken: string[];
   tapes: number[];
@@ -135,6 +137,7 @@ export function freshRun(): RunSave {
     wave: 0,
     supplies: { ...START_SUPPLIES },
     fed: 0,
+    eaten: 0,
     taken: [],
     tapes: [],
     hints: [],
@@ -151,12 +154,16 @@ const text = (v: unknown): v is string => typeof v === 'string';
 const gunKind = (v: unknown): v is GunKind => (GUN_KINDS as readonly unknown[]).includes(v);
 
 /** A save as it may sit on disk: Plans 2–5 wrote version 1 (`hasGun`, four supplies). */
-export interface StoredRun extends Omit<RunSave, 'version' | 'guns' | 'wave' | 'supplies'> {
+export interface StoredRun extends Omit<
+  RunSave,
+  'version' | 'guns' | 'wave' | 'supplies' | 'eaten'
+> {
   version: 1 | 2;
   supplies: Partial<Supplies> & Pick<Supplies, 'battery' | 'arrows' | 'ammo' | 'fishPacks'>;
   guns?: GunKind[];
   hasGun?: boolean;
   wave?: number;
+  eaten?: number;
 }
 
 function isStoredSupplies(v: unknown): v is StoredRun['supplies'] {
@@ -176,6 +183,7 @@ export function isRunSave(value: unknown): value is StoredRun {
     (PHASES as readonly string[]).includes(value.phase) &&
     isStoredSupplies(value.supplies) &&
     count(value.fed) &&
+    maybeCount(value.eaten) &&
     list(value.taken, text) &&
     list(value.tapes, count) &&
     list(value.hints, text)
@@ -189,6 +197,7 @@ export function normalizeSave(save: StoredRun): RunSave {
     ...rest,
     version: 2,
     wave: save.wave ?? 0,
+    eaten: save.eaten ?? 0,
     supplies: { ...START_SUPPLIES, cells: 0, ...save.supplies },
     guns: save.guns ?? (hasGun ? ['pistol'] : []),
   };
@@ -199,6 +208,7 @@ export function restartPhase(save: RunSave, hintsSeen: readonly string[] = []): 
   return {
     supplies: { ...save.supplies },
     fed: save.fed,
+    eaten: save.eaten,
     taken: [...save.taken],
     tapes: [...save.tapes],
     hints: [...new Set([...save.hints, ...hintsSeen])],
@@ -213,6 +223,7 @@ function snapshot(live: RunState, phase: Phase, wave: number, fed: number): RunS
     wave,
     supplies: { ...live.supplies },
     fed,
+    eaten: live.eaten,
     taken: [...live.taken],
     tapes: [...live.tapes],
     hints: [...live.hints],
