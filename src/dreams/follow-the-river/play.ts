@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { syncKeyShadows } from '../../engine/shadows';
 import type { AmbushDef } from './areas/types';
 import { createControls, cutsceneChange, type Controls } from './controls';
 import { DIFFICULTY, nightTuning, type DifficultyTuning } from './difficulty';
@@ -404,6 +405,7 @@ function tickView(p: State, dt: number): void {
   const { sys, run, sense, hudState } = p;
   const s = run.live.supplies;
   sys.world.lights.sky.position.set(sense.x, 0, sense.z);
+  syncKeyShadows(sys.world.lights.key, sys.ctx.stage.tier); // Auto lowered the tier: smaller cascades
   sys.ambience.update(
     dt,
     sense.x,

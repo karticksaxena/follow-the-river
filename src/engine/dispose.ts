@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { releaseEnvironment } from './environment';
+import { detachKeyShadows } from './shadows';
 
 function isCached(thing: { userData: Record<string, unknown> }): boolean {
   return thing.userData.cached === true;
@@ -31,6 +32,7 @@ export function disposeScene(root: THREE.Object3D): void {
     thing.dispose();
   };
   root.traverse((node) => {
+    if (node instanceof THREE.DirectionalLight) detachKeyShadows(node);
     if (
       node instanceof THREE.Light &&
       'shadow' in node &&

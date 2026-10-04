@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { CITY } from './areas/city';
 import { FOREST } from './areas/forest';
 import { SUBURBS } from './areas/suburbs';
+import { DAWN } from './dawn';
 import { HORDE_CAPACITY } from './difficulty';
 import {
   armForLastStand,
-  DAWN,
   ENDING_PAGES,
   nextEndingStep,
   nightEnd,

@@ -20,10 +20,17 @@ export interface LightPreset {
   environment: number;
   /** Key-light shadow strength 0..1 (0 = no shadow pass at all). */
   shadow: number;
-  /** The painted dome shows its star field. */
+  /** 0..1: the drifting overcast on the painted dome (flat colour at 0). */
+  clouds: number;
+  /** The moon, its halo and the star field show. */
   stars?: boolean;
   sky?: SkyParams;
 }
+
+/** The sunrise's ceilings: it is the one warm exception, but still no white-out (a test holds these). */
+export const SUNRISE_CAPS = { hemi: 0.6, key: 1.3, environment: 0.4 } as const;
+/** Day's overcast drift amount 0..1. */
+const DAY_CLOUDS = 0.6;
 
 /** Tuning knobs. Never bright: even "day" is overcast; the sunrise is the one warm exception. */
 export const LIGHTING: Readonly<Record<LightingName, LightPreset>> = {
@@ -37,17 +44,19 @@ export const LIGHTING: Readonly<Record<LightingName, LightPreset>> = {
     disc: { color: 0x8a5a40, size: 6, soft: 0.7 },
     environment: 0.2,
     shadow: 0,
+    clouds: 0,
   },
   // Overcast day: flat grey, a pale sun disc barely through the haze.
   day: {
     skyTop: 0x2c3136,
     skyHorizon: 0x50565b,
     fog: { color: 0x4a5055, near: 10, far: 90 },
-    hemi: { sky: 0x8a9098, ground: 0x24261f, intensity: 0.75 },
+    hemi: { sky: 0x8a9098, ground: 0x24261f, intensity: 0.68 },
     key: { color: 0xd0d4d8, intensity: 0.45, elevation: 0.6, azimuth: -2.0 },
     disc: { color: 0x7d8286, size: 7, soft: 0.95 },
     environment: 0.5,
     shadow: 0,
+    clouds: DAY_CLOUDS,
   },
   // Night: blue-black, a small cold moon that blooms, a faint star field, weak soft moon shadows.
   night: {
@@ -56,9 +65,10 @@ export const LIGHTING: Readonly<Record<LightingName, LightPreset>> = {
     fog: { color: 0x141a20, near: 5, far: 55 },
     hemi: { sky: 0x3a4450, ground: 0x0c0e0a, intensity: 0.35 },
     key: { color: 0x9fb4ff, intensity: 0.35, elevation: 0.5, azimuth: -2.6 },
-    disc: { color: 0xdfe8ff, size: 4, soft: 0.25 },
+    disc: { color: 0xdfe8ff, size: 3, soft: 1 },
     environment: 0.15,
     shadow: 0.35,
+    clouds: 0,
     stars: true,
   },
   // Still grey and dim, a pale sun low over the dam (the ending now goes on to `sunrise`).
@@ -71,6 +81,7 @@ export const LIGHTING: Readonly<Record<LightingName, LightPreset>> = {
     disc: { color: 0x8a837c, size: 7, soft: 0.9 },
     environment: 0.4,
     shadow: 0,
+    clouds: 0,
   },
   // The moon is setting and the sky is just going pale: where the night hands over to the sunrise.
   predawn: {
@@ -79,22 +90,24 @@ export const LIGHTING: Readonly<Record<LightingName, LightPreset>> = {
     fog: { color: 0x1d2230, near: 6, far: 70 },
     hemi: { sky: 0x4a5878, ground: 0x10120f, intensity: 0.45 },
     key: { color: 0xcfd8ff, intensity: 0.3, elevation: 0.35, azimuth: -2.6 },
-    disc: { color: 0xdfe8ff, size: 4, soft: 0.25 },
+    disc: { color: 0xdfe8ff, size: 3, soft: 1 },
     environment: 0.2,
     shadow: 0.3,
+    clouds: 0,
     stars: true,
   },
-  // The end of the farewell and the canoe ride: a warm sun over the dam, a blue sky.
+  // The end of the farewell and the canoe ride: a warm, slightly misty sun over the dam, blue above.
   sunrise: {
-    skyTop: 0x6f9fd0,
-    skyHorizon: 0xf0c890,
-    fog: { color: 0xc9c2b0, near: 10, far: 110 },
-    hemi: { sky: 0xbcd2e8, ground: 0x4a5a36, intensity: 1.4 },
-    key: { color: 0xffc27a, intensity: 2.2, elevation: 0.12, azimuth: 3.0 },
-    disc: { color: 0xffe2a8, size: 8, soft: 0.6 },
-    environment: 1,
+    skyTop: 0x4f7fb0,
+    skyHorizon: 0xd89a5a,
+    fog: { color: 0x8f8070, near: 12, far: 130 },
+    hemi: { sky: 0xa8bcd0, ground: 0x2e3a22, intensity: SUNRISE_CAPS.hemi },
+    key: { color: 0xffb870, intensity: SUNRISE_CAPS.key, elevation: 0.12, azimuth: 3.0 },
+    disc: { color: 0xffd9a0, size: 5, soft: 0.6 },
+    environment: SUNRISE_CAPS.environment,
     shadow: 1,
-    sky: { turbidity: 6, rayleigh: 2.2, mie: 0.006, mieG: 0.85 },
+    clouds: 0,
+    sky: { turbidity: 4, rayleigh: 1.6, mie: 0.003, mieG: 0.8 },
   },
 };
 
@@ -160,6 +173,7 @@ export function mixPresetInto(
   out.disc.soft = t < 0.5 ? a.disc.soft : b.disc.soft;
   out.environment = mix(a.environment, b.environment, t);
   out.shadow = mix(a.shadow, b.shadow, t);
+  out.clouds = mix(a.clouds, b.clouds, t);
   out.stars = t < 0.5 ? a.stars : b.stars;
   mixSky(a, b, t, out);
   return out;

@@ -3,12 +3,17 @@ import * as THREE from 'three/webgpu';
 import { refreshEnvironment } from '../../engine/environment';
 import { setShadowStrength } from '../../engine/shadows';
 import {
+  createHalo,
+  createMoon,
   createPhysicalSky,
   createSkyDome,
   createStars,
+  MOON_RADIUS,
   paintSkyDome,
+  setDomeLook,
   setPhysicalSky,
 } from '../../engine/sky';
+import type { LightColors } from './light-colors';
 import type { LightPreset } from './light-presets';
 
 export * from './light-presets';
@@ -16,7 +21,10 @@ export * from './light-presets';
 export interface WorldLights {
   hemi: THREE.HemisphereLight;
   key: THREE.DirectionalLight;
+  /** The sun (or day's pale disc): not drawn while the moon is. */
   disc: THREE.Mesh;
+  moon: THREE.Mesh;
+  halo: THREE.Mesh;
   /** The painted dome; the star field and the physical sky are its children, so they follow the camera. */
   sky: THREE.Mesh;
   physical: SkyMesh;
@@ -77,9 +85,8 @@ export function skyDirection(
 }
 
 /**
- * One hemisphere light, one key light, the sky dome and the sun/moon disc (a child of the dome).
- * The key light stays put (a shadowless DirectionalLight only uses its direction);
- * only the sky dome follows the camera.
+ * One hemisphere light, one key light, the sky dome and the sun/moon (children of the dome, so they
+ * follow the camera with it). The key light stays put (only its direction matters).
  */
 export function createWorldLights(scene: THREE.Scene): WorldLights {
   const hemi = new THREE.HemisphereLight();
@@ -95,12 +102,41 @@ export function createWorldLights(scene: THREE.Scene): WorldLights {
       map: glowTexture(0.5),
     }),
   );
+  const [moon, halo] = [createMoon(), createHalo(glowTexture(1))];
   const physical = createPhysicalSky();
   const stars = createStars();
-  sky.add(disc, stars, physical);
+  sky.add(disc, halo, moon, stars, physical);
   scene.fog = new THREE.Fog(0, 1, 2);
   scene.add(sky, hemi, key);
-  return { hemi, key, disc, sky, physical, stars, scene };
+  return { hemi, key, disc, moon, halo, sky, physical, stars, scene };
+}
+
+/**
+ * Per-call extras for `applyLighting`. A caller that blends every frame keeps one and edits it:
+ * `colors` (linear blends, no 8-bit steps), `sun` (the physical sky's and the disc's direction when it
+ * is not the key's), and the opacities of the dome, the stars and the moon (default: from the preset).
+ */
+export interface LightFrame {
+  refreshEnv: boolean;
+  sun: { x: number; y: number; z: number } | null;
+  colors: LightColors | null;
+  dome: number | null;
+  stars: number | null;
+  moon: number | null;
+}
+
+/** A still switch: refresh the image-based light, everything else from the preset. */
+export const STILL: Readonly<LightFrame> = {
+  refreshEnv: true,
+  sun: null,
+  colors: null,
+  dome: null,
+  stars: null,
+  moon: null,
+};
+
+export function createFrame(): LightFrame {
+  return { ...STILL };
 }
 
 /** Pulls the fog in (an area's tighter night). Rare: called when a phase starts. */
@@ -115,55 +151,77 @@ export function applyDim(lights: WorldLights, preset: LightPreset, dim: number):
   lights.key.intensity = preset.key.intensity * factor;
 }
 
+function place(
+  mesh: THREE.Object3D,
+  dir: { x: number; y: number; z: number },
+  scale: number,
+): void {
+  mesh.position.set(dir.x * DISC_DISTANCE, dir.y * DISC_DISTANCE, dir.z * DISC_DISTANCE);
+  // Face the dome's centre (these are children of the dome, so work in dome space).
+  mesh.quaternion.setFromUnitVectors(FORWARD, towardCentre.set(-dir.x, -dir.y, -dir.z));
+  mesh.scale.setScalar(scale);
+}
+
+function setOpacity(mesh: THREE.Mesh | THREE.Points, opacity: number): void {
+  mesh.visible = opacity > 0.001;
+  if (mesh.material instanceof THREE.Material) mesh.material.opacity = opacity;
+}
+
 /**
- * Switches to a preset: colours, intensities, positions, fog, the sky (painted dome or physical),
- * the star field, the image-based light and the key light's shadow strength. Never changes the
- * light count (that would recompile shaders). Allocation-free except the first disc texture and
- * `refreshEnvironment` (six 128 px faces): per-frame callers pass `refreshEnv` false and refresh
- * on their own slow clock. `sun` overrides the physical sky's sun direction (default: the key's).
- * Per-frame dimming is `applyDim`.
+ * Switches to a preset (or one frame of a blend): colours, intensities, positions, fog, the sky
+ * (painted dome and/or physical), the moon and stars, the image-based light and the key light's
+ * shadow strength. Never changes the light count (that would recompile shaders). Allocation-free
+ * except the first disc texture and `refreshEnvironment` (six 128 px faces): per-frame callers set
+ * `frame.refreshEnv` false and refresh on their own slow clock. Per-frame dimming is `applyDim`.
  */
 export function applyLighting(
   lights: WorldLights,
   preset: LightPreset,
-  refreshEnv = true,
-  sun?: { x: number; y: number; z: number },
+  frame: Readonly<LightFrame> = STILL,
 ): void {
-  const { scene, hemi, key, disc } = lights;
+  const { scene, hemi, key, disc, moon, halo, sky, physical, stars } = lights;
+  const c = frame.colors;
   if (scene.fog instanceof THREE.Fog) {
-    scene.fog.color.set(preset.fog.color);
+    scene.fog.color.set(c?.fog ?? preset.fog.color);
     scene.fog.near = preset.fog.near;
     scene.fog.far = preset.fog.far;
   }
-  hemi.color.set(preset.hemi.sky);
-  hemi.groundColor.set(preset.hemi.ground);
+  hemi.color.set(c?.hemiSky ?? preset.hemi.sky);
+  hemi.groundColor.set(c?.hemiGround ?? preset.hemi.ground);
   const d = skyDirection(preset.key.elevation, preset.key.azimuth, sunScratch);
-  key.color.set(preset.key.color);
+  key.color.set(c?.key ?? preset.key.color);
   applyDim(lights, preset, 0);
   key.position.set(d.x * KEY_DISTANCE, d.y * KEY_DISTANCE, d.z * KEY_DISTANCE);
   setShadowStrength(key, preset.shadow);
-  applySky(lights, preset, sun ?? d);
-  if (disc.material instanceof THREE.MeshBasicMaterial) {
-    disc.material.color.set(preset.disc.color);
-    disc.material.opacity = 1;
-    const map = glowTexture(preset.disc.soft);
-    if (map && map !== disc.material.map) disc.material.map = map;
-  }
-  disc.visible = !preset.sky; // the physical sky draws its own sun
-  disc.position.set(d.x * DISC_DISTANCE, d.y * DISC_DISTANCE, d.z * DISC_DISTANCE);
-  // Face the dome's centre (the disc is a child of the dome, so work in dome space).
-  disc.quaternion.setFromUnitVectors(FORWARD, towardCentre.set(-d.x, -d.y, -d.z));
-  disc.scale.setScalar(preset.disc.size);
-  if (refreshEnv) refreshEnvironment(scene, preset, sun ?? d);
+  const aim = frame.sun ?? d;
+  const night = preset.stars ? 1 : 0;
+  const moonAmount = frame.moon ?? night;
+  paintSkyDome(sky, c?.skyTop ?? preset.skyTop, c?.skyHorizon ?? preset.skyHorizon);
+  setDomeLook(sky, frame.dome ?? (preset.sky ? 0 : 1), preset.clouds);
+  if (preset.sky) setPhysicalSky(physical, preset.sky, aim);
+  physical.visible = !!preset.sky;
+  setOpacity(stars, frame.stars ?? night);
+  setOpacity(moon, moonAmount);
+  setOpacity(halo, moonAmount);
+  place(moon, d, MOON_RADIUS);
+  place(halo, d, preset.disc.size);
+  applyDisc(disc, preset, c?.disc ?? preset.disc.color, moonAmount <= 0, aim);
+  if (frame.refreshEnv) refreshEnvironment(scene, preset, c?.skyTop, c?.skyHorizon);
   else scene.environmentIntensity = preset.environment;
 }
 
-/** The painted dome (with or without stars) or the physical sky, whichever the preset asks for. */
-function applySky(lights: WorldLights, preset: LightPreset, sun: THREE.Vector3Like): void {
-  const { sky, physical, stars } = lights;
-  if (preset.sky) setPhysicalSky(physical, preset.sky, sun);
-  else paintSkyDome(sky, preset.skyTop, preset.skyHorizon);
-  physical.visible = !!preset.sky;
-  stars.visible = !!preset.stars && !preset.sky;
-  if (sky.material instanceof THREE.Material) sky.material.visible = !preset.sky;
+function applyDisc(
+  disc: THREE.Mesh,
+  preset: LightPreset,
+  color: THREE.ColorRepresentation,
+  shown: boolean,
+  aim: { x: number; y: number; z: number },
+): void {
+  disc.visible = shown;
+  if (disc.material instanceof THREE.MeshBasicMaterial) {
+    disc.material.color.set(color);
+    const map = glowTexture(preset.disc.soft);
+    if (map && map !== disc.material.map) disc.material.map = map;
+  }
+  place(disc, aim, preset.disc.size);
 }

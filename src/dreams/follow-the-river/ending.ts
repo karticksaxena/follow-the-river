@@ -100,7 +100,6 @@ export const WAVE = {
   /** The whole wave keeps hearing the player (m), so nobody gives up the hunt mid-fight. */
   hearing: 60,
 } as const;
-export { DAWN };
 const FLINCH = { lookUp: 12 } as const; // m up the bank Mom watches during the fight
 
 /** How many zombies of the wave should exist `elapsed` seconds in (all of them once the last group is due). */

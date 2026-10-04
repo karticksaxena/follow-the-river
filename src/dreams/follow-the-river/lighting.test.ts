@@ -9,6 +9,7 @@ import {
   mixPreset,
   mixPresetInto,
   skyDirection,
+  SUNRISE_CAPS,
 } from './lighting';
 
 const brightness = (hex: number): number => ((hex >> 16) + ((hex >> 8) & 255) + (hex & 255)) / 765;
@@ -130,8 +131,30 @@ describe('the real sunrise', () => {
   });
 
   it('lights the image more as the day brightens', () => {
-    expect(LIGHTING.sunrise.environment).toBe(1);
+    expect(LIGHTING.sunrise.environment).toBe(SUNRISE_CAPS.environment);
     expect(LIGHTING.day.environment).toBe(0.5);
     expect(LIGHTING.sunrise.shadow).toBeGreaterThan(LIGHTING.night.shadow);
+  });
+});
+
+describe('the sunrise is warm, not blown out', () => {
+  it('stays under named ceilings', () => {
+    const s = LIGHTING.sunrise;
+    expect(s.hemi.intensity).toBeLessThanOrEqual(0.7);
+    expect(s.key.intensity).toBeLessThanOrEqual(1.5);
+    expect(s.environment).toBeLessThanOrEqual(0.5);
+    expect(s.hemi.intensity).toBeLessThanOrEqual(SUNRISE_CAPS.hemi);
+    expect(s.key.intensity).toBeLessThanOrEqual(SUNRISE_CAPS.key);
+  });
+
+  it('has a fog that is warm and mid-grey, not white', () => {
+    const fog = new THREE.Color(LIGHTING.sunrise.fog.color);
+    expect(fog.r).toBeGreaterThan(fog.b);
+    expect(brightness(LIGHTING.sunrise.fog.color)).toBeLessThan(0.6);
+  });
+
+  it('only day has the overcast layer', () => {
+    expect(LIGHTING.day.clouds).toBeGreaterThan(0);
+    expect(LIGHTING.night.clouds).toBe(0);
   });
 });
