@@ -123,7 +123,10 @@ export async function assemble(
 ): Promise<Assembled | null> {
   const camera = ctx.stage.camera;
   setWaterTier(ctx.stage.tier); // before the first build, so Medium/Low never builds High first
-  const [world, sounds] = await Promise.all([buildWorld(area), loadSounds(ctx.audio)]);
+  const [world, sounds] = await Promise.all([
+    buildWorld(area, ctx.stage.tier),
+    loadSounds(ctx.audio),
+  ]);
   const scene = world.scene;
   if (isCancelled()) {
     disposeScene(scene);

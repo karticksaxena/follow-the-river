@@ -1,14 +1,15 @@
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as THREE from 'three/webgpu';
-import { addBatched } from '../../engine/batch';
 import { disposeScene } from '../../engine/dispose';
 import { loadModel, loadSkinned } from '../../engine/models';
 import type { Tier } from '../../engine/quality';
 import { attachKeyShadows } from '../../engine/shadows';
 import { surfaceMaterial, texturesReady } from '../../engine/surfaces';
+import { canoePlants } from './canoe-vegetation';
 import { createMom, type Mom } from './intro-scene';
 import { characterUrl, KIT_SCALE, kitUrl } from './kits';
 import { applyLighting, createWorldLights, LIGHTING, SKY_NAME } from './lighting';
+import { addVegetation } from './nature';
 import { createWaterMesh, type WaterLook } from './water';
 
 /** The river's meander in x as a function of z (the ride flows toward -z). Tuning knobs (metres). */
@@ -65,16 +66,13 @@ export function rng(seed: number): () => number {
 
 const WATER_LOOK: WaterLook = { speed: 1.6, deep: 0x2b5750, streak: 0x9cc2b0, glow: 0x1d4a3c };
 
-/** Foliage and ground colours (sRGB hex). Tuning knobs. */
+/** Canoe, wood and ground colours (sRGB hex). Tuning knobs. */
 const COLORS = {
-  leaves: [0x74ae3e, 0x58943a, 0x3f7d33],
+  leaves: [0x74ae3e],
   bark: 0x5b4331,
-  grass: [0x86bf4c, 0x62a63c],
   canoe: 0x8a5a36,
   mud: 0x7a6a45,
-  rock: 0x77756c,
   meadow: [0x5f9a36, 0x4a8630],
-  flowers: [0xf2d24a, 0xf4f0e0, 0xe58fb4],
 } as const;
 
 export interface CanoeScene {
@@ -112,7 +110,6 @@ function tinter(): (root: THREE.Object3D, pick: (name: string) => number | null)
 
 const isLeaf = (n: string): boolean => /leaf/i.test(n);
 const isWood = (n: string): boolean => /wood|bark/i.test(n);
-const isGrass = (n: string): boolean => /grass/i.test(n);
 
 /** Pure: the terrain mesh's own height at (x, z): the flat triangle of the grid cell, exactly as drawn. */
 export function meshY(x: number, z: number, zNear: number = TERRAIN.behind): number {
@@ -183,152 +180,12 @@ function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
   return terrain;
 }
 
-interface Scatter {
-  model: THREE.Object3D;
-  count: number;
-  /** Distance from the river centre line: min and max (metres). */
-  from: number;
-  to: number;
-  scale: readonly [number, number];
-  minY: number;
-}
+/** What canoe-vegetation.ts needs of this file's terrain. */
+const GROUND = { pathX, meshY, terrainY, riverHalf: RIVER_HALF };
 
-const SINK = 0.15; // trunks and rocks bite into the ground
-
-/** Clones `model` at random bank spots (deterministic). */
-function scatter(
-  s: Scatter,
-  zNear: number,
-  zFar: number,
-  rand: () => number,
-  recolor: (root: THREE.Object3D) => void,
-): THREE.Object3D[] {
-  const out: THREE.Object3D[] = [];
-  for (let i = 0; i < s.count; i++) {
-    const z = zNear - rand() * (zNear - zFar);
-    const d = s.from + (s.to - s.from) * rand() ** 1.4;
-    const x = pathX(z) + (rand() < 0.5 ? -d : d);
-    if (terrainY(x, z) < s.minY) continue;
-    const item = s.model.clone(true);
-    recolor(item);
-    item.position.set(x, meshY(x, z) - SINK, z);
-    item.rotation.y = rand() * TAU;
-    item.scale.setScalar(s.scale[0] + (s.scale[1] - s.scale[0]) * rand());
-    out.push(item);
-  }
-  return out;
-}
-
-const TREES = [
-  'tree_oak_dark',
-  'tree_default_dark',
-  'tree_detailed_dark',
-  'tree_tall_dark',
-  'tree_pineTallA',
-  'tree_pineTallB',
-  'tree_pineTallC',
-  'tree_pineDefaultA',
-] as const;
-
-async function addForest(scene: THREE.Scene, zNear: number, zFar: number): Promise<void> {
-  const tint = tinter();
-  const rand = rng(11);
-  const [trees, bush, bushL, grass, rocks] = await Promise.all([
-    Promise.all(TREES.map((t) => loadModel(kitUrl('nature', t)))),
-    loadModel(kitUrl('nature', 'plant_bush')),
-    loadModel(kitUrl('nature', 'plant_bushLarge')),
-    loadModel(kitUrl('nature', 'grass_large')),
-    Promise.all(
-      ['rock_largeA', 'rock_largeC', 'rock_tallB'].map((r) => loadModel(kitUrl('nature', r))),
-    ),
-  ]);
-  const leafy = (root: THREE.Object3D): void => {
-    const leaf = COLORS.leaves[Math.floor(rand() * COLORS.leaves.length)] ?? COLORS.leaves[0];
-    tint(root, (n) => (isLeaf(n) ? leaf : isWood(n) ? COLORS.bark : null));
-  };
-  const green = (root: THREE.Object3D): void => {
-    const g = COLORS.grass[Math.floor(rand() * COLORS.grass.length)] ?? COLORS.grass[0];
-    tint(root, (n) => (isGrass(n) ? g : null));
-  };
-  const S = KIT_SCALE.nature;
-  const roots: THREE.Object3D[] = [];
-  for (const model of trees) {
-    roots.push(
-      ...scatter(
-        { model, count: 110, from: RIVER_HALF + 1.5, to: 95, scale: [S * 0.9, S * 1.6], minY: 0.2 },
-        zNear,
-        zFar,
-        rand,
-        leafy,
-      ),
-    );
-  }
-  const spec = { from: RIVER_HALF + 1, to: 40, minY: 0.1 };
-  roots.push(
-    ...scatter(
-      { ...spec, model: bush, count: 220, scale: [S * 0.8, S * 1.4] },
-      zNear,
-      zFar,
-      rand,
-      green,
-    ),
-    ...scatter(
-      { ...spec, model: bushL, count: 140, scale: [S * 0.8, S * 1.3] },
-      zNear,
-      zFar,
-      rand,
-      green,
-    ),
-    ...scatter(
-      { ...spec, model: grass, count: 600, scale: [S * 0.4, S * 0.7] },
-      zNear,
-      zFar,
-      rand,
-      green,
-    ),
-  );
-  for (const rock of rocks) {
-    roots.push(
-      ...scatter(
-        {
-          model: rock,
-          count: 12,
-          from: RIVER_HALF - 1,
-          to: 30,
-          scale: [S * 0.5, S * 1.1],
-          minY: -0.4,
-        },
-        zNear,
-        zFar,
-        rand,
-        (root) => tint(root, () => COLORS.rock),
-      ),
-    );
-  }
-  addBatched(scene, roots);
-}
-
-/** Meadow flowers: one instanced mesh of tiny coloured blobs scattered on the banks. */
-function makeFlowers(zNear: number, zFar: number): THREE.InstancedMesh {
-  const count = 600;
-  const mesh = new THREE.InstancedMesh(
-    new THREE.IcosahedronGeometry(0.11, 0),
-    new THREE.MeshLambertMaterial(),
-    count,
-  );
-  const rand = rng(23);
-  const dummy = new THREE.Object3D();
-  const color = new THREE.Color();
-  for (let i = 0; i < count; i++) {
-    const z = zNear - rand() * (zNear - zFar);
-    const x = pathX(z) + (rand() < 0.5 ? -1 : 1) * (RIVER_HALF + 2 + rand() ** 1.5 * 30);
-    dummy.position.set(x, meshY(x, z) + 0.13, z);
-    dummy.updateMatrix();
-    mesh.setMatrixAt(i, dummy.matrix);
-    mesh.setColorAt(i, color.setHex(COLORS.flowers[i % COLORS.flowers.length] ?? 0xffffff));
-  }
-  mesh.frustumCulled = false;
-  return mesh;
+/** MegaKit trees, ferns, rocks, pebbles and the tier's grass on both banks (nature.ts instances them). */
+function addBanks(scene: THREE.Scene, zNear: number, zFar: number, tier: Tier): Promise<void> {
+  return addVegetation(scene, canoePlants(zNear, zFar, tier, GROUND), tier);
 }
 
 /** A double-bladed paddle of dark wood lying along x, pivoting about its middle. */
@@ -404,12 +261,12 @@ export async function buildCanoeScene(length: number, stage: CanoeStage): Promis
   const water = createWaterMesh(TERRAIN.halfWidth * 2.4, zNear - zFar, WATER_LOOK);
   water.rotation.x = -Math.PI / 2;
   water.position.set(0, WATER_LEVEL, (zNear + zFar) / 2);
-  scene.add(terrain, water, makeFlowers(zNear, zFar));
+  scene.add(terrain, water);
   const [canoe, momAsset, orca] = await Promise.all([
     makeCanoe(),
     loadSkinned(characterUrl('mom')),
     loadSkinned(characterUrl('orca')),
-    addForest(scene, zNear, zFar),
+    addBanks(scene, zNear, zFar, stage.tier),
     texturesReady(),
   ]);
   const mom = createMom(momAsset, new THREE.Group());

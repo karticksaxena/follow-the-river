@@ -14,7 +14,15 @@ describe('kits', () => {
   });
 
   it('scales every kit to metres', () => {
-    expect(KIT_SCALE).toEqual({ city: 10, roads: 6, cars: 1, survival: 6, suburb: 8, nature: 5 });
+    expect(KIT_SCALE).toEqual({
+      city: 10,
+      roads: 6,
+      cars: 1,
+      survival: 6,
+      suburb: 8,
+      nature: 5,
+      megakit: 1,
+    });
   });
 });
 

@@ -1,6 +1,6 @@
 import { assetUrl } from '../../engine/assets';
 
-export type Kit = 'city' | 'roads' | 'cars' | 'survival' | 'suburb' | 'nature';
+export type Kit = 'city' | 'roads' | 'cars' | 'survival' | 'suburb' | 'nature' | 'megakit';
 
 /**
  * Kenney kits come in tiny native units; these scale each to metres. Tuning knobs.
@@ -14,6 +14,9 @@ export const KIT_SCALE: Readonly<Record<Kit, number>> = {
   survival: 6,
   suburb: 8,
   nature: 5,
+  // Quaternius' MegaKit is modelled in metres (a Pine is 7.3 m): its category GLBs are
+  // instanced by `nature.ts`, never loaded through `kitUrl`.
+  megakit: 1,
 };
 
 /** Each kit has its own folder: their `Textures/colormap.png` files differ. */

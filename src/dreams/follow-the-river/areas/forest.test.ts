@@ -90,12 +90,26 @@ describe('FOREST', () => {
 
   it('sets the shore rocks on the wandering waterline, sunk a little into the slope', () => {
     const rocks = FOREST.props.filter(
-      (p) => p.model.startsWith('rock_large') && p.z < LAKE_Z + 6 && p.z > LAKE_Z - 13,
+      (p) =>
+        p.y !== undefined &&
+        p.model.startsWith('Rock_Medium') &&
+        p.z < LAKE_Z + 6 &&
+        p.z > LAKE_Z - 13,
     );
     expect(rocks.length).toBeGreaterThan(5);
     for (const r of rocks) {
       expect(r.y).toBeCloseTo(shoreY(r.z - lakeEdgeZ(r.x, LAKE_Z)) - 0.1, 6);
       expect(r.z).toBeGreaterThan(lakeEdgeZ(r.x, LAKE_Z)); // on the land side of the water
+    }
+  });
+
+  it('lays pebbles low on the beach, between the water line and the dry land', () => {
+    const pebbles = FOREST.props.filter((p) => p.model.startsWith('Pebble_Round'));
+    expect(pebbles.length).toBeGreaterThan(20);
+    for (const p of pebbles) {
+      const dz = p.z - lakeEdgeZ(p.x, LAKE_Z);
+      expect(dz).toBeGreaterThan(0);
+      expect(p.y).toBeCloseTo(shoreY(dz) - 0.02, 6);
     }
   });
 

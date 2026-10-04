@@ -45,6 +45,8 @@ export function disposeScene(root: THREE.Object3D): void {
       done.add(node.skeleton);
       node.skeleton.dispose();
     }
+    // An InstancedMesh's matrices (and per-instance attributes) are GPU buffers of their own.
+    if (node instanceof THREE.InstancedMesh) node.dispose();
     if (!isDrawable(node)) return;
     // three builds one geometry for every Sprite: freeing it left the next home screen's sprites
     // on a destroyed GPU buffer, every frame failed and the last game frame stayed on screen.

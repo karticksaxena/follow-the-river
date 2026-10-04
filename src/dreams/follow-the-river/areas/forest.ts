@@ -2,6 +2,7 @@ import { EDGE_X, FAR_EDGE_X, LAKE, RIVER_X, shoreY } from '../river';
 import { shackBounds } from '../shack';
 import { lakeEdgeZ } from '../shore-shape';
 import { seeded } from '../skyline';
+import { DEAD_TREES, PEBBLES, PINES, ROCKS, UNDERGROWTH } from '../vegetation';
 import type { AreaDef, LurkerDef, PickupDef, PropPlacement, ScareDef, ShackDef } from './types';
 
 const START_Z = 14;
@@ -22,21 +23,20 @@ const FACE_DOOR = -Math.PI / 2;
 const TAU = Math.PI * 2;
 /** Metres kept free of scenery around each shack (pine canopies are wide). */
 const SHACK_CLEARANCE = 1.5;
-const PINES = [
-  'tree_pineTallA',
-  'tree_pineTallB',
-  'tree_pineTallC',
-  'tree_pineTallD',
-  'tree_pineDefaultA',
-  'tree_pineDefaultB',
-  'tree_tall_dark',
-];
 
 function at(model: string, x: number, z: number, yaw = 0, scale?: number): PropPlacement {
   return { kit: 'nature', model, x, z, yaw, ...(scale ? { scale } : {}) };
 }
 
-/** Random pines in the band x0…x1 every `step` m from fromZ to toZ; the same picks every visit. */
+/** A MegaKit plant, tree or rock (`nature.ts` instances them; far trees are picked by distance). */
+function mega(model: string, x: number, z: number, yaw = 0, scale = 1, y?: number): PropPlacement {
+  return { kit: 'megakit', model, x, z, yaw, scale, ...(y === undefined ? {} : { y }) };
+}
+
+/** One in this many forest trees is a dead one. */
+const DEAD_EVERY = 7;
+
+/** Random pines (and every few, a dead tree) in the band x0…x1 every `step` m from fromZ to toZ; the same picks every visit. */
 function pines(
   seed: number,
   fromZ: number,
@@ -48,9 +48,12 @@ function pines(
   const random = seeded(seed);
   const out: PropPlacement[] = [];
   for (let z = fromZ; z >= toZ; z -= step) {
-    const model = PINES[Math.floor(random() * PINES.length)];
+    const dead = Math.floor(random() * DEAD_EVERY) === 0;
+    const list = dead ? DEAD_TREES : PINES;
+    const model = list[Math.floor(random() * list.length)];
     const x = x0 + random() * (x1 - x0);
-    out.push(at(model, x, z - random() * step * 0.5, random() * TAU, 0.9 + random() * 0.5));
+    const scale = dead ? 0.7 + random() * 0.4 : 0.9 + random() * 0.5;
+    out.push(mega(model, x, z - random() * step * 0.5, random() * TAU, scale));
   }
   return out;
 }
@@ -64,46 +67,76 @@ function dayForest(): PropPlacement[] {
   ];
 }
 
-/** Pines along both sides of the lake, receding into the fog, and rocks along the shore. */
-function lakeShore(): PropPlacement[] {
+/** Pebbles on the beach and the band (m) of the beach they lie in. */
+const PEBBLE_COUNT = 70;
+const PEBBLE_BAND = [0.4, 3.8] as const;
+
+/** True off the river mouth, which stays open water. */
+function onShore(x: number): boolean {
+  return x <= EDGE_X - 4 || x >= FAR_EDGE_X + 1;
+}
+
+/** Rocks and pebbles lying on the wandering beach: a little up the slope from the local water line. */
+function beach(): PropPlacement[] {
   const random = seeded(PINE_SEED + 6);
-  const out = [
-    ...pines(PINE_SEED + 7, LAKE_Z - 2, LAKE_Z - 110, 5, -78, -64),
-    ...pines(PINE_SEED + 8, LAKE_Z - 2, LAKE_Z - 110, 7, LAKE.east + 4, LAKE.east + 20),
-    // West of Mom: the orca's last leap lands east of her (ending-farewell.ts FAREWELL.nose).
-    { ...at('canoe', MOM.x - 3, MOM.z - 1.2, 0.35, 0.6), y: shoreY(MOM.z - 1.2 - LAKE_Z) },
-  ];
+  const out: PropPlacement[] = [];
   for (let x = -34; x < FAR_EDGE_X + 29; x += 9) {
-    if (x > EDGE_X - 4 && x < FAR_EDGE_X + 1) continue; // the river mouth stays open
-    const model = random() < 0.5 ? 'rock_largeA' : 'rock_largeC';
+    if (!onShore(x)) continue;
     const rx = x + random() * 4;
-    // The rocks follow the wandering shore: a little up the beach from the local water line.
     const edge = lakeEdgeZ(rx, LAKE_Z);
     const z = edge + 0.5 + random() * 2;
-    out.push({
-      ...at(model, rx, z, random() * TAU, 0.3 + random() * 0.3),
-      y: shoreY(z - edge) - 0.1, // sunk a little into the slope
-    });
+    const y = shoreY(z - edge) - 0.1; // sunk a little into the slope
+    const rock = ROCKS[Math.floor(random() * ROCKS.length)];
+    out.push(mega(rock, rx, z, random() * TAU, 0.25 + random() * 0.3, y));
+  }
+  for (let i = 0; i < PEBBLE_COUNT; i++) {
+    const rx = -34 + random() * (FAR_EDGE_X + 63);
+    const dz = PEBBLE_BAND[0] + random() * (PEBBLE_BAND[1] - PEBBLE_BAND[0]);
+    const model = PEBBLES[Math.floor(random() * PEBBLES.length)];
+    const yaw = random() * TAU;
+    const scale = 0.7 + random() * 1.1;
+    if (onShore(rx))
+      out.push(mega(model, rx, lakeEdgeZ(rx, LAKE_Z) + dz, yaw, scale, shoreY(dz) - 0.02));
   }
   return out;
 }
 
-const TALL_ROCKS = ['rock_tallA', 'rock_tallB', 'rock_tallC', 'rock_tallD', 'rock_tallE'];
+/** Pines along both sides of the lake, receding into the fog, and rocks and pebbles along the shore. */
+function lakeShore(): PropPlacement[] {
+  return [
+    ...pines(PINE_SEED + 7, LAKE_Z - 2, LAKE_Z - 110, 5, -78, -64),
+    ...pines(PINE_SEED + 8, LAKE_Z - 2, LAKE_Z - 110, 7, LAKE.east + 4, LAKE.east + 20),
+    // West of Mom: the orca's last leap lands east of her (ending-farewell.ts FAREWELL.nose).
+    { ...at('canoe', MOM.x - 3, MOM.z - 1.2, 0.35, 0.6), y: shoreY(MOM.z - 1.2 - LAKE_Z) },
+    ...beach(),
+  ];
+}
 
-/** Night route: the forest thins to rocks, the far bank turns to cliffs, the river looks narrow. */
+/** Night route: the forest thins to boulders, the far bank turns rocky, the river looks narrow. */
 function nightRoute(): PropPlacement[] {
   const out = [
     ...pines(PINE_SEED + 3, -124, -390, 9, -34, -16),
     ...pines(PINE_SEED + 4, -124, -390, 30, FAR_EDGE_X + 3, FAR_EDGE_X + 13),
   ];
   const random = seeded(PINE_SEED + 5);
-  // Real rock shapes only: the cliff blocks read as plain brown boxes in the fog.
-  const tall = (): string => TALL_ROCKS[Math.floor(random() * TALL_ROCKS.length)] ?? 'rock_tallA';
+  const rock = (): string => ROCKS[Math.floor(random() * ROCKS.length)] ?? ROCKS[0];
   for (let z = -130; z > -388; z -= 14) {
-    out.push(at(tall(), -17 - random() * 4, z, random() * TAU, 1 + random() * 0.6));
-    out.push(at(tall(), FAR_EDGE_X + 1 + random() * 6, z - 6, random() * TAU, 1.6 + random()));
-    if (Math.round(z / 14) % 3 === 0)
-      out.push(at('rock_largeC', FAR_EDGE_X + 2 + random() * 4, z, 0, 1.4));
+    out.push(mega(rock(), -17 - random() * 4, z, random() * TAU, 1.2 + random() * 0.8));
+    out.push(
+      mega(rock(), FAR_EDGE_X + 1 + random() * 6, z - 6, random() * TAU, 2 + random() * 1.5),
+    );
+  }
+  return out;
+}
+
+/** Ferns and low plants under the trees, along the land side of the strip (not on the path). */
+function undergrowth(): PropPlacement[] {
+  const random = seeded(PINE_SEED + 10);
+  const out: PropPlacement[] = [];
+  for (let z = 10; z > -388; z -= 3.5) {
+    const model = UNDERGROWTH[Math.floor(random() * UNDERGROWTH.length)];
+    const x = -17.5 + random() * 8;
+    out.push(mega(model, x, z - random() * 3, random() * TAU, 0.8 + random() * 0.5));
   }
   return out;
 }
@@ -149,12 +182,12 @@ function campsite(): PropPlacement[] {
 /** Rocks, stumps, moss, mushrooms and bushes scattered along the day strip. */
 function clutter(): PropPlacement[] {
   const out: PropPlacement[] = [
-    at('rock_largeA', -12, -10, 0.5, 0.8),
-    at('rock_largeD', -11, -58, 2, 0.9),
-    at('rock_tallA', -12.5, -88, 1),
-    at('rock_largeF', -10, -104, 4, 0.7),
-    at('rock_tallC', -2, -96, 3, 0.5),
-    at('rock_largeC', -1, -6, 1, 0.4),
+    mega('Rock_Medium_1', -12, -10, 0.5, 0.8),
+    mega('Rock_Medium_2', -11, -58, 2, 0.9),
+    mega('Rock_Medium_3', -12.5, -88, 1, 1.1),
+    mega('Rock_Medium_1', -10, -104, 4, 0.7),
+    mega('Rock_Medium_2', -2, -96, 3, 0.5),
+    mega('Rock_Medium_3', -1, -6, 1, 0.4),
     at('bridge_wood', -12, -56, FACE_DOOR, 0.5),
   ];
   const random = seeded(PINE_SEED + 9);
@@ -162,7 +195,6 @@ function clutter(): PropPlacement[] {
     const x = -11 - random() * 5;
     out.push(at(z % 2 ? 'stump_old' : 'stump_oldTall', x, z, random() * TAU, 0.5));
     out.push(at('mushroom_redGroup', x + 1.5 + random() * 3, z - 3, random() * TAU));
-    out.push(at('plant_bush', x + random() * 3, z - 5, random() * TAU, 0.5));
     if (z % 14 === 0) out.push(at('hanging_moss', x - 1, z, random() * TAU));
   }
   return out;
@@ -180,9 +212,14 @@ function clearOfShacks(p: PropPlacement): boolean {
 }
 
 const PROPS: readonly PropPlacement[] = [
-  ...[...dayForest(), ...nightRoute(), ...lakeShore(), ...campsite(), ...clutter()].filter(
-    clearOfShacks,
-  ),
+  ...[
+    ...dayForest(),
+    ...nightRoute(),
+    ...lakeShore(),
+    ...undergrowth(),
+    ...campsite(),
+    ...clutter(),
+  ].filter(clearOfShacks),
   ...barricade(),
   { kit: 'survival', model: 'bedroll', x: -0.9, z: -113.5, yaw: 0.5 },
 ];

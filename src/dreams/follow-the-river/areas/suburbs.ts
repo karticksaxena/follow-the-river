@@ -1,5 +1,6 @@
 import { EDGE_X } from '../river';
 import { seeded } from '../skyline';
+import { COMMON_TREES, DEAD_TREES, PINES, UNDERGROWTH } from '../vegetation';
 import type { AreaDef, LurkerDef, PickupDef, PropPlacement, ScareDef, ShackDef } from './types';
 
 const ROAD_X = -5;
@@ -20,6 +21,8 @@ const HOUSE_SEED = 31;
 const HOUSE_COUNT = 8;
 const HOUSE_STEP = 14;
 const BARRICADE_PIECES = 8;
+const TREE_SEED = 83;
+const TAU = Math.PI * 2;
 const HOUSES = 'abcdefghijklmnop'.split('').map((c) => `building-type-${c}`);
 
 type Extra = Pick<PropPlacement, 'yaw' | 'scale' | 'collide'>;
@@ -53,9 +56,23 @@ function solid(
   return { kit, model, x, z, yaw, collide: true };
 }
 
+/** A MegaKit tree (`nature.ts` instances it; far ones are picked by distance). */
+function mega(model: string, x: number, z: number, yaw: number, scale: number): PropPlacement {
+  return { kit: 'megakit', model, x, z, yaw, scale };
+}
+
+/** Garden and roadside trees: common trees, now and then a dead one. */
+function treeAt(random: () => number, x: number, z: number, scale: number): PropPlacement {
+  const dead = random() < 0.15;
+  const list = dead ? DEAD_TREES : COMMON_TREES;
+  const model = list[Math.floor(random() * list.length)];
+  return mega(model, x, z, random() * TAU, dead ? scale * 0.8 : scale);
+}
+
 /** Houses behind the shacks facing the river, each with a driveway, planter and a fence run. */
 function street(): PropPlacement[] {
   const random = seeded(HOUSE_SEED);
+  const trees = seeded(TREE_SEED);
   const out: PropPlacement[] = [];
   for (let i = 0; i < HOUSE_COUNT; i++) {
     const z = 4 - i * HOUSE_STEP;
@@ -63,13 +80,13 @@ function street(): PropPlacement[] {
     out.push({ kit: 'suburb', model, x: -27 - random() * 3, z, yaw: FACE_DOOR });
     out.push({ kit: 'suburb', model: 'driveway-short', x: -20.5, z, yaw: FACE_DOOR });
     out.push({ kit: 'suburb', model: 'planter', x: -19, z: z + 3.5 });
-    if (i % 2 === 0) out.push({ kit: 'suburb', model: 'tree-small', x: -21, z: z - 5 });
+    if (i % 2 === 0) out.push(treeAt(trees, -21, z - 5, 0.7 + trees() * 0.2));
   }
+  for (let z = 0; z >= -110; z -= 38) out.push(treeAt(trees, -22, z, 1 + trees() * 0.3));
   return [
     ...out,
     ...row('suburb', 'fence-2x3', 12, -78, 12, -19.5, { yaw: Math.PI / 2 }),
     ...row('suburb', 'fence-2x3', -102, -120, 12, -19.5, { yaw: Math.PI / 2 }),
-    ...row('suburb', 'tree-large', 0, -110, 38, -22),
   ];
 }
 
@@ -132,8 +149,34 @@ function farm(): PropPlacement[] {
     car('delivery', -2.5, -240, 0.5),
     car('garbage-truck', -4.5, -350, -0.4),
     ...row('survival', 'barrel', -200, -330, 65, -24, { scale: 5 }),
-    ...row('nature', 'tree_default_dark', -150, -480, 60, -21),
   ];
+}
+
+/** Trees along the farm road, ferns in the verge, and the forest closing in at the ranger camp. */
+function woods(): PropPlacement[] {
+  const random = seeded(TREE_SEED + 1);
+  const out: PropPlacement[] = [];
+  for (let z = -128; z > -440; z -= 11) {
+    out.push(treeAt(random, -34 + random() * 9, z - random() * 5, 0.9 + random() * 0.4));
+  }
+  for (let z = -150; z > -480; z -= 60) out.push(treeAt(random, -21, z, 1 + random() * 0.3));
+  for (let z = -430; z > -510; z -= 5) {
+    const model = random() < 0.2 ? DEAD_TREES[0] : PINES[Math.floor(random() * PINES.length)];
+    out.push(
+      mega(model, -42 + random() * 18, z - random() * 3, random() * TAU, 0.9 + random() * 0.5),
+    );
+  }
+  // Deep woods behind the first row: past `NEAR_RANGE`, so these are the thinned far trees.
+  for (let z = 14; z > -510; z -= 8) {
+    out.push(treeAt(random, -85 + random() * 30, z - random() * 4, 1 + random() * 0.4));
+  }
+  for (let z = 10; z > -500; z -= 6) {
+    const model = UNDERGROWTH[Math.floor(random() * UNDERGROWTH.length)];
+    out.push(
+      mega(model, -17.5 + random() * 3, z - random() * 4, random() * TAU, 0.8 + random() * 0.5),
+    );
+  }
+  return out;
 }
 
 /** The ranger camp at the forest edge: tents, a fire and logs (the cabin is the safe prop). */
@@ -151,6 +194,7 @@ const PROPS: readonly PropPlacement[] = [
   ...streetProps(),
   ...barricade(),
   ...farm(),
+  ...woods(),
   ...camp(),
 ];
 

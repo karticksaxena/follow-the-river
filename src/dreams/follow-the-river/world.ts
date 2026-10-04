@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { addBatched } from '../../engine/batch';
 import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
+import type { Tier } from '../../engine/quality';
 import { texturesReady } from '../../engine/surfaces';
 import type { AreaDef, PropPlacement } from './areas/types';
 import { addBanks, groundEndX } from './banks';
@@ -10,11 +11,13 @@ import { groundSurfaces } from './ground';
 import { KIT_SCALE, kitUrl } from './kits';
 import { addLake } from './lake';
 import { createWorldLights, type WorldLights } from './lighting';
+import { addVegetation } from './nature';
 import type { Railing } from './railing';
 import { addRiver, bentPlane, EDGE_X, LAKE, OVERRUN, RIVER_WIDTH } from './river';
 import { addShack, shackBounds, shackColliders } from './shack';
 import { bendFor, type Bend } from './shore-shape';
 import { addSkyline } from './skyline';
+import { plantsOf, stripGrass } from './vegetation';
 
 export interface World {
   scene: THREE.Scene;
@@ -112,16 +115,23 @@ async function addWaters(scene: THREE.Scene, area: AreaDef): Promise<Railing | n
   return railing;
 }
 
-/** Builds an area: lights, ground, river, skyline, props, shacks and every blocker. */
-export async function buildWorld(area: AreaDef): Promise<World> {
+/** MegaKit trees, ferns, rocks and the tier's grass, instanced (`nature.ts`). */
+function addPlants(scene: THREE.Scene, area: AreaDef, tier: Tier): Promise<void> {
+  const grass = stripGrass(area, tier, area.shacks.map(shackBounds));
+  return addVegetation(scene, [...plantsOf(area), ...grass], tier);
+}
+
+/** Builds an area: lights, ground, river, skyline, props, plants, shacks and every blocker. */
+export async function buildWorld(area: AreaDef, tier: Tier = 'high'): Promise<World> {
   const scene = new THREE.Scene();
   const lights = createWorldLights(scene);
   addGround(scene, area);
   const colliders = stripBlockers(area);
   const [props, fire, railing] = await Promise.all([
-    Promise.all(area.props.map(loadProp)),
+    Promise.all(area.props.filter((p) => p.kit !== 'megakit').map(loadProp)),
     addCampfire(scene, area.waitSpot.x, area.waitSpot.z),
     addWaters(scene, area),
+    addPlants(scene, area, tier),
     ...area.shacks.map((shack) => addShack(scene, shack)),
   ]);
   await texturesReady(); // the ground never pops in
