@@ -1,12 +1,12 @@
 import * as THREE from 'three/webgpu';
 import type { DreamContext } from '../types';
-import { findArms, gripPaddle, type Arm } from './canoe-paddle';
+import { gripPaddle, type Arm } from './canoe-paddle';
+import { makeRide } from './canoe-ride-setup';
 import { buildCanoeScene, pathSlope, pathX, WATER_LEVEL, type CanoeScene } from './canoe-scene';
 import { createShot, SHOT } from './canoe-shot';
 import {
   calfPose,
   CLOSING_PAGES,
-  newScript,
   nextCue,
   OPENING_PAGES,
   RIDE,
@@ -16,9 +16,9 @@ import {
   type Script,
 } from './canoe-timing';
 import { CINEMATIC } from './flashback';
-import { createMotion, dripAt, type Motion } from './motion';
+import { dripAt, type Motion } from './motion';
 import { lookAt } from './rig';
-import { picker, rateIn, type Sounds } from './sounds';
+import { rateIn, type Sounds } from './sounds';
 
 export {
   BEATS,
@@ -93,7 +93,7 @@ export function toWorld(at: Pose, lx: number, lz: number, out: { x: number; z: n
   out.z = at.z - lx * s + lz * c;
 }
 
-interface Ride {
+export interface Ride {
   ctx: DreamContext;
   sounds: Sounds;
   cs: CanoeScene;
@@ -154,10 +154,7 @@ export function dipPaddle(along: THREE.Vector3, mid: THREE.Vector3): THREE.Vecto
   return along.normalize();
 }
 
-/** Half the paddle's length: its blades sit this far from its middle, along x (see canoe-scene). */
-const BLADE_X = 1.2;
-
-interface Blade {
+export interface Blade {
   mark: THREE.Object3D;
   sound: THREE.PositionalAudio;
   y: number;
@@ -186,16 +183,6 @@ function stepPaddles(r: Ride): void {
     }
     b.y = y;
   }
-}
-
-/** One marker and one positional sound per blade, on the paddle (they move with it). */
-function makeBlades(cs: CanoeScene, ctx: DreamContext): Blade[] {
-  return [-BLADE_X, BLADE_X].map((x) => {
-    const mark = new THREE.Object3D();
-    mark.position.x = x;
-    cs.paddle.add(mark);
-    return { mark, sound: ctx.audio.positional(mark, 3), y: -Infinity };
-  });
 }
 
 /** Puts the canoe, Mom, paddle and the calf where time `t` says; returns nothing, allocates nothing. */
@@ -376,49 +363,6 @@ export function playCanoeRide(
   });
 }
 
-/** The ride's state at t = 0: the scene's actors, the sounds' pickers, the fireflies. */
-function makeRide(ctx: DreamContext, sounds: Sounds, cs: CanoeScene): Ride {
-  const { stage } = ctx;
-  const r: Ride = {
-    ctx,
-    sounds,
-    cs,
-    t: 0,
-    dt: 0,
-    started: false,
-    script: newScript(),
-    reading: false,
-    look: 0,
-    shot: null,
-    shotT: 0,
-    fading: false,
-    ended: false,
-    endedFor: 0,
-    onEnd: () => {
-      r.ended = true;
-    },
-    heads: { mom: cs.mom.bone('Head'), kartik: cs.kartik.bone('Head') },
-    over: false,
-    blown: false,
-    rowing: true,
-    arms: findArms(cs.mom.group),
-    paddled: false,
-    lastYaw: 0,
-    pose: { x: 0, y: 0, z: 0, yaw: 0, roll: 0 },
-    calf: { x: 0, z: 0, y: 0, pitch: 0, visible: false, surfaced: 0 },
-    spot: { x: 0, z: 0 },
-    blades: makeBlades(cs, ctx),
-    strokes: picker(sounds.paddles),
-    blows: picker(sounds.blows),
-    motion: createMotion(cs.scene, stage.camera, {
-      fires: [],
-      fireflies: { kind: 'ring', y: WATER_LEVEL + 0.3 },
-    }),
-  };
-  r.motion.env.fireflies = true; // it is dawn: the banks are alive
-  return r;
-}
-
 async function run(
   ctx: DreamContext,
   sounds: Sounds,
@@ -438,10 +382,30 @@ async function run(
     // A failed load still ends the dream with the pages as text.
     return ctx.read(CLOSING_PAGES, done);
   }
+  try {
+    stageRide(ctx, sounds, cs, previous, done);
+  } catch {
+    // Anything thrown after the fade must not leave a black screen: same fallback as a failed build.
+    cs.dispose();
+    if (stage.scene === cs.scene) stage.scene = previous;
+    void ctx.overlay.fade(false, RIDE.fadeMs);
+    ctx.read(CLOSING_PAGES, done);
+  }
+}
+
+/** Builds the ride around the loaded scene, wires its teardown and starts it. May throw; `run` catches. */
+function stageRide(
+  ctx: DreamContext,
+  sounds: Sounds,
+  cs: CanoeScene,
+  previous: THREE.Scene,
+  done: () => void,
+): void {
+  const { stage } = ctx;
+  const r = makeRide(ctx, sounds, cs);
   const water = ctx.audio.loop(sounds.water, VOLUME.water);
   const birds = sounds.birds ? ctx.audio.loop(sounds.birds, 0) : null;
   const graded = ctx.grade('sunrise');
-  const r = makeRide(ctx, sounds, cs);
   let live = true;
   const teardown = (finished = false): void => {
     if (!live) return;

@@ -313,9 +313,22 @@ export interface CanoeStage {
 
 /** Builds the whole sunrise forest river; `length` is how far down the river (metres) the ride goes. */
 export async function buildCanoeScene(length: number, stage: CanoeStage): Promise<CanoeScene> {
+  const scene = new THREE.Scene();
+  try {
+    return await fillCanoeScene(scene, length, stage);
+  } catch (error) {
+    disposeScene(scene); // terrain, water and the shadow cascades are already in it
+    throw error;
+  }
+}
+
+async function fillCanoeScene(
+  scene: THREE.Scene,
+  length: number,
+  stage: CanoeStage,
+): Promise<CanoeScene> {
   const zNear = TERRAIN.behind;
   const zFar = -length - TERRAIN.ahead;
-  const scene = new THREE.Scene();
   const lights = createWorldLights(scene);
   attachKeyShadows(lights.key, stage.tier); // the sun's shadows: the forest, the canoe, Mom
   applyLighting(lights, LIGHTING.sunrise);

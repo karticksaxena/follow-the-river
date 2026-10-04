@@ -89,7 +89,6 @@ export function beginPhase(f: Flow): void {
   fish.reset();
   sys.world.railing?.reset();
   sys.scares.reset();
-  if (night) fish.arm(strikesFor(run.live.fed), styleFor(run.live.fed));
   const cleared = night ? save.wave : 0;
   run.waves = newWaveState(cleared);
   run.interact = null;
@@ -109,7 +108,8 @@ export function beginPhase(f: Flow): void {
   const at = spawnFor(save.phase, area, cleared);
   ctx.player.teleport(at.x, at.z, at.yaw);
   sys.world.lights.sky.position.set(at.x, 0, at.z); // the dome follows the player; paused frames skip that
-  f.onReset();
+  f.onReset(); // may reset the fish (ending.cancel), so arm her after it
+  if (night) fish.arm(strikesFor(run.live.fed), styleFor(run.live.fed));
 }
 
 /** Days 2 and 3 name their place on the title card (Day 1 stays plain). */
