@@ -1,3 +1,4 @@
+import * as THREE from 'three/webgpu';
 import { disposeScene } from '../../engine/dispose';
 import type { DreamContext } from '../types';
 import { createHud, type Hud } from './hud';
@@ -15,6 +16,7 @@ import {
 } from './intro-scene';
 import { applyDim, LIGHTING } from './lighting';
 import { createMomActor, TURN_RATE, wrapAngle, type MomActor } from './mom-actor';
+import { lookAt } from './rig';
 import { introVoice, stopVoice, voiceHooks } from './voice';
 
 export type IntroStep =
@@ -60,6 +62,12 @@ export const INTRO_PAGES: Readonly<Record<ActiveStep, readonly string[]>> = {
   ],
 };
 
+/** What Mom's head follows: you while a page of hers is open, the TV during the news. */
+export function momGaze(step: IntroStep, reading: boolean): 'you' | 'tv' | null {
+  if (reading) return 'you';
+  return step === 'news' ? 'tv' : null;
+}
+
 export interface Intro {
   dispose(): void;
 }
@@ -67,6 +75,9 @@ export interface Intro {
 const THROW_DELAY = 0.7; // Mom's wind-up before the pack leaves her hand
 const TAKE_WAIT = 3.5; // pack flight + splash + the orca rising and sinking, watched unpaused
 const FILM_HOLD = 1.5; // Mom raises her phone before the last page
+const GAZE = { weight: 0.8, yaw: 1.1, pitch: 0.5 } as const; // head-turn knobs
+const GAZE_TARGET = new THREE.Vector3();
+const TV_EYE = new THREE.Vector3(AT.tv.x, 1, AT.tv.z);
 const TURN_WAIT = 0.4; // Mom turns to face you before she speaks (~90% of the turn at TURN_RATE)
 const LOOK_TIME = 1.2; // the camera eases toward the water this long when the pack is thrown
 const WATER_VOLUME = 0.4;
@@ -86,6 +97,8 @@ interface State {
   step: IntroStep;
   inside: boolean;
   busy: boolean;
+  /** A page of Mom's is open (the game is paused, but she keeps animating and looks at you). */
+  reading: boolean;
   disposed: boolean;
   time: number;
   /** Seconds left of easing the camera toward the river. */
@@ -132,7 +145,17 @@ function makeIo(ctx: DreamContext, st: State): Io {
   return {
     // Stray-style: Mom and the TV anchor 'speak' each line without words.
     read: (pages) =>
-      new Promise((resolve) => ctx.read(pages, resolve, voiceHooks(ctx.audio, introVoice))),
+      new Promise((resolve) => {
+        st.reading = pages.some((p) => p.startsWith('Mom:'));
+        ctx.read(
+          pages,
+          () => {
+            st.reading = false;
+            resolve();
+          },
+          voiceHooks(ctx.audio, introVoice),
+        );
+      }),
     wait: (seconds) =>
       new Promise((resolve) => {
         st.waitLeft = seconds;
@@ -257,7 +280,8 @@ function riverActions(
       await actor.walkTo([AT.momRiverBack]); // backs off a step
       if (st.disposed) return;
       actor.faceTo(AT.momRiver.x + 1, AT.momRiver.z); // back to the water, phone up
-      mom.play('Idle_Gun_Pointing');
+      sc.phone.visible = true; // stays up while the last page is open
+      mom.play('Film');
       await wait(FILM_HOLD);
       if (st.disposed) return;
       await read(INTRO_PAGES.goodbye.slice(3));
@@ -288,18 +312,22 @@ function makePerform(actions: Actions, st: State, hud: Hud, onDone: () => void) 
   };
 }
 
+/** Mom's animation and head, also run while a page is open so she never freezes mid-pose. */
+function animateMom(sc: IntroScene, st: State, camera: THREE.Camera, dt: number): void {
+  sc.mom.update(dt);
+  const gaze = momGaze(st.step, st.reading);
+  if (!gaze || !sc.mom.group.visible) return;
+  const target = gaze === 'you' ? camera.getWorldPosition(GAZE_TARGET) : TV_EYE;
+  lookAt(sc.mom.bone('Head'), target, GAZE.weight, GAZE);
+}
+
 /** Per-frame motion: Mom, the TV picture and flicker, the orca, and the timed waits. */
-function makeTick(
-  sc: IntroScene,
-  st: State,
-  actor: MomActor,
-  camera: { position: { x: number; z: number }; rotation: { y: number } },
-) {
+function makeTick(sc: IntroScene, st: State, actor: MomActor, camera: THREE.PerspectiveCamera) {
   const cam = camera.position;
   return (dt: number): void => {
     st.time += dt;
     actor.update(dt);
-    sc.mom.update(dt);
+    animateMom(sc, st, camera, dt);
     if (st.look > 0) {
       st.look -= dt;
       const ease = 1 - Math.exp(-TURN_RATE * dt);
@@ -349,6 +377,7 @@ export async function runIntro(
     step: 'news',
     inside: true,
     busy: false,
+    reading: false,
     disposed: false,
     time: 0,
     look: 0,
@@ -366,7 +395,11 @@ export async function runIntro(
   const stop = ctx.stage.addUpdater((dt) => {
     const pressed = ctx.keys.consumePress('KeyE');
     sc.lights.sky.position.set(cam.x, 0, cam.z);
-    if (ctx.isPaused() || st.disposed) return; // frozen while pages / the pause menu are open
+    if (st.disposed) return;
+    if (ctx.isPaused()) {
+      animateMom(sc, st, ctx.stage.camera, dt); // frozen, except Mom keeps her pose alive
+      return;
+    }
     tick(dt);
     if (st.busy || st.step === 'done') return;
     const spot = spots[st.step];

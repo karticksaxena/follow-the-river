@@ -1,8 +1,18 @@
+import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
 import { resolveCircle, type Box } from '../../engine/collide';
 import { PLAYER_RADIUS } from '../../engine/player';
-import { INTRO_PAGES, nextIntroStep, type IntroStep } from './intro';
-import { AT, DOOR_CAP, MOM_PATH, OUTSIDE_COLLIDERS, REACH, ROOM_COLLIDERS } from './intro-scene';
+import { INTRO_PAGES, momGaze, nextIntroStep, type IntroStep } from './intro';
+import {
+  AT,
+  createCharacter,
+  DOOR_CAP,
+  MOM_PATH,
+  OUTSIDE_COLLIDERS,
+  REACH,
+  ROOM_COLLIDERS,
+} from './intro-scene';
+import { makePhone } from './phone';
 
 /** A free standing point (not pushed by any collider) within `reach` of `at`. */
 function reachable(at: { x: number; z: number }, reach: number, boxes: readonly Box[]): boolean {
@@ -92,5 +102,69 @@ describe('intro', () => {
     expect(pathIsClear([AT.momRiver, { x: AT.momRiver.x + 1, z: 0 }], OUTSIDE_COLLIDERS)).toBe(
       false, // the water's edge really is the edge
     );
+  });
+});
+
+/** A one-bone rig scaled x100 like the Quaternius characters. */
+function rig(): ReturnType<typeof createCharacter> {
+  const scene = new THREE.Group();
+  const wrist = new THREE.Bone();
+  wrist.name = 'WristR';
+  wrist.scale.setScalar(100);
+  scene.add(wrist);
+  return createCharacter({
+    scene,
+    clips: [new THREE.AnimationClip('CharacterArmature|Idle', 1, [])],
+  });
+}
+
+describe('character.attach grip option', () => {
+  it('keeps the old behaviour by default: cancels the x100 and grips at the pack offset', () => {
+    const item = new THREE.Group();
+    rig().attach(item, 'WristR');
+    expect(item.scale.x).toBeCloseTo(0.01);
+    expect(item.position.y).toBeCloseTo(0.0012);
+  });
+
+  it('takes an explicit grip, and grip null leaves the prop where it was put', () => {
+    const c = rig();
+    const gripped = new THREE.Group();
+    c.attach(gripped, 'WristR', { grip: 0.05 });
+    expect(gripped.position.y).toBeCloseTo(0.0005);
+    const arm = new THREE.Group();
+    arm.position.set(0, 0.3, 0.2);
+    arm.scale.setScalar(2);
+    c.attach(arm, 'WristR', { grip: null, fitScale: false });
+    expect(arm.position.toArray()).toEqual([0, 0.3, 0.2]);
+    expect(arm.scale.x).toBe(2);
+  });
+});
+
+describe('the phone', () => {
+  it('is a small dark slab with a dim blue screen, hidden until Mom films', () => {
+    const phone = makePhone();
+    expect(phone.visible).toBe(false);
+    const [body, screen] = phone.children;
+    if (!body || !(screen instanceof THREE.Mesh)) throw new Error('phone parts');
+    const size = new THREE.Box3().setFromObject(body).getSize(new THREE.Vector3());
+    expect(size.toArray().map((v) => +v.toFixed(3))).toEqual([0.075, 0.15, 0.009]);
+    const mat: unknown = screen.material;
+    expect(mat instanceof THREE.MeshBasicMaterial && mat.color.getHex()).toBe(0x6f86b0);
+  });
+
+  it('shows during the last goodbye page, after the three Mom pages', () => {
+    const pages = INTRO_PAGES.goodbye;
+    expect(pages).toHaveLength(4);
+    expect(pages.slice(0, 3).every((p) => p.startsWith('Mom:'))).toBe(true);
+    expect(pages[3]).toMatch(/phone/);
+  });
+});
+
+describe("Mom's gaze", () => {
+  it('is on you while her page is open, on the TV during the news, free otherwise', () => {
+    expect(momGaze('mom-leaves', true)).toBe('you');
+    expect(momGaze('news', true)).toBe('you');
+    expect(momGaze('news', false)).toBe('tv');
+    expect(momGaze('throw', false)).toBeNull();
   });
 });

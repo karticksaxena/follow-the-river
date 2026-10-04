@@ -9,6 +9,7 @@ import { createFish, type Fish } from './fish';
 import { characterUrl, KIT_SCALE, kitUrl, propUrl } from './kits';
 import { applyDim, applyLighting, createWorldLights, LIGHTING, type WorldLights } from './lighting';
 import { createNewsScreen } from './news';
+import { makePhone, PHONE_GRIP } from './phone';
 import { addRiver, EDGE_X, plane } from './river';
 import { loadSounds, type Sounds } from './sounds';
 import { addRim } from './zombies/look';
@@ -99,6 +100,11 @@ function findClip(clips: readonly THREE.AnimationClip[], name: string): THREE.An
   return clip;
 }
 
+export interface AttachOptions {
+  grip?: number | null;
+  fitScale?: boolean;
+}
+
 export interface Character {
   group: THREE.Group;
   pack: THREE.Object3D;
@@ -106,8 +112,12 @@ export interface Character {
   rest: string;
   /** A bone by name (GLTFLoader strips '.': Wrist.R is WristR); throws if the rig lacks it. */
   bone(name: string): THREE.Object3D;
-  /** Parks `prop` in the hand of `bone`, scaled to cancel the rig's x100 and gripped at PACK_GRIP. */
-  attach(prop: THREE.Object3D, bone: string): void;
+  /**
+   * Parks `prop` in the hand of `bone`. By default it is scaled to cancel the rig's x100 and gripped
+   * at PACK_GRIP. `grip` (m down the fingers) overrides that; `grip: null` leaves the prop's position
+   * alone, and `fitScale: false` its scale (for a prop modelled in the bone's own frame).
+   */
+  attach(prop: THREE.Object3D, bone: string, opts?: AttachOptions): void;
   play(name: string, once?: boolean): void;
   update(dt: number): void;
   dispose(): void;
@@ -131,13 +141,17 @@ export function createCharacter(
     if (!found) throw new Error(`character has no ${name} bone`);
     return found;
   };
-  const attach = (item: THREE.Object3D, name: string): void => {
+  const attach = (
+    item: THREE.Object3D,
+    name: string,
+    { grip = PACK_GRIP, fitScale = true }: AttachOptions = {},
+  ): void => {
     const hand = bone(name);
     hand.add(item);
     group.updateMatrixWorld(true);
     const handScale = hand.getWorldScale(new THREE.Vector3()).x; // the rig is scaled x100
-    item.scale.setScalar(1 / handScale);
-    item.position.y = PACK_GRIP / handScale; // wrist +Y runs down the fingers: grip the item's top edge
+    if (fitScale) item.scale.setScalar(1 / handScale);
+    if (grip !== null) item.position.y = grip / handScale; // wrist +Y runs down the fingers
   };
   pack.visible = false;
   if (prop) attach(prop, propBone);
@@ -226,6 +240,7 @@ export interface IntroScene {
   news: ReturnType<typeof createNewsScreen>;
   tvLight: THREE.PointLight;
   mom: Character;
+  phone: THREE.Object3D;
   sounds: Sounds;
 }
 
@@ -271,10 +286,12 @@ export async function buildIntroScene(ctx: DreamContext): Promise<IntroScene> {
   const room = new THREE.Group();
   room.position.x = ROOM_X;
   room.add(roomModel, couch, tv, tvLight);
-  const mom = createCharacter(momAsset, pack);
+  const mom = createCharacter(momAsset, pack); // the pack: default grip (PACK_GRIP)
+  const phone = makePhone();
+  mom.attach(phone, 'WristR', { grip: PHONE_GRIP });
   mom.group.position.set(AT.momInside.x, 0, AT.momInside.z); // world, not room-local
   scene.add(room, mom.group);
   buildOutside(scene, house, fence);
   await texturesReady();
-  return { scene, lights, fish, news, tvLight, mom, sounds };
+  return { scene, lights, fish, news, tvLight, mom, phone, sounds };
 }
