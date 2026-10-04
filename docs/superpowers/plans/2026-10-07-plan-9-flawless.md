@@ -1312,3 +1312,115 @@ export const BEATS = [
 - Waves: `waves.ts`, the areas' `waves`, `play.ts tickWaves`/`spawnAmbush`, `phases.ts`.
 - Weapons: `gun.ts` (Armory), `weapons.ts` GUNS, `bow.ts`; sounds `public/assets/sounds/weapons/*` (CC0 Free Firearm Sound Library).
 - Downloaded this session: `scratchpad/plan9-sounds/` (`killer_whale.ogg/.wav` NPS public domain, `kayak-hq.mp3/.wav` CC0, `birds.ogg/.wav` CC0, `forest_birds.7z` CC0 by pauliuw), `scratchpad/plan9-nature/` (MegaKit Standard, CC0).
+
+---
+
+## 8. Track G: showcase-quality rendering, same theme (added 2026-10-04 at Kartik's request)
+
+Kartik, after browsing the threejs.org showcase: "These are minor upgrades... we can do much better. We do not want to change the theme but graphics can be made a lot better." Ruling: Track G replaces Tasks A13, A14, B1, B2, B3 (their content is folded in below) and runs right after A7, before A8. The theme stays: dark, foggy, horror, stylised low-poly characters, "never bright" at night, the sunrise the one warm exception.
+
+What makes the showcase scenes look good, and what we adopt (all verified in `node_modules/three` r186.1: `examples/jsm/tsl/display/{SSGINode,TRAANode,GTAONode,SSRNode,GodraysNode,DepthOfFieldNode,BloomNode,SMAANode,DenoiseNode}.js`, `examples/jsm/csm/CSMShadowNode.js`, `src/materials/nodes/VolumeNodeMaterial.js`, `examples/jsm/objects/SkyMesh.js`; usage read from the r186 examples `webgpu_postprocessing_ssgi`, `webgpu_postprocessing_traa`, `webgpu_shadowmap_csm`, `webgpu_volume_lighting`, `webgpu_sky`, saved in the scratchpad `three-examples/`):
+1. Physically based lighting everywhere: standard materials, image-based light from the sky, real shadows from the moon and sun (cascaded).
+2. Light you can see: volumetric fog lit by the flashlight, Mom's lantern and the moon; god rays at dawn.
+3. Clean, filmic images: full resolution, temporal AA, ambient occlusion or screen-space GI, AgX, a colour grade per scene, subtle bloom and grain.
+4. Real surfaces: CC0 PBR textures (Poly Haven, verified CC0 at polyhaven.com/license; the API `https://api.polyhaven.com/files/<id>` gives 1k `Diffuse` / `nor_gl` / `Rough` / `arm` jpgs) for wet asphalt, mud, forest floor and pebbles; wet reflective streets at night.
+5. Living nature: Quaternius MegaKit trees and plants (CC0), dense instanced grass, everything swaying in the wind.
+6. Small motion everywhere: mist wisps over the water, dust in the torch beam, fireflies in the forest, splash spray, campfire embers.
+
+Every G task needs:
+- a quality tier switch (`Low / Medium / High / Auto`, Auto default, in the pause menu, saved in settings);
+- the adaptive resolution from G1;
+- p95 frame time ≤ 16.7 ms on Kartik's Mac at the tier Auto settles on;
+- `?webgl` rendering;
+- before/after screenshots of the same eight spots (home, intro room, intro bank, Day 1 street, Night 1 wave, Night 2 corn, Night 3 lake, canoe), judged as a player: better, still dark, still the same game.
+
+### Task G1: The image pipeline (was A13)
+**Files:** `src/engine/stage.ts`, `src/engine/post.ts`, new `src/engine/quality.ts` (+test), new `src/engine/grade.ts` (TSL colour grade, +test of its pure parameter mix), `src/engine/settings.ts` (`graphics: 'low' | 'medium' | 'high' | 'auto'`), `src/engine/menus.ts` (pause row), `src/dreams/types.ts` + `session.ts` (`ctx.focus(on, distance)`, `ctx.grade(preset)`), flashlight/lantern/lighting retunes.
+- Full resolution with the adaptive scaler exactly as Task A13 specifies (`QUALITY` steps, hysteresis, ≥ 2 s between changes), plus tiers:
+  - Low = SMAA, no AO.
+  - Medium = GTAO (half res) + TRAA.
+  - High = SSGI (half res, `ssgi(color, depth, normal, camera)`) + TRAA.
+  - The MRT pass outputs `output`, `normal` (`normalView`, packed) and `velocity` (TRAA needs it), as in `webgpu_postprocessing_ssgi`.
+  - Auto starts at High and steps down (resolution first, then tier) when p95 is over budget.
+- AgX tone mapping, HDR bloom (threshold ≈ 1: only lamps, windows, the moon and the sun glow), film grain 0.08, the vignette kept but gentler.
+- `grade.ts`: a TSL grade node (lift/gamma/gain, saturation, split toning of shadows/highlights, contrast) with named presets per scene, switched and blended by the chapter and cutscenes:
+  - `night`: cold teal shadows, desaturated, blacks kept crushed and dark;
+  - `day`: overcast grey-green;
+  - `dusk`: rust;
+  - `flashback`: sepia-cold;
+  - `sunrise`: warm highlights, blue shadows.
+- Depth of field for cutscenes (`ctx.focus`), compiled once behind a black fade.
+- Retune under AgX by screenshot: the flashlight (a zombie at 0.5 m bright but not white), Mom's lantern (face lit, not blown), lit windows, the moon disc. Also the tank flashback (Mom must not be a pure silhouette).
+- Commit `feat: a filmic full-resolution image: TRAA, ambient occlusion or SSGI, AgX, colour grades, depth of field in cutscenes, adaptive quality`.
+
+### Task G2: Light: the physical sky, image-based lighting, moon and sun shadows, the real sunrise (was A14 + B1)
+**Files:** `src/engine/sky.ts`, `src/dreams/follow-the-river/lighting.ts` (+test), `world.ts`/`assemble.ts`, `canoe-scene.ts`, `ending.ts` (`dawn()`), `src/engine/models.ts` (Kenney Lambert → `MeshStandardMaterial`, roughness 0.85, metalness 0, keeping the colormap texture).
+- Everything Task A14 specifies: SkyMesh for dusk, dawn and sunrise; `mixPresetInto` per frame; the 14 s lake sunrise with the moon setting and the sun rising warm over the dam; the predawn match at the switch.
+- Night sky: the dark dome with a star field (about 1500 points, faint twinkle) and a haloed moon. Day: a drifting overcast layer (B1).
+- Image-based light:
+  - a 128 px PMREM of the current sky (`new PMREMGenerator(renderer).fromScene(skyScene)`) assigned as `scene.environment`;
+  - refreshed only when the preset changes (and every 0.5 s during the dawn blend);
+  - intensity per preset (`environmentIntensity`: night 0.15, day 0.5, sunrise 1).
+- Shadows:
+  - the key light uses `CSMShadowNode` (3 cascades, `maxFar` 80 m, 2048 maps) following the camera;
+  - moon shadows at night (soft, weak), sun shadows at sunrise and in the canoe;
+  - zombies, Mom, Dras, Kartik and props cast; ground and water receive.
+- Commit `feat: a physical sky, image-based light, cascaded moon and sun shadows, and the real sunrise`.
+
+### Task G3: Light you can see: volumetric fog, the torch beam in the mist, god rays at dawn
+**Files:** new `src/dreams/follow-the-river/atmosphere.ts` (+test of its pure density/height function), the `post.ts` hook for the volumetric pass, `ending.ts` (dawn god rays).
+- A `VolumeNodeMaterial` box (about 60 × 12 × 60 m) that follows the player, on its own layer. As `webgpu_volume_lighting` does, a quarter-resolution pass renders it, then it is gaussian-blurred and added to the scene colour.
+  - Density = low ground mist (thicker near the water and in the corn, thinning with height) × slow drifting 3D noise.
+  - `steps` 8–12, with `bayer16` dithering.
+  - Lights that scatter: the flashlight spot (the beam becomes visible in the mist, the core horror image), Mom's lantern, the moon (weak), the campfire.
+- Tiers: Low off (exponential height fog only), Medium 8 steps, High 12 steps.
+- Dawn: `godrays(depth, camera, sunLight)` through the forest at the lake for the sunrise (needs G2's shadowed sun), fading out once the sun is up.
+- Still "never bright": mist density and scattering tuned so nights stay dark. Screenshots of the beam at 2 m, 8 m and 15 m.
+- Commit `feat: volumetric mist: the torch beam and the lantern light the fog; god rays at dawn`.
+
+### Task G4: The water
+**Files:** `src/dreams/follow-the-river/water.ts` (+test), `river.ts`.
+- Keep the planar reflection, and add:
+  - depth-based shoreline foam (scene depth vs water depth in the shader);
+  - a sharper normal-mapped ripple layer (procedural, two scrolling scales);
+  - a moon/sun specular glint that follows the light direction;
+  - a darker depth fade toward the middle of the river.
+- Still dark at night. No rain (theme).
+- Commit `feat: the river: foam at the banks, finer ripples, moonlight glint, depth`.
+
+### Task G5: Real surfaces (CC0 PBR textures)
+**Files:** `tools/assets/README.md` (Poly Haven downloads), `public/assets/textures/<name>/{diff,nor,arm}.jpg` (1k, resized to 512 where enough), new `src/engine/surfaces.ts` (texture set loader, `repeat`, anisotropy), the ground planes in `world.ts`/`banks.ts`/`river.ts`/`canoe-scene.ts`/`intro-scene.ts`, `public/assets/LICENSES.md`.
+- Pick by eye from the Poly Haven API (verified CC0):
+  - wet asphalt for the city road, with low roughness in puddle patches at night so the streetlights and windows reflect;
+  - mud and grass-mud for the natural banks and fields;
+  - forest floor for Night 3;
+  - pebbles for the lake shore;
+  - cobbles/concrete for the embankment.
+- Diffuse + normal + ARM (AO/rough/metal), tiled per metre, darkened to match the palette.
+- Commit `feat: textured ground: wet asphalt, mud, forest floor, pebbles` (+ LICENSES rows).
+
+### Task G6: Living nature (was B2, plus grass)
+Everything Task B2 specifies: the MegaKit import with meshopt + webp textures, the triangle budget with `-far` variants and Kenney silhouettes beyond, wind in leaves and grass. Plus:
+- dense instanced grass: thousands of blades from `Grass_Common_Short/Tall` and `Grass_Wispy_Tall` as instanced meshes near the player, fading out with distance, swaying in the wind;
+- ferns and pebbles scattered on the banks;
+- the canoe scene's banks rebuilt from MegaKit.
+
+Commit `feat: Quaternius' trees and plants and dense grass, all moving in the wind`.
+
+### Task G7: Small motion (was B3, plus)
+Everything Task B3 specifies (splash spray, river mist wisps), plus, all pooled and allocation-free:
+- dust motes drifting in the flashlight beam (a few hundred tiny particles inside the cone, lit only by the beam);
+- fireflies over the Night 3 forest edge and the canoe banks at dawn-twilight;
+- embers rising from the campfires;
+- falling leaves in the forest by day.
+
+Commit `feat: splash spray, mist, dust in the torch beam, fireflies, embers`.
+
+### Task G8: Characters and Dras under the new light
+**Files:** `zombies/body.ts`/`look.ts`, `intro-scene.ts` (`createCharacter`), `fish-state.ts`.
+- Characters on standard materials (skin roughness 0.6, clothes 0.85).
+- A faint moon-coloured rim light (TSL fresnel term scaled by the night preset), so zombie silhouettes read against the fog without brightening the scene.
+- Dras' wet sheen (roughness 0.25 on skin, clearcoat-like specular), her eyes catching the light.
+- Commit `feat: characters and Dras lit like the world around them`.
+
+New execution order (Ruling): A7 → G1 → G2 → G3 → G4 → G5 → G6 → G7 → G8 → A8 → A9 → A10 → A11 → A12 → A15 → A16 → A17 (B4 optional, last). A13, A14, B1, B2 and B3 are done inside G1, G2, G6 and G7.
