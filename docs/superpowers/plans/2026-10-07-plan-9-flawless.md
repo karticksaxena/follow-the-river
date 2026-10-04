@@ -3,6 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: **`superpowers:subagent-driven-development`** (Kartik's choice, 2026-10-04: "use subagent driven development, it works better"), together with `grounded-research`, `superpowers:executing-plans` discipline (ledger, TDD, verification) and the repo game skill `webgpu-threejs-tsl`. Implementers and reviewers are Sonnet subagents (`model: "sonnet"`, Kartik's standing rule; it overrides the skill's "more capable model" escalation). Steps use checkbox (`- [ ]`) syntax.
 > - Use `grounded-research` for any asset, sound, API or version; use the repo skill `webgpu-threejs-tsl` for every three.js / TSL change.
 > - Subagents run on Sonnet only (`model: "sonnet"`). Blender and asset-building tasks go to Sonnet agents with exact briefs; the controller reviews their output by eye.
+> - Blender: the project Blender MCP (`.mcp.json`; `execute_blender_code`, `get_screenshot_of_window_as_image`, `render_viewport_to_path`, `get_objects_summary`) for live modelling, posing and quick looks in Tasks A7, A10 and B4, plus headless Blender (`--background --python tools/blender/<script>.py`) so every asset is rebuildable from a committed script.
 > - Work in a git worktree `.claude/worktrees/plan-9` (branch `plan-9`) with its own Vite port (5180). :5173 is Kartik's: never touch it.
 > - Commit per task (upgrades in their own commits so a regression can be bisected). When everything is verified, fast-forward local `main`. NEVER push.
 
