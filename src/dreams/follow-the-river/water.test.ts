@@ -91,6 +91,36 @@ describe('createWaterMesh', () => {
     again.material.dispose();
   });
 
+  it('draws no water surface of the group while the shared reflection renders', () => {
+    const river = createWaterMesh(10, 10, RIVER_FLOW, 'pass-group');
+    const lake = createWaterMesh(10, 10, LAKE_FLOW, 'pass-group');
+    const scene = new THREE.Scene();
+    scene.add(river, lake);
+    river.position.y = -1;
+    scene.updateMatrixWorld(true);
+    const camera = new THREE.PerspectiveCamera();
+    camera.position.set(0, 5, 0);
+    camera.updateMatrixWorld(true);
+    const seen: boolean[][] = [];
+    const renderer = {
+      getDrawingBufferSize: (v: THREE.Vector2) => v.set(100, 100),
+      getRenderTarget: () => null,
+      getMRT: () => null,
+      setMRT: () => undefined,
+      setRenderTarget: () => undefined,
+      autoClear: true,
+      coordinateSystem: 2000,
+      render: () => seen.push([river.material.visible, lake.material.visible]),
+    };
+    const { reflector: base } = waterReflection(river.material);
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    base.updateBefore({ scene, camera, renderer, material: river.material } as never);
+    expect(seen).toEqual([[false, false]]);
+    expect([river.material.visible, lake.material.visible]).toEqual([true, true]);
+    river.material.dispose();
+    lake.material.dispose();
+  });
+
   it('frees the reflection with the scene', () => {
     const scene = new THREE.Scene();
     const mesh = createWaterMesh(10, 10, LAKE_FLOW);

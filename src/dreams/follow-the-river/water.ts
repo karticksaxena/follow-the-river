@@ -191,8 +191,8 @@ export function createRiverMaterial(
   look: WaterLook = RIVER_FLOW,
   group?: string,
 ): THREE.MeshStandardNodeMaterial {
-  const { reflection, release } = acquireReflection(group);
   const material = new THREE.MeshStandardNodeMaterial({ metalness: 0.15 });
+  const { reflection, release } = acquireReflection(group, material);
   material.userData.reflection = reflection;
   buildNodes(material, look, reflection);
   live.set(material, look);
@@ -206,11 +206,29 @@ export function createRiverMaterial(
 
 interface SharedReflection {
   reflection: THREE.ReflectorNode;
-  refs: number;
+  /** Every water material drawing this reflection: none may be drawn while it renders. */
+  materials: Set<THREE.Material>;
 }
 const groups = new Map<string, SharedReflection>();
 
-function newReflection(): THREE.ReflectorNode {
+const hiddenNow: THREE.Material[] = [];
+
+/** Hides `materials` for the pass `run`, then shows again those that were visible. Allocation-free. */
+function withHidden<T>(materials: ReadonlySet<THREE.Material>, run: () => T): T {
+  hiddenNow.length = 0;
+  materials.forEach((m) => {
+    if (m.visible) hiddenNow.push(m);
+    m.visible = false;
+  });
+  try {
+    return run();
+  } finally {
+    for (const m of hiddenNow) m.visible = true;
+    hiddenNow.length = 0;
+  }
+}
+
+function newReflection(materials: ReadonlySet<THREE.Material>): THREE.ReflectorNode {
   const reflection = reflector({ resolutionScale: reflectionScale(waterTier), bounces: false });
   const base = reflection.reflector;
   // The virtual camera is a clone of the player's: it must not see the unreflected layer.
@@ -222,7 +240,10 @@ function newReflection(): THREE.ReflectorNode {
   };
   // The reflection samples the shadow maps the main camera drew; it never redraws them.
   const updateBefore = base.updateBefore.bind(base);
-  base.updateBefore = (frame) => withoutShadowUpdates(() => updateBefore(frame));
+  // ReflectorNode hides only the material that triggered it; a second water surface in the group
+  // would sample the render target being written (a GPU validation error), so hide them all.
+  base.updateBefore = (frame) =>
+    withoutShadowUpdates(() => withHidden(materials, () => updateBefore(frame)));
   return reflection;
 }
 
@@ -230,19 +251,28 @@ function newReflection(): THREE.ReflectorNode {
  * The reflector for water `group` (all surfaces of a group lie in one plane, so one reflection
  * pass serves them all; no group: its own). `release` frees it when its last user is disposed.
  */
-function acquireReflection(group?: string): {
+function acquireReflection(
+  group: string | undefined,
+  material: THREE.Material,
+): {
   reflection: THREE.ReflectorNode;
   release: () => void;
 } {
-  const entry = (group && groups.get(group)) || { reflection: newReflection(), refs: 0 };
-  if (group) groups.set(group, entry);
-  entry.refs++;
+  let entry = group ? groups.get(group) : undefined;
+  if (!entry) {
+    const materials = new Set<THREE.Material>();
+    entry = { reflection: newReflection(materials), materials };
+    if (group) groups.set(group, entry);
+  }
+  const shared = entry;
+  shared.materials.add(material);
   return {
-    reflection: entry.reflection,
+    reflection: shared.reflection,
     release() {
-      if (--entry.refs > 0) return;
-      if (group && groups.get(group) === entry) groups.delete(group);
-      entry.reflection.dispose();
+      shared.materials.delete(material);
+      if (shared.materials.size > 0) return;
+      if (group && groups.get(group) === shared) groups.delete(group);
+      shared.reflection.dispose();
     },
   };
 }
