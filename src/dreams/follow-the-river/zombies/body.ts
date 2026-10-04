@@ -13,7 +13,7 @@ import {
   type Thought,
   type Tuning,
 } from './brain';
-import { CLIP_FOR, LOOPING, pickOutfit } from './look';
+import { addRim, CLIP_FOR, LOOPING, pickOutfit } from './look';
 import { steer } from './steer';
 import { THROWN, thrownPose } from './thrown';
 
@@ -89,7 +89,10 @@ export function createBody(i: number, assets: Record<'m' | 'f', SkinnedAsset>): 
   });
   for (const node of skinned) if (node.name !== outfit) node.removeFromParent();
   const kept = skinned.find((node) => node.name === outfit) ?? null;
-  if (kept) kept.frustumCulled = false;
+  if (kept) {
+    kept.frustumCulled = false;
+    addRim(kept);
+  }
   const mixer = new THREE.AnimationMixer(root);
   const actions = buildActions(mixer, asset.clips);
   root.visible = false;

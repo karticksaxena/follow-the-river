@@ -11,6 +11,7 @@ import {
   TORCH_EXPOSURE,
   torchAim,
   torchScale,
+  WATCH,
 } from './flashlight';
 
 const EYE = 1.6;
@@ -155,5 +156,22 @@ describe('inBeamDistance', () => {
     expect(inBeamDistance(eye, fwd, 0, 1.6, -3)).toBeCloseTo(3);
     expect(inBeamDistance(eye, fwd, 5, 1.6, -3)).toBe(Infinity);
     expect(inBeamDistance(eye, fwd, 0, 1.6, 3)).toBe(Infinity);
+  });
+});
+
+describe('the eye adjusts to Dras too', () => {
+  it('has a slot of her own, and the nearest of all slots sets the exposure', () => {
+    expect(new Set(Object.values(WATCH)).size).toBe(Object.keys(WATCH).length);
+    const cam = new THREE.PerspectiveCamera();
+    cam.updateMatrixWorld(true); // looks down -Z from the origin
+    const torch = createFlashlight(cam);
+    torch.apply(100, 0); // nobody watched: full
+    const full = torch.light.intensity;
+    torch.watch(WATCH.dras, 0, 0, -2);
+    torch.apply(100, 0);
+    expect(torch.light.intensity).toBeLessThan(full);
+    torch.clearWatch(WATCH.dras);
+    torch.apply(100, 0);
+    expect(torch.light.intensity).toBe(full);
   });
 });

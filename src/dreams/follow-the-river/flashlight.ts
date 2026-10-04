@@ -46,8 +46,8 @@ export function inBeamDistance(
 }
 
 /** Who the eye adjusts to: independent slots, each cleared and refilled by its owner every frame. */
-export const WATCH = { horde: 0, mom: 1 } as const;
-const SLOTS = 2;
+export const WATCH = { horde: 0, mom: 1, dras: 2 } as const;
+const SLOTS = 3;
 
 /** Where the torch points, in camera space: slightly inward, `FLASHLIGHT.pitch` below the view. Writes `out`. */
 export function torchAim<T extends { set(x: number, y: number, z: number): unknown }>(out: T): T {
@@ -151,7 +151,7 @@ export function createFlashlight(camera: THREE.Camera, tier: Tier = 'high'): Fla
     apply(battery, time, dt = Infinity) {
       const wasOn = light.intensity > 0;
       const target = torchScale(
-        Math.min(nearest[WATCH.horde], nearest[WATCH.mom]),
+        Math.min(nearest[WATCH.horde], nearest[WATCH.mom], nearest[WATCH.dras]),
         FLASHLIGHT.intensity,
         FLASHLIGHT.decay,
         TORCH_EXPOSURE.cap,

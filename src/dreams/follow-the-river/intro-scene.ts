@@ -11,6 +11,7 @@ import { applyDim, applyLighting, createWorldLights, LIGHTING, type WorldLights 
 import { createNewsScreen } from './news';
 import { addRiver, EDGE_X, plane } from './river';
 import { loadSounds, type Sounds } from './sounds';
+import { addRim } from './zombies/look';
 
 // Tuning knobs (metres). Everything below is in WORLD coordinates. The room sits far from the
 // river so fog hides it from outside.
@@ -122,6 +123,7 @@ export function createCharacter(
   const group = new THREE.Group();
   const body = clone(asset.scene);
   body.traverse((n) => (n.frustumCulled = false));
+  addRim(body);
   group.add(body);
   const bone = (name: string): THREE.Object3D => {
     const found =

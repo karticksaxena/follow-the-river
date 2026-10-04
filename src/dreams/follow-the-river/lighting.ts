@@ -20,6 +20,7 @@ import {
 import type { LightColors } from './light-colors';
 import type { LightPreset } from './light-presets';
 import { setWaterGlint } from './water';
+import { setRim } from './zombies/look';
 
 export * from './light-presets';
 
@@ -213,6 +214,7 @@ export function applyLighting(
   physical.visible = !!preset.sky;
   setOpacity(stars, frame.stars ?? night);
   setOpacity(moon, moonAmount);
+  setRim(moonAmount);
   setOpacity(halo, moonAmount);
   place(moon, d, MOON_RADIUS);
   place(halo, d, MOON_RADIUS * MOON_HALO);

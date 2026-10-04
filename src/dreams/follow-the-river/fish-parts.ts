@@ -51,7 +51,22 @@ export function makeWake(): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMater
 const FIN_HEIGHT = ANATOMY.finHeight;
 const FIN_CLEARANCE = 0.8; // fin top above the water while cruising (most of the fin shows)
 const BACK_CLEARANCE = 0.25; // back above the water while surfacing
-const WET_ROUGHNESS = 0.3;
+/** Roughness of her wet skin (glossy: the moon and torch streak on it) and of her glassy eye. Sickness dulls the skin's. */
+export const WET = { skin: 0.25, eye: 0.08 } as const;
+
+/** Where her eye is (the torch's eye adjustment aims here) for a body centre `(x, y, z)` facing `yaw`. Writes `out`. */
+export function headPoint(
+  x: number,
+  y: number,
+  z: number,
+  yaw: number,
+  out: { x: number; y: number; z: number },
+): typeof out {
+  out.x = x - Math.sin(yaw) * ANATOMY.eye.ahead;
+  out.y = y + ANATOMY.eye.up;
+  out.z = z - Math.cos(yaw) * ANATOMY.eye.ahead;
+  return out;
+}
 /** Seconds between surfacings: random in [18, 30]. */
 export const SURFACE_MIN = 18;
 export const SURFACE_MAX = 30;
@@ -97,13 +112,14 @@ export function topOf(body: THREE.Object3D): number {
   return new THREE.Box3().setFromObject(body).max.y;
 }
 
-/** A wet sheen on her skin so moon and flashlight catch it (still dark); the eye stays glossy. */
+/** A wet sheen on her skin so moon and flashlight catch it (still dark), and a glassy eye that glints. */
 export function makeWet(body: THREE.Object3D): void {
   body.traverse((n) => {
     if (!(n instanceof THREE.Mesh)) return;
     const m: unknown = n.material;
-    if (m instanceof THREE.MeshStandardMaterial && SKIN_MATERIALS.includes(m.name))
-      m.roughness = WET_ROUGHNESS;
+    if (!(m instanceof THREE.MeshStandardMaterial)) return;
+    if (SKIN_MATERIALS.includes(m.name)) m.roughness = WET.skin;
+    else if (m.name === 'orca-eye') m.roughness = WET.eye;
   });
 }
 

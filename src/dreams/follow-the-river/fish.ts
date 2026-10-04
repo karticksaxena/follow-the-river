@@ -9,6 +9,7 @@ import {
   FIGHT,
   fightSurfacing,
   FISH,
+  headPoint,
   inWaterX,
   LANE_OFFSET,
   nextSurfacing,
@@ -67,6 +68,8 @@ export interface Fish {
   setGuards(points: readonly { x: number; z: number }[]): void;
   /** Where the zombie she struck last was (null before the first strike): the ending reads it. */
   readonly lastStrike: { readonly x: number; readonly z: number } | null;
+  /** Where her eye is now (read-only; writes `out`), for the torch's eye adjustment. Null before she is placed. */
+  head(out: { x: number; y: number; z: number }): typeof out | null;
   /** Night: strikes left this phase. */
   readonly strikes: number;
   /** Arms `strikes` for the night, struck in `style` (a normal night's by default). */
@@ -428,6 +431,10 @@ export async function createFish(
     get onEat() {
       return f.onEat;
     },
+    head: (out) =>
+      f.placed
+        ? headPoint(f.root.position.x, f.root.position.y, f.root.position.z, f.yaw, out)
+        : null,
     get strikes() {
       return f.strikes;
     },
