@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { ANATOMY, SKIN_MATERIALS } from './dras-anatomy';
 import type { StrikeStyle } from './orca-grab';
 import { WATER_Y } from './river';
 
@@ -46,9 +47,8 @@ export function makeWake(): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMater
   return mesh;
 }
 
-// Heights (metres). orca.py: LENGTH 7, dorsal fin outline rises 1.45 above the back.
-/** Height of the dorsal fin above the back (tools/blender/orca.py `fins`). */
-const FIN_HEIGHT = 1.45;
+/** Height of the dorsal fin above the back (measured from the model). */
+const FIN_HEIGHT = ANATOMY.finHeight;
 const FIN_CLEARANCE = 0.8; // fin top above the water while cruising (most of the fin shows)
 const BACK_CLEARANCE = 0.25; // back above the water while surfacing
 const WET_ROUGHNESS = 0.3;
@@ -84,12 +84,13 @@ export function topOf(body: THREE.Object3D): number {
   return new THREE.Box3().setFromObject(body).max.y;
 }
 
-/** A wet sheen so moon and flashlight catch the orca (still dark). */
+/** A wet sheen on her skin so moon and flashlight catch it (still dark); the eye stays glossy. */
 export function makeWet(body: THREE.Object3D): void {
   body.traverse((n) => {
     if (!(n instanceof THREE.Mesh)) return;
     const m: unknown = n.material;
-    if (m instanceof THREE.MeshStandardMaterial) m.roughness = WET_ROUGHNESS;
+    if (m instanceof THREE.MeshStandardMaterial && SKIN_MATERIALS.includes(m.name))
+      m.roughness = WET_ROUGHNESS;
   });
 }
 
@@ -170,11 +171,11 @@ export function cruiseHeading(vx: number, vz: number): number {
 
 export const smooth = (s: number): number => s * s * (3 - 2 * s);
 
-/** orca.py LENGTH 7: half the body, and how far its nose and tail must stay from the bank (m). */
-const HALF_LENGTH = 3.5;
+/** Half the body, and how far its nose and tail must stay from the bank (m). */
+const HALF_LENGTH = ANATOMY.halfLength;
 const BANK_MARGIN = 0.6;
-/** Half the body's width (m): placeholder until measured from the model (Task A7). */
-export const BODY_HALF_WIDTH = 0.9;
+/** Half the body's width (m), measured from the model. */
+export const BODY_HALF_WIDTH = ANATOMY.halfWidth;
 
 /**
  * The smallest x that keeps the whole orca (nose and tail) in the river when it faces `yaw`:

@@ -44,6 +44,21 @@ pnpm dlx @gltf-transform/cli@latest optimize in.glb out.glb --compress meshopt \
   --join false --flatten false --palette false --instance false --simplify false --texture-compress auto
 ```
 
+## Dras (orca.glb)
+
+`tools/blender/orca.py` writes the raw GLB and prints an `ANATOMY {...}` line (measured metres). Rebuild, compress, then copy the
+numbers into `src/dreams/follow-the-river/dras-anatomy.ts` (never eyeball them):
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
+  --python tools/blender/orca.py -- /tmp/orca-raw.glb
+pnpm dlx @gltf-transform/cli@latest optimize /tmp/orca-raw.glb public/assets/characters/orca.glb --compress meshopt \
+  --join false --flatten false --palette false --instance false --simplify false --texture-compress auto
+```
+
+Materials `orca-black|white|grey|mouth|eye`, bones `Head Jaw Spine1-5 Tail1 Tail2`, clips `Swim` `Lunge`. The `Jaw` rest
+quaternion is not identity: open it by composing `-open` about local X on top of it.
+
 ## Kenney kits
 
 Download the kits from kenney.nl (City Kit Commercial, City Kit Roads, Car Kit, Survival Kit, City Kit Suburban). Copy the

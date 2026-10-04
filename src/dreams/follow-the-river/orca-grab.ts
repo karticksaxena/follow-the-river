@@ -1,3 +1,4 @@
+import { ANATOMY } from './dras-anatomy';
 import { EDGE_X, WATER_Y } from './river';
 import type { Horde } from './zombies/horde';
 
@@ -51,8 +52,8 @@ export const GRAB = {
   shakeHz: 3.2,
   shakeLift: 0.15,
   /** Where the jaws hold the zombie: at the nose tip, just below the centre line. */
-  jawAhead: 3.5,
-  jawBelow: 0.1,
+  jawAhead: ANATOMY.bite.ahead,
+  jawBelow: ANATOMY.bite.below,
   /** A zombie further than this from the jaws when they close got away. */
   biteRange: 2.5,
   /** Root depth it slides back to, below cruise depth: the zombie goes under too. */
@@ -61,7 +62,7 @@ export const GRAB = {
 
 /** Facing the land (−x): the orca's nose points along −x. */
 export const FACE_LAND = Math.PI / 2;
-const HALF_LENGTH = 3.5;
+const HALF_LENGTH = ANATOMY.halfLength;
 /** Feet to the middle of a zombie: the part the jaws hold. */
 const ZOMBIE_MID = 0.9;
 

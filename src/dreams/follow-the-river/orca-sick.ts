@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { SKIN_MATERIALS } from './dras-anatomy';
 import type { Phase } from './state';
 
 /**
@@ -31,12 +32,13 @@ const well = new THREE.Color(1, 1, 1);
 const sick = new THREE.Color(SICK.tint);
 const sickMist = new THREE.Color(SICK.mist.sick);
 
-/** Tints every material of the orca toward SICK.tint by `k` (0..1). */
+/** Tints the orca's skin materials (not eye or mouth) toward SICK.tint by `k` (0..1). */
 export function tintSick(body: THREE.Object3D, k: number): void {
   body.traverse((n) => {
     if (!(n instanceof THREE.Mesh)) return;
     const m: unknown = n.material;
-    if (m instanceof THREE.MeshStandardMaterial) m.color.copy(well).lerp(sick, k);
+    if (m instanceof THREE.MeshStandardMaterial && SKIN_MATERIALS.includes(m.name))
+      m.color.copy(well).lerp(sick, k);
   });
 }
 

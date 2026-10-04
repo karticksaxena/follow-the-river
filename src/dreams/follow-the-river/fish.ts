@@ -3,6 +3,7 @@ import type { AudioBus } from '../../engine/audio';
 import { loadModel, loadSkinned } from '../../engine/models';
 import type { Vec3 } from '../../engine/ray';
 import { waterlineX } from './banks';
+import { ANATOMY } from './dras-anatomy';
 import {
   cruiseHeading,
   cruiseTargetX,
@@ -47,7 +48,7 @@ const PACK_TIME = 1;
 const PACK_ARC = 1.2;
 const SURFACE_DRIFT = 1.5; // metres downstream while surfacing
 /** Where the blow rises from: ahead of the body's centre and up near its back (m). */
-const BLOWHOLE = { ahead: 1.6, up: 0.9 } as const;
+const BLOWHOLE = ANATOMY.blowhole;
 
 export interface Fish {
   /** The ending's state (read it each frame; it only moves forward). */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { waterlineX } from './banks';
+import { ANATOMY } from './dras-anatomy';
 import { canThrow, cruiseHeading, FISH, pickStrike, strikesFor } from './fish';
 import {
   BODY_HALF_WIDTH,
@@ -50,8 +51,8 @@ describe('fish', () => {
   it('cruises with the fin above the water and the back under it', () => {
     const finTop = 2; // any measured fin top
     expect(cruiseYFor(finTop) + finTop).toBeGreaterThan(WATER_Y);
-    expect(cruiseYFor(finTop) + finTop - 1.45).toBeLessThan(WATER_Y);
-    expect(surfaceYFor(finTop) + finTop - 1.45).toBeGreaterThan(WATER_Y);
+    expect(cruiseYFor(finTop) + finTop - ANATOMY.finHeight).toBeLessThan(WATER_Y);
+    expect(surfaceYFor(finTop) + finTop - ANATOMY.finHeight).toBeGreaterThan(WATER_Y);
   });
 
   it('surfaces every 18 to 30 seconds', () => {
