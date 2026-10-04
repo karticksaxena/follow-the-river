@@ -30,7 +30,7 @@ export function waitQuestion(fishPacks: number, tapeLeft: boolean): string {
   const parts = ['Wait for dark?'];
   if (fishPacks > 0) {
     const [noun, pronoun] = fishPacks === 1 ? ['pack', 'it'] : ['packs', 'them'];
-    parts.push(`You still hold ${fishPacks} fish ${noun} - throw ${pronoun} to the fish first.`);
+    parts.push(`You still hold ${fishPacks} fish ${noun} - throw ${pronoun} to Dras first.`);
   }
   if (tapeLeft) parts.push('You have not found the tape yet.');
   parts.push('You cannot come back here.');

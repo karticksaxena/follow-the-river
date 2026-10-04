@@ -15,9 +15,10 @@ export const DREAMS: readonly DreamInfo[] = [
     howToPlay: [
       'W A S D: move. Mouse: look. Shift: run. Space: jump. E: use / pick up. F: flashlight. Click: shoot the bow.',
       'By day: search the area for batteries, arrows and fish packs. Zombies are slow, and hide in the dark.',
-      "Throw fish packs into the river (E at the water's edge). The more you feed it, the more it protects you at night.",
+      "Throw fish packs into the river (E at the water's edge). The more you feed Dras, the harder she hunts for you at night.",
       'Rest by the campfire to wait for dark. You cannot go back.',
-      'By night: run downstream to the safe spot. Zombies are fast. Your flashlight stuns them; it uses battery.',
+      'By night: zombies keep coming in waves. Clear each wave and the barricade falls. Follow the river downstream.',
+      '1 to 4: switch weapons. R: put in a spare battery.',
       'The bow is silent. Walk over arrows to pick them up again.',
       'Three hits and you die. Dying restarts the day or night with what you had when it began.',
     ],

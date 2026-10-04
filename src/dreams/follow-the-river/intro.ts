@@ -49,13 +49,13 @@ export const INTRO_PAGES: Readonly<Record<ActiveStep, readonly string[]>> = {
   'mom-back': ['An hour later.', 'Mom: "Come with me. Now. To the river. Don\'t ask."'],
   outside: ['Mom is holding a pack of fish from the store. Her hands are shaking.'],
   throw: [
-    'Mom: "Here. Here, girl."',
-    'Something enormous moves under the water. Black and white. It takes the fish and is gone.',
+    'Mom: "Here, Dras. Here, girl."',
+    'Something enormous moves under the water. Black and white. She takes the fish and is gone.',
   ],
   goodbye: [
-    'Mom: "It knows me. It will know you."',
-    'Mom: "Listen to me. Whatever happens - run. Always follow the river."',
-    'Mom: "Feed it, and it will keep you safe at night. Go!"',
+    'Mom: "She knows me. She will know you."',
+    'Mom: "Listen to me. Whatever happens, run. Always follow the river."',
+    'Mom: "Feed her, and she will keep you safe at night. Go!"',
     'She lifts her phone and starts filming the water. You hear her whisper: "What have we done…"',
   ],
 };

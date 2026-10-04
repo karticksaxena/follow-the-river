@@ -56,20 +56,21 @@ export const ENDING_PAGES: Readonly<Record<PagedStep, readonly string[]>> = {
   mom: [
     'Mom: "It\'s you. You followed the river."',
     'Mom: "I\'m so sorry. For all of it."',
-    'Mom: "They\'re coming, all of them. Take this, and stay by the water. It will fight with us."',
+    'Mom: "They\'re coming, all of them. Take this, and stay by the water. Dras will fight with us."',
   ],
   home: ['Mom: "Come on. Let\'s go home."'],
   credits: [
     "Kartik's Dreams - Follow the River",
     'A dream by Kartik',
-    'Art and sound: Kenney, Quaternius and OpenGameArt contributors (CC0)',
+    'Art: Kenney and Quaternius (CC0)',
+    'Sound: OpenGameArt and Freesound contributors (CC0), U.S. National Park Service recordings (public domain)',
     'Made with three.js',
   ],
 };
 
 /** The pages of the ending with no scene behind them ("Watch the ending again"). */
 export const REPLAY_PAGES: readonly string[] = [
-  'The orca lies on the pebbles below the dam, where it held them back.',
+  'Dras lies on the pebbles below the dam, where she held them back.',
   'Mom rows you down the river into the green. Something small swims beside the canoe.',
   ...ENDING_PAGES.credits,
 ];

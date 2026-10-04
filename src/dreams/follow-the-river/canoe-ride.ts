@@ -33,7 +33,7 @@ export const VOLUME = { water: 0.3, dawn: 0.22, blow: 0.3, dawnFade: 4 } as cons
 export const OPENING_PAGES: readonly string[] = ['Mom pushes off from the shore.'];
 export const CLOSING_PAGES: readonly string[] = [
   'Mom stops rowing. She has seen it too.',
-  'Mom: "Look. It wasn\'t alone."',
+  'Mom: "Look. She wasn\'t alone."',
   'She smiles for the first time since the river.',
 ];
 

@@ -79,6 +79,36 @@ describe('tank swim', () => {
   });
 });
 
+describe('tank swim hold', () => {
+  it('holds at the glass facing Mom for the naming, easing in and out', () => {
+    const out: Glide = { x: 9, z: 9, yaw: 0 };
+    tankSwim(24, out);
+    expect(out.x).toBeCloseTo(0, 9); // not toBe: x * 0 can be -0
+    expect(out.yaw).toBeCloseTo(Math.PI);
+    expect(out.z).toBeGreaterThan(TANK_SWIM.depth);
+    tankSwim(TANK_SWIM.holdFrom - 1, out); // inside the 2 s blend: between swim and hold
+    expect(Math.abs(out.x)).toBeLessThan(TANK_SWIM.halfWidth);
+  });
+
+  it('never snaps: positions move continuously across the whole clip', () => {
+    const out: Glide = { x: 0, z: 0, yaw: 0 };
+    tankSwim(0, out);
+    let px = out.x;
+    let pz = out.z;
+    for (let t = 0.01; t < 45; t += 0.01) {
+      tankSwim(t, out);
+      expect(Math.hypot(out.x - px, out.z - pz)).toBeLessThan(0.05);
+      px = out.x;
+      pz = out.z;
+    }
+  });
+
+  it('tape 1 is the tank, tape 2 the lab', () => {
+    expect(SHOTS[1].from[2]).toBeGreaterThan(4);
+    expect(SHOTS[2].from[2]).toBeLessThan(2);
+  });
+});
+
 describe('spillway', () => {
   it('sends the orca downstream (−Z) and keeps the dam far and dim', () => {
     const { from, to, seconds } = SPILLWAY.orca;

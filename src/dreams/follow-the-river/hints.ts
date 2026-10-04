@@ -32,7 +32,7 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   bow: ['Click to shoot your bow. It is silent.', 'Walk over your arrows to pick them back up.'],
   fish: [
     "Stand at the water's edge and press E to throw a fish pack in.",
-    'Every pack you feed it makes it hunt harder for you at night.',
+    'Every pack you feed Dras makes her hunt harder for you at night.',
   ],
   wait: [
     'When you are ready, rest by the campfire and wait for dark.',
@@ -42,8 +42,8 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
     'Night. They are fast now.',
     'Click shoots. F is your flashlight: off, it charges back up; R puts in a spare battery.',
     'Shine the light in their faces to stop them for a moment.',
-    'Downstream, a barricade holds you at each wave of them. Kill them all and it falls.',
-    'Stay close to the water. E at the edge feeds the orca: every fish pack makes it hunt harder.',
+    'Downstream, a barricade holds you at each wave. They keep coming until the wave is dead; then it falls.',
+    'Stay close to the water. E at the edge feeds Dras: every fish pack makes her hunt harder.',
   ],
   wave: ['They are coming. Find the crate: there is something in it for you.'],
   clear: ['The way is clear.'],

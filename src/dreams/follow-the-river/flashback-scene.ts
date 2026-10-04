@@ -22,10 +22,10 @@ export interface Shot {
 
 /** Tuning knobs. Metres; the lab/tank GLBs have their origin at the floor's centre. */
 export const SHOTS: Readonly<Record<Tape, Shot>> = {
-  // Lab: Mom's back at the bench, the cage and the red lamp over her shoulder.
-  1: { from: [2.6, 1.75, 1.6], to: [2.0, 1.65, 1.0], look: [0.2, 1.1, -2.5], seconds: 40 },
-  // Tank: three-quarter view past Mom's shoulder into the glass; a slow push-in.
-  2: { from: [3.4, 1.7, 4.6], to: [2.6, 1.55, 3.6], look: [-0.3, 1.3, -0.2], seconds: 40 },
+  // Tank (tape 1): three-quarter view past Mom's shoulder into the glass; a slow push-in.
+  1: { from: [3.4, 1.7, 4.6], to: [2.6, 1.55, 3.6], look: [-0.3, 1.3, -0.2], seconds: 40 },
+  // Lab (tape 2): Mom's back at the bench, the cage and the red lamp over her shoulder.
+  2: { from: [2.6, 1.75, 1.6], to: [2.0, 1.65, 1.0], look: [0.2, 1.1, -2.5], seconds: 40 },
   // Spillway: behind Mom on the bank, looking out over the river.
   3: { from: [4.5, 1.9, 1.5], to: [4.0, 1.8, 1.0], look: [-6, 0.4, -4], seconds: 45 },
 };
@@ -59,7 +59,11 @@ export const SPILLWAY = {
   orca: { from: [-5, 3] as const, to: [-10, -10] as const, seconds: 45, finDepth: 0.35 },
 } as const;
 
-/** Tape 2's orca: a slow glide across the tank that turns toward Mom (+Z) at each end. */
+/**
+ * Tape 1's orca: a slow glide across the tank that turns toward Mom (+Z) at each end, then comes
+ * to the glass and holds still facing her (`holdFrom`..`holdTo`, s) while Mom names her; it eases
+ * into and out of the hold over `blend` seconds.
+ */
 export const TANK_SWIM = {
   halfWidth: 1.4,
   depth: -0.4,
@@ -67,6 +71,9 @@ export const TANK_SWIM = {
   period: 14,
   scale: 0.4,
   centreY: 1.27,
+  holdFrom: 18,
+  holdTo: 30,
+  blend: 2,
 } as const;
 
 const MOM_SWAY = { amplitude: 0.06, rate: 0.9 } as const;
@@ -90,6 +97,13 @@ export interface Glide {
   yaw: number;
 }
 
+/** 0..1: how far into the hold the glide is at `t` (eased in before `holdFrom`, out after `holdTo`). */
+function holdWeight(t: number, swim: typeof TANK_SWIM): number {
+  const into = (t - (swim.holdFrom - swim.blend)) / swim.blend;
+  const out = (swim.holdTo + swim.blend - t) / swim.blend;
+  return smooth(Math.min(1, Math.max(0, Math.min(into, out))));
+}
+
 /** Where the young orca is at `t`: x sweeps the tank, z bows toward the glass, yaw follows. */
 export function tankSwim(t: number, out: Glide, swim = TANK_SWIM): Glide {
   const w = (2 * Math.PI) / swim.period;
@@ -98,6 +112,13 @@ export function tankSwim(t: number, out: Glide, swim = TANK_SWIM): Glide {
   const vx = swim.halfWidth * w * Math.cos(w * t);
   const vz = 2 * w * swim.sway * Math.sin(2 * w * t);
   out.yaw = Math.atan2(-vx, -vz); // the orca's nose points −Z at yaw 0
+  const k = holdWeight(t, swim);
+  if (k === 0) return out;
+  const glass = swim.depth + swim.sway; // nose to the glass, facing Mom
+  const turn = Math.atan2(Math.sin(Math.PI - out.yaw), Math.cos(Math.PI - out.yaw)); // shortest way round
+  out.x *= 1 - k;
+  out.z += (glass - out.z) * k;
+  out.yaw += turn * k;
   return out;
 }
 
@@ -250,7 +271,7 @@ async function buildLab(): Promise<Flashback> {
   const mom = createMom(momAsset, new THREE.Group());
   placeMom(mom, -0.6, -1.75, Math.PI, 'Idle_Neutral');
   scene.add(lab, cage, mom.group);
-  const { camera, move } = makeCamera(SHOTS[1]);
+  const { camera, move } = makeCamera(SHOTS[2]);
   let t = 0;
   let nextGesture = LAB_INTERACT_EVERY;
   const tick = (dt: number): void => {
@@ -267,7 +288,7 @@ async function buildLab(): Promise<Flashback> {
   return finish(scene, camera, tick, () => mom.dispose());
 }
 
-/** Day 63: Mom sings at the tank; the young orca glides behind the glass and turns to her. */
+/** Day 12: Mom sings at the tank; the young orca comes to the glass and holds for her naming. */
 async function buildTank(): Promise<Flashback> {
   const [tank, momAsset, orcaAsset] = await Promise.all([
     loadModel(propUrl('tank')),
@@ -290,7 +311,7 @@ async function buildTank(): Promise<Flashback> {
   const orca = youngOrca(orcaAsset, TANK_SWIM.scale);
   orca.pivot.position.y = TANK_SWIM.centreY;
   scene.add(floor, tank, mom.group, orca.pivot);
-  const { camera, move } = makeCamera(SHOTS[2]);
+  const { camera, move } = makeCamera(SHOTS[1]);
   const glide: Glide = { x: 0, z: 0, yaw: 0 };
   let t = 0;
   const tick = (dt: number): void => {
@@ -376,8 +397,8 @@ async function buildSpillway(): Promise<Flashback> {
 }
 
 const BUILDERS: Readonly<Record<Tape, () => Promise<Flashback>>> = {
-  1: buildLab,
-  2: buildTank,
+  1: buildTank,
+  2: buildLab,
   3: buildSpillway,
 };
 

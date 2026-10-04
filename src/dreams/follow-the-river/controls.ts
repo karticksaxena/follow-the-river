@@ -197,8 +197,7 @@ function promptOf(c: Ctl): string | null {
   if (dry && c.sys.ctx.keys.isDown('Mouse0')) return 'No ammo';
   if (c.target === 'interact') return c.run.interact?.prompt ?? null;
   if (c.target === 'pickup' && c.pickup) return promptFor(c.pickup, c.run.live.supplies);
-  if (c.target === 'fish')
-    return isNight(c.run.phase) ? 'E: feed the orca' : 'E: throw a fish pack';
+  if (c.target === 'fish') return isNight(c.run.phase) ? 'E: feed Dras' : 'E: throw a fish pack';
   return c.target === 'wait' ? 'E: wait for dark' : null;
 }
 

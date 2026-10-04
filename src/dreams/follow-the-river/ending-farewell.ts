@@ -27,21 +27,21 @@ export const FAREWELL = {
 export const FAREWELL_PAGES = {
   stranded: [
     'Mom: "No. No, no, no..."',
-    'Mom: "It was eating the sickness for us. Every one it took, it took the sickness too."',
-    'Mom: "It held on for us. It held on for you."',
+    'Mom: "She was eating the sickness for us. Every one she took, she took the sickness too."',
+    'Mom: "She held on for us. She held on for you."',
   ],
   song: [
     'Mom: "Mm-mm. Mm-mm-mm."',
-    'She hums the song from the lab, the one it learned through the glass.',
+    'She hums the song from the lab, the one Dras learned through the glass.',
   ],
-  answer: ['It answers her. Once, softly.'],
+  answer: ['Dras answers her. Once, softly.'],
   hand: [
-    'Its skin is cold and rough under your hand.',
+    'Her skin is cold and rough under your hand.',
     'Mom puts her hand next to yours. Neither of you says anything.',
   ],
   pack: [
-    'You set your last fish pack on the water beside it.',
-    'It breathes out once, long and slow. Then it is still.',
+    'You set your last fish pack on the water beside her.',
+    'She breathes out once, long and slow. Then she is still.',
   ],
 } as const;
 
