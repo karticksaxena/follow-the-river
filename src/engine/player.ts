@@ -15,6 +15,8 @@ export interface Player {
   shove(dx: number, dz: number): void;
   /** Must be called from a click or key handler (browsers require a user gesture). */
   lock(): void;
+  /** Dev `?nolock`: turn the view with plain mouse movement (never locked), only while playing. */
+  freeLook(on: boolean): void;
   unlock(): void;
   teleport(x: number, z: number, yaw: number): void;
   setSensitivity(sensitivity: number): void;
@@ -28,11 +30,8 @@ export function createPlayer(
   dom: HTMLElement,
   keys: KeyState,
   onLock: (event: LockEvent) => void,
-  freeLook = false,
 ): Player {
   const controls = new PointerLockControls(camera, dom);
-  // Dev `?nolock`: never locked, so let plain mouse movement turn the view anyway.
-  if (freeLook) controls.isLocked = true;
   const forward = new THREE.Vector3();
   const onLocked = (): void => onLock('locked');
   const onUnlocked = (): void => onLock('unlocked');
@@ -56,6 +55,9 @@ export function createPlayer(
       if (request instanceof Promise) request.catch(() => undefined);
     },
     unlock: () => controls.unlock(),
+    freeLook(on) {
+      controls.isLocked = on;
+    },
     teleport(x, z, yaw) {
       camera.position.set(x, EYE_HEIGHT, z);
       camera.rotation.set(0, yaw, 0, 'YXZ');
