@@ -62,6 +62,12 @@ const HEAD = { y: 1.6, r: 0.2 } as const;
 const CHEST = { y: 1.15, r: 0.38 } as const;
 const LYING = { y: 0.25, r: 0.5 } as const;
 
+/** Where a ray struck: how far along it, and whether it was the head. */
+export interface Strike {
+  distance: number;
+  head: boolean;
+}
+
 /** Distance along a unit ray to a zombie standing at (x, y, z) (head and chest spheres; one sphere when lying), or null. */
 export function bodyHit(
   origin: Vec3,
@@ -70,12 +76,15 @@ export function bodyHit(
   y: number,
   z: number,
   lying: boolean,
-): number | null {
+): Strike | null {
   const sphere = (s: { readonly y: number; readonly r: number }): number | null =>
     raySphere(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, x, y + s.y, z, s.r);
-  if (lying) return sphere(LYING);
+  if (lying) {
+    const d = sphere(LYING);
+    return d === null ? null : { distance: d, head: false };
+  }
   const head = sphere(HEAD);
   const chest = sphere(CHEST);
-  if (head === null) return chest;
-  return chest === null ? head : Math.min(head, chest);
+  if (head !== null && (chest === null || head <= chest)) return { distance: head, head: true };
+  return chest === null ? null : { distance: chest, head: false };
 }

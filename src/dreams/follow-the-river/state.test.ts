@@ -151,12 +151,13 @@ describe('checkpoints', () => {
 
   it('a death never leaves you empty-handed: supplies are raised, ammo only for guns you own', () => {
     const empty = { ...START_SUPPLIES, battery: 5, arrows: 0, fishPacks: 0, cells: 0 };
-    const up = topUp(empty, ['shotgun']);
+    const up = topUp(empty, ['shotgun'], 1);
     expect(up.battery).toBe(AFTER_DEATH.battery);
     expect(up.arrows).toBe(AFTER_DEATH.arrows);
     expect(up.cells).toBe(AFTER_DEATH.cells);
     expect(up.fishPacks).toBe(AFTER_DEATH.fishPacks);
     expect([up.shells, up.ammo, up.rounds]).toEqual([AFTER_DEATH.shells, 0, 0]);
-    expect(topUp({ ...up, arrows: 15 }, []).arrows).toBe(15);
+    expect(topUp({ ...up, arrows: 15 }, [], 1).arrows).toBe(15);
+    expect(topUp(empty, ['shotgun'], 0.6).arrows).toBe(Math.round(AFTER_DEATH.arrows * 0.6));
   });
 });

@@ -1,5 +1,6 @@
 import type * as THREE from 'three/webgpu';
 import type { PickupDef } from './areas/types';
+import { DIFFICULTY } from './difficulty';
 import { canThrow, FISH, styleFor } from './fish';
 import { nearSpot } from './flow';
 import type { Gun } from './gun';
@@ -119,7 +120,7 @@ function take(c: Ctl, found: PickupDef): void {
   if (isFull(found, c.run.live.supplies)) return;
   const gun = gunIn(found);
   const fresh = gun !== null && !c.run.live.guns.includes(gun);
-  c.run.live = collect(c.run.live, found);
+  c.run.live = collect(c.run.live, found, DIFFICULTY[c.sys.ctx.difficulty()].supplies);
   c.run.taken.add(found.id);
   c.sys.pickups.remove(found.id);
   click(c);

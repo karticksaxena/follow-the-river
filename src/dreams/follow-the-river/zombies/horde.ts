@@ -6,7 +6,7 @@ import { inCone, type Vec3 } from '../../../engine/ray';
 import { characterUrl } from '../kits';
 import { createBody, move, park, play, type Body, type Scratch } from './body';
 import {
-  ATTACK,
+  hitKills,
   isAlive,
   kill as killMind,
   newMind,
@@ -32,7 +32,13 @@ export interface Horde {
   /** Places a zombie from the pool (a never-used or long-dead slot). Returns its id, or −1 when full. */
   spawn(x: number, z: number, yaw: number, tuning: Tuning, lying?: boolean): number;
   update(dt: number, player: PlayerSense, onHit: (damage: number) => void): void;
-  rayHit(origin: Vec3, dir: Vec3, maxDistance: number): { id: number; distance: number } | null;
+  rayHit(
+    origin: Vec3,
+    dir: Vec3,
+    maxDistance: number,
+  ): { id: number; distance: number; head: boolean } | null;
+  /** A bullet or arrow struck `id`: true if it died (a head hit, or enough body hits), else it flinches. */
+  hurt(id: number, head: boolean): boolean;
   kill(id: number): void;
   takeByFish(id: number): void;
   /** The orca bites `id`: false if it is no longer alive. Pose it with hold(), end with drown(). */
@@ -116,7 +122,7 @@ function tick(
   senses.heard = b.heard;
   b.heard = false;
   const t = think(b.mind, senses, b.tuning, dt, b.thought);
-  if (t.hit) onHit(ATTACK.damage);
+  if (t.hit) onHit(b.tuning.damage);
   if (t.intent !== b.intent) {
     if (t.intent === 'strike') h.voices.say(id, 1, true);
     else if (t.intent === 'fall') h.voices.say(id, 0.8, true);
@@ -172,6 +178,7 @@ function spawnZombie(
   b.active = true;
   b.order = ++h.seq;
   b.heard = false;
+  b.wounds = 0;
   b.x = x;
   b.y = 0;
   b.z = z;
@@ -180,6 +187,9 @@ function spawnZombie(
   b.tuning.sight = tuning.sight;
   b.tuning.speed = tuning.speed;
   b.tuning.giveUp = tuning.giveUp;
+  b.tuning.stun = tuning.stun;
+  b.tuning.damage = tuning.damage;
+  b.tuning.bodyHits = tuning.bodyHits;
   b.root.visible = true;
   b.root.position.set(x, 0, z);
   b.root.rotation.y = yaw;
@@ -216,17 +226,36 @@ function rayHitHorde(
   origin: Vec3,
   dir: Vec3,
   maxDistance: number,
-): { id: number; distance: number } | null {
-  let best: { id: number; distance: number } | null = null;
+): { id: number; distance: number; head: boolean } | null {
+  let best: { id: number; distance: number; head: boolean } | null = null;
   for (let id = 0; id < bodies.length; id++) {
     const b = bodies[id];
     if (!b.active || !isAlive(b.mind)) continue;
     const d = bodyHit(origin, dir, b.x, b.y, b.z, b.mind.state === 'lying');
-    if (d !== null && d <= maxDistance && (!best || d < best.distance)) {
-      best = { id, distance: d };
+    if (d !== null && d.distance <= maxDistance && (!best || d.distance < best.distance)) {
+      best = { id, distance: d.distance, head: d.head };
     }
   }
   return best;
+}
+
+/** Short stagger after a body hit that did not drop it. */
+const FLINCH_SECONDS = 0.35;
+
+function hurtBody(b: Body, head: boolean): boolean {
+  if (!b.active || !isAlive(b.mind)) return false;
+  b.wounds++;
+  if (hitKills(b.wounds - 1, head, b.tuning.bodyHits)) {
+    killMind(b.mind);
+    return true;
+  }
+  b.heard = true;
+  // A stunned (or still rising) zombie keeps its own timer: the flinch must not cut a stun short.
+  if (b.mind.state !== 'stunned' && b.mind.state !== 'rising') {
+    b.mind.state = 'recover';
+    b.mind.timer = FLINCH_SECONDS;
+  }
+  return false;
 }
 
 function alertHorde(bodies: readonly Body[], x: number, z: number, radius: number): void {
@@ -328,6 +357,7 @@ export async function createHorde(
     spawn: (x, z, yaw, tuning, lying = false) => spawnZombie(h, x, z, yaw, tuning, lying),
     update: (dt, player, onHit) => updateHorde(h, dt, player, onHit),
     rayHit: (origin, dir, maxDistance) => rayHitHorde(bodies, origin, dir, maxDistance),
+    hurt: (id, head) => hurtBody(bodies[id], head),
     kill: (id) => killMind(bodies[id].mind),
     takeByFish: (id) => takeMind(bodies[id].mind),
     seize: (id) => seizeBody(h, id),

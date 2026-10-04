@@ -1,6 +1,6 @@
 import { toggleFullscreen } from './fullscreen';
 import { pagerActionForKeyEvent, startPager, stepPager, type PagerAction } from './pager';
-import { SENSITIVITY_RANGE, type Settings } from './settings';
+import { DIFFICULTIES, SENSITIVITY_RANGE, type Difficulty, type Settings } from './settings';
 import { button, el, type Overlay } from './ui';
 
 /** Optional callbacks for a pager: voice lines, sounds. Existing callers pass none. */
@@ -136,6 +136,35 @@ function slider(
   return wrap;
 }
 
+const DIFFICULTY_LABEL: Readonly<Record<Difficulty, string>> = {
+  story: 'Story',
+  normal: 'Normal',
+  hard: 'Hard',
+};
+
+/** "Difficulty": three buttons, the current one pressed (`on`), and when a change lands. */
+function difficultyRow(current: Difficulty, onPick: (d: Difficulty) => void): HTMLElement {
+  const buttons = DIFFICULTIES.map((d) =>
+    button(DIFFICULTY_LABEL[d], () => {
+      onPick(d);
+      mark(d);
+    }),
+  );
+  function mark(now: Difficulty): void {
+    buttons.forEach((b, i) => {
+      const on = DIFFICULTIES[i] === now;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+  }
+  mark(current);
+  const row = el('div', 'row');
+  row.append(...buttons);
+  const wrap = el('div', 'difficulty');
+  wrap.append(el('p', '', 'Difficulty'), row, el('p', 'small', 'Takes effect from the next wave.'));
+  return wrap;
+}
+
 export function showPauseMenu(overlay: Overlay, options: PauseMenuOptions): void {
   const settings = { ...options.settings };
   overlay.panel((panel) => {
@@ -160,6 +189,7 @@ export function showPauseMenu(overlay: Overlay, options: PauseMenuOptions): void
         (v) => change({ sensitivity: v }),
       ),
       slider('Volume', 0, 1, settings.volume, (v) => change({ volume: v })),
+      difficultyRow(settings.difficulty, (difficulty) => change({ difficulty })),
       button('Quit to dreams', options.onQuit, 'btn quiet'),
     );
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLIP_FOR, OUTFITS, pickOutfit, timeScaleFor } from './look';
+import { bodyHit, CLIP_FOR, OUTFITS, pickOutfit, timeScaleFor } from './look';
 
 describe('zombie looks', () => {
   it('uses every outfit before repeating one', () => {
@@ -23,5 +23,13 @@ describe('zombie looks', () => {
   it('speeds the walk clip up with the zombie so feet do not slide', () => {
     expect(timeScaleFor('Walk', 1.8)).toBeCloseTo(2 * timeScaleFor('Walk', 0.9));
     expect(timeScaleFor('Idle', 3)).toBe(1);
+  });
+
+  it('says whether a ray struck the head or the body', () => {
+    const dir = { x: 0, y: 0, z: -1 };
+    expect(bodyHit({ x: 0, y: 1.6, z: 5 }, dir, 0, 0, 0, false)?.head).toBe(true);
+    expect(bodyHit({ x: 0, y: 1.0, z: 5 }, dir, 0, 0, 0, false)?.head).toBe(false);
+    expect(bodyHit({ x: 0, y: 0.25, z: 5 }, dir, 0, 0, 0, true)?.head).toBe(false);
+    expect(bodyHit({ x: 3, y: 1.6, z: 5 }, dir, 0, 0, 0, false)).toBeNull();
   });
 });

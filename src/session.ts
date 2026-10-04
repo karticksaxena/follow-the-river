@@ -172,6 +172,8 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
         choose,
         hold,
         cinematic,
+        difficulty: () => app.settings.difficulty,
+        setDifficulty: (difficulty) => app.saveSettings({ ...app.settings, difficulty }),
         finish,
       };
     },

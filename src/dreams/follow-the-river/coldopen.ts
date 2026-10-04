@@ -3,6 +3,7 @@ import type { DreamContext } from '../types';
 import { buildColdOpenScene, LAMP, LAMP_LIGHT, WINDOW, type ColdOpenScene } from './coldopen-scene';
 import { TV_LIGHT } from './intro-scene';
 import { applyLighting, LIGHTING } from './lighting';
+import { DAY_TUNING } from './zombies/brain';
 import type { PlayerSense } from './zombies/horde';
 
 export type ColdOpenStep = 'aerial' | 'corner' | 'window' | 'done';
@@ -84,7 +85,7 @@ export const SHAMBLERS = {
   walkers: [v(-9, 0, -34), v(-5, 0, -38), v(-7.5, 0, -41), v(-3.5, 0, -36)],
   /** Far up the road behind the camera: they never arrive, so they never strike. */
   goal: { x: -6, z: 12 },
-  tuning: { sight: 60, speed: 1.2, giveUp: 200 },
+  tuning: { ...DAY_TUNING, sight: 60, speed: 1.2, giveUp: 200 },
 } as const;
 
 /** Between shots: a quick dip to black. */

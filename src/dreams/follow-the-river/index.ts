@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { showMessage } from '../../engine/menus';
 import { browserStorage, createSaveStore, type SaveStore } from '../../engine/save';
+import { DIFFICULTIES } from '../../engine/settings';
 import { withTimeout } from '../../engine/time';
 import { LOAD_TIMEOUT_MS } from '../load';
 import type { DreamContext, DreamModule } from '../types';
@@ -30,6 +31,13 @@ const LOAD_FAILED = "Couldn't load the next part. Check your internet connection
 /** The page whose click regains control after a scene swap. */
 const RESUME_PAGES: readonly string[] = ['The dream begins again.'];
 
+const DIFFICULTY_QUESTION = [
+  'How hard should the nights be?',
+  'Story: more supplies, slower zombies, longer stuns.',
+  'Normal: the game as meant.',
+  'Hard: little ammo, faster, bigger waves.',
+].join('\n');
+
 /** The intro is played by `runIntro`; this fallback (a finished run restarting) skips it. */
 function playable(save: RunSave): RunSave {
   return save.phase === 'intro' ? completePhase(save, restartPhase(save)) : save;
@@ -51,6 +59,8 @@ export function createDream(): DreamModule {
   /** The cold open (how it started) plays once per new run, before the intro. */
   let cold: ColdOpen | null = null;
   let coldDue = false;
+  /** A brand-new run: ask the difficulty before anything plays. */
+  let newRun = false;
   let save: RunSave = freshRun();
   let resumable = false;
   let disposed = false;
@@ -184,8 +194,17 @@ export function createDream(): DreamModule {
     });
   }
 
+  /** The difficulty question for a new run: the cold open waits behind it (its clock runs only unpaused). */
+  async function askDifficulty(): Promise<void> {
+    if (!ctx) return;
+    const pick = await ctx.choose(DIFFICULTY_QUESTION, ['Story', 'Normal', 'Hard'], 1);
+    ctx.setDifficulty(DIFFICULTIES[pick] ?? 'normal');
+  }
+
   async function startOver(): Promise<void> {
     chapter?.freeze();
+    await askDifficulty();
+    if (disposed) return;
     await transition(async () => {
       dropScene();
       store?.clear();
@@ -206,6 +225,11 @@ export function createDream(): DreamModule {
       if (disposed) return;
       return pick === 0 ? onFinale() : startOver();
     }
+    if (newRun) {
+      newRun = false;
+      await askDifficulty();
+      if (disposed) return;
+    }
     if (resumable) {
       const label = `Continue from ${phaseTitle(save.phase)}?`;
       const pick = await ctx.choose(label, ['Continue', 'Start over']);
@@ -225,6 +249,7 @@ export function createDream(): DreamModule {
       save = loaded ?? freshRun();
       resumable = !forced && loaded !== null && loaded.phase !== 'intro';
       coldDue = !forced && !resumable; // a new run (not Continue, not a dev `?phase=`)
+      newRun = coldDue;
       await enter(save);
     },
     begin() {

@@ -2,7 +2,6 @@ import { el } from '../../engine/ui';
 import { MAX_HEALTH } from './flow';
 import type { GunKind } from './state';
 import { SLOTS, type Weapon } from './weapons';
-import { ATTACK } from './zombies/brain';
 
 export interface HudState {
   battery: number;
@@ -13,6 +12,8 @@ export interface HudState {
   /** Rounds for the gun in hand (hidden with the bow). */
   ammo: number;
   health: number;
+  /** Health one zombie blow takes (the difficulty's). */
+  damage: number;
   /** Guns owned, as bits (see `gunBits`): crates are optional, so any mix is possible. */
   guns: number;
   weapon: Weapon;
@@ -65,10 +66,10 @@ export function batteryCells(battery: number): string {
   return '▮'.repeat(full) + '▯'.repeat(CELLS - full);
 }
 
-/** Hits you can take: "♥♥♡" after one (a zombie blow takes ATTACK.damage of MAX_HEALTH). */
-export function hearts(health: number): string {
-  const total = Math.ceil(MAX_HEALTH / ATTACK.damage);
-  const left = Math.max(0, Math.min(total, Math.ceil(health / ATTACK.damage)));
+/** Hits you can take: "♥♥♡" after one (a zombie blow takes `damage` of MAX_HEALTH). */
+export function hearts(health: number, damage: number): string {
+  const total = Math.ceil(MAX_HEALTH / damage);
+  const left = Math.max(0, Math.min(total, Math.ceil(health / damage)));
   return '♥'.repeat(left) + '♡'.repeat(total - left);
 }
 
@@ -120,6 +121,7 @@ function buildHud(root: HTMLElement): HudEls {
     fishPacks: 0,
     ammo: 0,
     health: 0,
+    damage: 0,
     guns: 0,
     weapon: 'bow',
     wave: 0,
@@ -168,9 +170,9 @@ function writeStats(h: HudEls, s: HudState): void {
   if (fresh || last.wave !== s.wave) {
     h.waveEl.textContent = waveText(s.wave, s.waves);
   }
-  if (fresh || last.health !== s.health) {
-    h.health.textContent = hearts(s.health);
-    h.health.classList.toggle('low', s.health <= ATTACK.damage);
+  if (fresh || last.health !== s.health || last.damage !== s.damage) {
+    h.health.textContent = hearts(s.health, s.damage);
+    h.health.classList.toggle('low', s.health <= s.damage);
     h.hurtEl.style.opacity = String(Math.max(0, Math.min(1, 1 - s.health / 100)));
   }
 }

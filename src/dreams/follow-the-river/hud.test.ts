@@ -12,10 +12,13 @@ describe('batteryCells', () => {
 
 describe('hearts', () => {
   it('shows one heart per zombie hit you can still take', () => {
-    expect(hearts(100)).toBe('♥♥♥');
-    expect(hearts(66)).toBe('♥♥♡');
-    expect(hearts(32)).toBe('♥♡♡');
-    expect(hearts(0)).toBe('♡♡♡');
+    expect(hearts(100, 34)).toBe('♥♥♥');
+    expect(hearts(66, 34)).toBe('♥♥♡');
+    expect(hearts(32, 34)).toBe('♥♡♡');
+    expect(hearts(0, 34)).toBe('♡♡♡');
+    expect(hearts(100, 50)).toBe('♥♥');
+    expect(hearts(50, 50)).toBe('♥♡');
+    expect(hearts(100, 25)).toBe('♥♥♥♥');
   });
 });
 

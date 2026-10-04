@@ -30,14 +30,19 @@ export interface Tuning {
   speed: number;
   /** Loses interest beyond this many metres. */
   giveUp: number;
+  /** Seconds of steady light to stun, and how long it holds. */
+  stun: { readonly exposure: number; readonly seconds: number };
+  /** Health one blow takes. */
+  damage: number;
+  /** Body hits that drop it (a head hit always kills). */
+  bodyHits: number;
 }
 
 /** Tuning knobs. Day: few, slow, half-asleep in the dark. Night: fast, they know where you are. */
-export const DAY_TUNING: Tuning = { sight: 7, speed: 1.1, giveUp: 22 };
-export const NIGHT_TUNING: Tuning = { sight: 45, speed: 3.5, giveUp: 80 };
-export const ATTACK = { range: 1.3, windup: 0.45, recover: 0.9, damage: 34 } as const;
-/** Seconds of steady light to stun, and how long the stun lasts. */
-export const STUN = { exposure: 0.4, seconds: 2.5 } as const;
+const NORMAL_HARM = { stun: { exposure: 0.6, seconds: 0.9 }, damage: 34, bodyHits: 2 } as const;
+export const DAY_TUNING: Tuning = { sight: 7, speed: 1.1, giveUp: 22, ...NORMAL_HARM };
+export const NIGHT_TUNING: Tuning = { sight: 45, speed: 3.5, giveUp: 80, ...NORMAL_HARM };
+export const ATTACK = { range: 1.3, windup: 0.45, recover: 0.9 } as const;
 export const FALL_SECONDS = 3;
 export const TAKEN_SECONDS = 1.6;
 /** A lying zombie wakes when the player is this close (m) or makes noise, then takes RISE_SECONDS to get up. */
@@ -45,6 +50,11 @@ export const WAKE = 4;
 export const RISE_SECONDS = 1.2;
 /** `heard` is a one-frame pulse; a zombie keeps hunting this long after the last one. */
 export const HUNT_SECONDS = 8;
+
+/** Does this hit drop it? A head hit always does; a body hit once `wounds` earlier ones make `bodyHits`. */
+export function hitKills(wounds: number, head: boolean, bodyHits: number): boolean {
+  return head || wounds + 1 >= bodyHits;
+}
 
 export interface Mind {
   state: ZombieState;
@@ -107,11 +117,11 @@ function set(out: Thought, intent: Intent, hit = false): Thought {
 }
 
 /** Light builds up exposure; anything short of a stun fades away. Returns true when stunned. */
-function lightUp(mind: Mind, lit: boolean, dt: number): boolean {
+function lightUp(mind: Mind, lit: boolean, stun: Tuning['stun'], dt: number): boolean {
   mind.exposure = lit ? mind.exposure + dt : Math.max(0, mind.exposure - dt);
-  if (mind.exposure < STUN.exposure) return false;
+  if (mind.exposure < stun.exposure) return false;
   mind.state = 'stunned';
-  mind.timer = STUN.seconds;
+  mind.timer = stun.seconds;
   mind.exposure = 0;
   return true;
 }
@@ -137,7 +147,7 @@ function wake(mind: Mind, senses: Senses, out: Thought): Thought {
 }
 
 function chase(mind: Mind, senses: Senses, tuning: Tuning, dt: number, out: Thought): Thought {
-  if (lightUp(mind, senses.lit, dt)) return set(out, 'stagger');
+  if (lightUp(mind, senses.lit, tuning.stun, dt)) return set(out, 'stagger');
   mind.hunt = senses.heard ? HUNT_SECONDS : mind.hunt - dt;
   if (senses.distance > tuning.giveUp && mind.hunt <= 0) {
     mind.state = 'idle';
@@ -151,8 +161,14 @@ function chase(mind: Mind, senses: Senses, tuning: Tuning, dt: number, out: Thou
   return set(out, moveIntent(tuning));
 }
 
-function windup(mind: Mind, senses: Senses, dt: number, out: Thought): Thought {
-  if (lightUp(mind, senses.lit, dt)) return set(out, 'stagger');
+function windup(
+  mind: Mind,
+  senses: Senses,
+  stun: Tuning['stun'],
+  dt: number,
+  out: Thought,
+): Thought {
+  if (lightUp(mind, senses.lit, stun, dt)) return set(out, 'stagger');
   mind.timer -= dt;
   if (mind.timer > 0) return set(out, 'strike');
   mind.state = 'recover';
@@ -197,7 +213,7 @@ export function think(
     case 'chase':
       return chase(mind, senses, tuning, dt, out);
     case 'attack':
-      return windup(mind, senses, dt, out);
+      return windup(mind, senses, tuning.stun, dt, out);
     default:
       return waitThen(mind, dt, out, 'stand');
   }

@@ -3,7 +3,15 @@ import * as THREE from 'three/webgpu';
 import { resolveCircle } from '../../../engine/collide';
 import type { BoxGrid } from '../../../engine/grid';
 import type { SkinnedAsset } from '../../../engine/models';
-import { newMind, type Intent, type Mind, type Senses, type Thought, type Tuning } from './brain';
+import {
+  DAY_TUNING,
+  newMind,
+  type Intent,
+  type Mind,
+  type Senses,
+  type Thought,
+  type Tuning,
+} from './brain';
 import { CLIP_FOR, LOOPING, pickOutfit } from './look';
 import { steer } from './steer';
 
@@ -27,6 +35,8 @@ export interface Body {
   active: boolean;
   order: number;
   heard: boolean;
+  /** Body hits taken so far (see `hitKills`). */
+  wounds: number;
   x: number;
   y: number;
   z: number;
@@ -88,12 +98,13 @@ export function createBody(i: number, assets: Record<'m' | 'f', SkinnedAsset>): 
     active: false,
     order: 0,
     heard: false,
+    wounds: 0,
     x: 0,
     y: 0,
     z: 0,
     yaw: 0,
     mind: newMind(),
-    tuning: { sight: 0, speed: 0, giveUp: 0 },
+    tuning: { ...DAY_TUNING },
     thought: { intent: 'stand', hit: false },
   };
 }

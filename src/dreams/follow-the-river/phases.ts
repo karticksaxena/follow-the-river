@@ -1,6 +1,7 @@
 import type * as THREE from 'three/webgpu';
 import type { SaveStore } from '../../engine/save';
 import type { PickupDef } from './areas/types';
+import { dayTuning, DIFFICULTY } from './difficulty';
 import { strikesFor, styleFor } from './fish';
 import { MAX_HEALTH, phaseTitle, spawnFor, waitQuestion } from './flow';
 import { HINTS, type HintId } from './hints';
@@ -20,7 +21,6 @@ import {
 } from './state';
 import { playTape } from './tapes';
 import { newWaveState, waveCrates } from './waves';
-import { DAY_TUNING } from './zombies/brain';
 
 /** Lantern brightness at night (tuning knob); it is 0 by day. */
 const LANTERN_NIGHT = 6;
@@ -96,7 +96,9 @@ export function beginPhase(f: Flow): void {
   sys.gates.set(cleared);
   run.pickups = night ? waveCrates(area) : area.pickups;
   pickups.place(run.pickups, run.taken);
-  if (!night) for (const l of area.lurkers) horde.spawn(l.x, l.z, l.yaw, DAY_TUNING, l.lying);
+  if (!night)
+    for (const l of area.lurkers)
+      horde.spawn(l.x, l.z, l.yaw, dayTuning(ctx.difficulty()), l.lying);
   sys.flashlight.on = night;
   const at = spawnFor(save.phase, area, cleared);
   ctx.player.teleport(at.x, at.z, at.yaw);
@@ -159,7 +161,7 @@ export function restart(f: Flow): void {
   if (f.disposed) return;
   beginPhase(f);
   const { live } = f.run;
-  live.supplies = topUp(live.supplies, live.guns);
+  live.supplies = topUp(live.supplies, live.guns, DIFFICULTY[f.sys.ctx.difficulty()].supplies);
   announce(f, false);
 }
 

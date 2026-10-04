@@ -5,6 +5,7 @@ import { KIT_SCALE, kitUrl, propUrl } from './kits';
 import {
   addSupply,
   AMMO_OF,
+  scaled,
   SUPPLY_LIMITS,
   type GunKind,
   type RunState,
@@ -20,22 +21,26 @@ export const PICKUP_GAIN: Readonly<
 > = {
   // A spare battery: R puts it in the torch.
   battery: { kind: 'cells', amount: 1 },
-  arrows: { kind: 'arrows', amount: 3 },
+  arrows: { kind: 'arrows', amount: 2 },
   fishPack: { kind: 'fishPacks', amount: 1 },
-  ammo: { kind: 'ammo', amount: 6 },
+  // A box (see AMMO_BOX) feeds every gun; this stands for it in the "full" check.
+  ammo: { kind: 'ammo', amount: 3 },
   // The pistol itself (taking it adds it to `guns`); it comes loaded with a few bullets.
-  gun: { kind: 'ammo', amount: 8 },
+  gun: { kind: 'ammo', amount: 6 },
   tape: null,
   crate: null, // see CRATE
 };
 
 /** What a night crate holds besides its gun: ammo for every gun you own, and the rest. Tuning knobs. */
 export const CRATE = {
-  ammo: { pistol: 12, shotgun: 8, rifle: 45 } as Readonly<Record<GunKind, number>>,
-  arrows: 4,
-  cells: 1,
+  ammo: { pistol: 6, shotgun: 4, rifle: 15 } as Readonly<Record<GunKind, number>>,
+  arrows: 2,
+  cells: 0,
   fishPacks: 1,
 };
+
+/** The 'ammo' pickup: this much for every gun you own (pistol bullets if none). */
+export const AMMO_BOX: Readonly<Record<GunKind, number>> = { pistol: 3, shotgun: 2, rifle: 8 };
 
 const GUN_NAME: Readonly<Record<GunKind, string>> = {
   pistol: 'the police pistol',
@@ -79,21 +84,32 @@ export function gunIn(pickup: PickupDef): GunKind | null {
 }
 
 /** A crate: its gun, then ammo for every gun you now own, arrows, a spare battery, a fish pack. */
-function openCrate(supplies: Supplies, guns: readonly GunKind[]): Supplies {
+function openCrate(supplies: Supplies, guns: readonly GunKind[], k: number): Supplies {
   let out = supplies;
-  for (const gun of guns) out = addSupply(out, AMMO_OF[gun], CRATE.ammo[gun]);
-  out = addSupply(out, 'arrows', CRATE.arrows);
-  out = addSupply(out, 'cells', CRATE.cells);
-  return addSupply(out, 'fishPacks', CRATE.fishPacks);
+  for (const gun of guns) out = addSupply(out, AMMO_OF[gun], scaled(CRATE.ammo[gun], k));
+  out = addSupply(out, 'arrows', scaled(CRATE.arrows, k));
+  out = addSupply(out, 'cells', scaled(CRATE.cells, k));
+  return addSupply(out, 'fishPacks', scaled(CRATE.fishPacks, k));
 }
 
-/** New run state with the pickup's supplies added (capped) and the pickup marked taken. */
-export function collect(state: RunState, pickup: PickupDef): RunState {
+/** An ammo box: bullets for every gun you own, or pistol bullets when you have none. */
+function openBox(supplies: Supplies, guns: readonly GunKind[], k: number): Supplies {
+  let out = supplies;
+  for (const gun of guns.length > 0 ? guns : (['pistol'] as const)) {
+    out = addSupply(out, AMMO_OF[gun], scaled(AMMO_BOX[gun], k));
+  }
+  return out;
+}
+
+/** New run state with the pickup's supplies (times the difficulty's factor `k`) added (capped) and the pickup marked taken. */
+export function collect(state: RunState, pickup: PickupDef, k: number): RunState {
   const gain = PICKUP_GAIN[pickup.kind];
   const found = gunIn(pickup);
   const guns = found && !state.guns.includes(found) ? [...state.guns, found] : state.guns;
-  let supplies = gain ? addSupply(state.supplies, gain.kind, gain.amount) : state.supplies;
-  if (pickup.kind === 'crate') supplies = openCrate(supplies, guns);
+  let supplies = state.supplies;
+  if (pickup.kind === 'ammo') supplies = openBox(supplies, guns, k);
+  else if (gain) supplies = addSupply(supplies, gain.kind, scaled(gain.amount, k));
+  if (pickup.kind === 'crate') supplies = openCrate(supplies, guns, k);
   return {
     ...state,
     supplies,

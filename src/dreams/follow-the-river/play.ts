@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import type { AmbushDef } from './areas/types';
 import { createControls, cutsceneChange, type Controls } from './controls';
-import { nightTuning } from './difficulty';
+import { DIFFICULTY, nightTuning } from './difficulty';
 import { nightEnd } from './ending';
 import { BEAM, chargeBattery } from './flashlight';
 import { nearSpot, takeDamage } from './flow';
@@ -11,14 +11,12 @@ import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
 import { addSupply, AMMO_OF, chapterOf, isNight } from './state';
 import { ambushSpot, stepWaves } from './waves';
-import type { Tuning } from './zombies/brain';
 import type { PlayerSense } from './zombies/horde';
 
 /** Shack darkness eases at this rate (per second); lights are touched only past `DIM_EPSILON`. */
 const DIM_RATE = 1.5;
 const DIM_EPSILON = 0.01;
 /** Health at or below which the heartbeat starts: one hit from death. */
-const HURT_HEALTH = 34;
 /** Within this many metres of the wait spot the `wait` hint appears. */
 const WAIT_HINT_RANGE = 12;
 /** After the "you are hurt" page closes, zombie hits can't land for this long (s). */
@@ -40,9 +38,8 @@ interface State {
   run: Run;
   events: Events;
   sense: PlayerSense;
-  /** The chapter and its night's zombie tuning, looked up once. */
+  /** The chapter (its night's zombie tuning is looked up per spawn: the difficulty can change). */
   chapter: number;
-  tuning: Tuning;
   controls: Controls;
   look: THREE.Vector3;
   /** Seconds the torch has been off (it recharges after a moment). */
@@ -83,7 +80,6 @@ function createState(sys: Systems, run: Run, events: Events): State {
     events,
     sense,
     chapter,
-    tuning: nightTuning(chapter),
     controls: createControls(sys, run, events, sense),
     look: new THREE.Vector3(),
     offFor: 0,
@@ -94,6 +90,7 @@ function createState(sys: Systems, run: Run, events: Events): State {
       fishPacks: 0,
       ammo: 0,
       health: 0,
+      damage: 0,
       guns: 0,
       weapon: 'bow',
       wave: 0,
@@ -152,7 +149,8 @@ function tickWorld(p: State, dt: number): void {
   sys.horde.update(dt, sense, p.onHit);
   sys.armory.update(dt);
   sys.gates.update(dt);
-  const recovered = sys.bow.update(dt, sys.horde, sys.grid, sense);
+  const keep = DIFFICULTY[sys.ctx.difficulty()].keepKillArrows;
+  const recovered = sys.bow.update(dt, sys.horde, sys.grid, sense, keep);
   if (recovered > 0) run.live.supplies = addSupply(run.live.supplies, 'arrows', recovered);
   sys.fish.update(dt, sense, night ? sys.horde : null, night);
   sys.world.railing?.update(dt);
@@ -182,7 +180,13 @@ function spawnAmbush(p: State, ambush: AmbushDef): void {
     for (let tries = 0; tries < 6; tries++) {
       const at = ambushSpot(ambush, sense, gateZ, sys.area.landX + 1, maxX, Math.random);
       if (p.blocked(at.x, at.z)) continue;
-      sys.horde.spawn(at.x, at.z, Math.atan2(sense.x - at.x, sense.z - at.z), p.tuning, lying);
+      sys.horde.spawn(
+        at.x,
+        at.z,
+        Math.atan2(sense.x - at.x, sense.z - at.z),
+        nightTuning(p.chapter, sys.ctx.difficulty()),
+        lying,
+      );
       spot ??= at;
       break;
     }
@@ -228,7 +232,7 @@ function tickView(p: State, dt: number): void {
     sense.x,
     isNight(run.phase) && run.ending !== 'calm', // after the wave only the wind is left
     sys.horde.aliveCount(),
-    run.health <= HURT_HEALTH,
+    run.health <= DIFFICULTY[sys.ctx.difficulty()].damage,
     p.chapter,
   );
   const weapon = p.controls.weapon();
@@ -240,6 +244,7 @@ function tickView(p: State, dt: number): void {
   hudState.guns = gunBits(run.live.guns);
   hudState.weapon = weapon;
   hudState.health = run.health;
+  hudState.damage = DIFFICULTY[sys.ctx.difficulty()].damage;
   const fighting = isNight(run.phase) && run.ending === 'no' && run.waves.fighting;
   hudState.wave = fighting ? run.waves.cleared + 1 : 0;
   sys.hud.set(hudState);

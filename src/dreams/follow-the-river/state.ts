@@ -75,12 +75,17 @@ export const SUPPLY_LIMITS: Readonly<Supplies> = {
 export const AFTER_DEATH: Readonly<Supplies> = {
   battery: 60,
   cells: 1,
-  arrows: 6,
-  ammo: 8,
-  shells: 4,
-  rounds: 20,
+  arrows: 4,
+  ammo: 6,
+  shells: 3,
+  rounds: 15,
   fishPacks: 1,
 };
+
+/** `n` times the difficulty's supply factor `k`, rounded; a non-zero amount never drops to 0. */
+export function scaled(n: number, k: number): number {
+  return n === 0 ? 0 : Math.max(1, Math.round(n * k));
+}
 
 export function addSupply(supplies: Supplies, kind: SupplyKind, amount: number): Supplies {
   const value = Math.max(0, Math.min(SUPPLY_LIMITS[kind], supplies[kind] + amount));
@@ -92,16 +97,14 @@ export function spend(supplies: Supplies, kind: SupplyKind, amount: number): Sup
   return supplies[kind] >= amount ? addSupply(supplies, kind, -amount) : null;
 }
 
-/** Supplies raised to AFTER_DEATH (ammo only for the guns you own). */
-export function topUp(supplies: Supplies, guns: readonly GunKind[]): Supplies {
+/** Supplies raised to AFTER_DEATH times the difficulty's factor `k` (ammo only for the guns you own). */
+export function topUp(supplies: Supplies, guns: readonly GunKind[], k: number): Supplies {
   const out = { ...supplies };
-  for (const kind of ['battery', 'cells', 'arrows', 'fishPacks'] as const) {
-    out[kind] = Math.max(out[kind], AFTER_DEATH[kind]);
-  }
-  for (const gun of guns) {
-    const kind = AMMO_OF[gun];
-    out[kind] = Math.max(out[kind], AFTER_DEATH[kind]);
-  }
+  const raise = (kind: SupplyKind): void => {
+    out[kind] = Math.max(out[kind], Math.min(SUPPLY_LIMITS[kind], scaled(AFTER_DEATH[kind], k)));
+  };
+  for (const kind of ['battery', 'cells', 'arrows', 'fishPacks'] as const) raise(kind);
+  for (const gun of guns) raise(AMMO_OF[gun]);
   return out;
 }
 

@@ -68,7 +68,7 @@ function shoot(s: GunState, eye: Vec3, look: Vec3, horde: Horde, grid: BoxGrid):
   for (let i = 0; i < spec.pellets; i++) {
     spreadDir(look, spec.spread, Math.random(), Math.random(), pellet);
     const zombie = horde.rayHit(origin, pellet, shotLength(eye, pellet, spec.range, grid));
-    if (zombie) horde.kill(zombie.id);
+    if (zombie) horde.hurt(zombie.id, zombie.head);
   }
   horde.alert(eye.x, eye.z, spec.alertRadius);
   s.audio.once(s.sound, spec.volume);

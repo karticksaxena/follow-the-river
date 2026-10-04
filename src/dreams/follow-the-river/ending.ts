@@ -1,7 +1,7 @@
 import type * as THREE from 'three/webgpu';
 import type { AreaDef } from './areas/types';
 import { playCanoeRide } from './canoe-ride';
-import { nightTuning } from './difficulty';
+import { DIFFICULTY, nightTuning } from './difficulty';
 import {
   FAREWELL_PAGES,
   goToIt,
@@ -27,7 +27,7 @@ import { applyLighting, LIGHTING, mixPreset, type LightPreset } from './lighting
 import { SICKNESS } from './orca-sick';
 import { EDGE_X } from './river';
 import type { Run, Systems } from './run';
-import { addSupply, AMMO_OF, SUPPLY_LIMITS } from './state';
+import { addSupply, AMMO_OF, SUPPLY_LIMITS, type SupplyKind } from './state';
 import { stopVoice, voiceFor, voiceHooks } from './voice';
 
 export type EndingStep =
@@ -209,7 +209,7 @@ const read = (h: EndingHost, pages: readonly string[]): Promise<void> =>
 function spawnWave(h: EndingHost, spawned: { n: number }, elapsed: number): void {
   const { horde, ctx } = h.sys;
   const cam = ctx.stage.camera.position;
-  const tuning = nightTuning(h.sys.area.chapter);
+  const tuning = nightTuning(h.sys.area.chapter, ctx.difficulty());
   // The pool is smaller than the horde: when it is full, the rest wait for the dead to make room.
   while (spawned.n < waveDue(elapsed)) {
     const at = waveSpot(spawned.n, cam.z);
@@ -231,14 +231,17 @@ function backOff(h: EndingHost, st: State): void {
   });
 }
 
-/** Mom's bag: ammo to the brim for every gun you carry, arrows, spare batteries (never empty-handed). */
-export function armForLastStand(run: Pick<Run, 'live'>): void {
+/** Mom's bag: `share` of the limit in ammo for every gun you carry and in arrows (never less than you hold), and a spare battery. */
+export function armForLastStand(run: Pick<Run, 'live'>, share: number): void {
   const { live } = run;
   if (live.guns.length === 0) live.guns = ['pistol'];
   let supplies = { ...live.supplies };
-  for (const gun of live.guns) supplies[AMMO_OF[gun]] = SUPPLY_LIMITS[AMMO_OF[gun]];
-  supplies.arrows = SUPPLY_LIMITS.arrows;
-  supplies = addSupply(supplies, 'cells', 2);
+  const fill = (kind: SupplyKind): void => {
+    supplies[kind] = Math.max(supplies[kind], Math.round(SUPPLY_LIMITS[kind] * share));
+  };
+  for (const gun of live.guns) fill(AMMO_OF[gun]);
+  fill('arrows');
+  supplies = addSupply(supplies, 'cells', 1);
   live.supplies = supplies;
 }
 
@@ -355,7 +358,7 @@ async function runStep(h: EndingHost, st: State, step: EndingStep, at: Shore): P
   if (!s) return;
   if (step === 'mom') {
     await read(h, ENDING_PAGES.mom);
-    armForLastStand(h.run);
+    armForLastStand(h.run, DIFFICULTY[h.sys.ctx.difficulty()].bag);
   } else if (step === 'fight') await fight(h, st);
   else if (step === 'strand') await stranded(h, st, s, at);
   else if (step === 'song') await song(s);

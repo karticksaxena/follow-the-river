@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ATTACK,
   DAY_TUNING,
+  hitKills,
   HUNT_SECONDS,
   isAlive,
   kill,
@@ -9,7 +10,6 @@ import {
   NIGHT_TUNING,
   RISE_SECONDS,
   seize,
-  STUN,
   takeByFish,
   think,
   WAKE,
@@ -73,20 +73,20 @@ describe('zombie brain', () => {
     expect(run(undefined, touching, seconds).hits).toBeLessThanOrEqual(Math.ceil(expected) + 1);
   });
 
-  it('is stunned by a steady flashlight beam, even mid-windup, then resumes the chase', () => {
-    const { mind } = run(undefined, touching, 0.1);
-    run(mind, { ...touching, lit: true }, STUN.exposure + 0.05);
+  it('is stunned by a steady flashlight beam, then resumes the chase', () => {
+    const { mind } = run(undefined, near, 0.1);
+    run(mind, { ...near, lit: true }, DAY_TUNING.stun.exposure + 0.05);
     expect(mind.state).toBe('stunned');
     expect(run(mind, touching, 0.5).hits).toBe(0);
-    run(mind, near, STUN.seconds);
+    run(mind, near, DAY_TUNING.stun.seconds);
     expect(mind.state).toBe('chase');
   });
 
   it('forgets flicks of light that are too short to stun', () => {
     const mind = newMind();
     for (let i = 0; i < 10; i++) {
-      run(mind, { ...near, lit: true }, STUN.exposure / 2);
-      run(mind, near, STUN.exposure);
+      run(mind, { ...near, lit: true }, DAY_TUNING.stun.exposure / 2);
+      run(mind, near, DAY_TUNING.stun.exposure);
     }
     expect(mind.state).not.toBe('stunned');
   });
@@ -148,5 +148,26 @@ describe('zombie brain', () => {
     const mind = newMind();
     kill(mind);
     expect(run(mind, touching, 10).hits).toBe(0);
+  });
+});
+
+describe('wounds and stuns', () => {
+  it('a head hit always kills; body hits count up to bodyHits', () => {
+    expect(hitKills(0, true, 2)).toBe(true);
+    expect(hitKills(0, false, 2)).toBe(false);
+    expect(hitKills(1, false, 2)).toBe(true);
+    expect(hitKills(0, false, 1)).toBe(true);
+  });
+  it("the stun lasts the tuning's seconds", () => {
+    const m = newMind();
+    m.state = 'chase';
+    const t = { ...NIGHT_TUNING, stun: { exposure: 0.6, seconds: 0.9 }, damage: 34, bodyHits: 2 };
+    const o: Thought = { intent: 'stand', hit: false };
+    const stunned = (): boolean => m.state === 'stunned';
+    for (let i = 0; i < 60 && !stunned(); i++) {
+      think(m, { distance: 10, lit: true, heard: false }, t, 1 / 60, o);
+    }
+    expect(m.state).toBe('stunned');
+    expect(m.timer).toBeCloseTo(0.9, 1);
   });
 });

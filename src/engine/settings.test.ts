@@ -20,7 +20,22 @@ describe('settings', () => {
   });
 
   it('clamps tampered values into range', () => {
-    expect(clampSettings({ sensitivity: 999, volume: -3 })).toEqual({ sensitivity: 3, volume: 0 });
+    expect(clampSettings({ sensitivity: 999, volume: -3, difficulty: 'normal' })).toEqual({
+      sensitivity: 3,
+      volume: 0,
+      difficulty: 'normal',
+    });
+  });
+
+  it('old settings without a difficulty load as Normal; bad values fall back', () => {
+    expect(isSettings({ sensitivity: 1, volume: 0.5 })).toBe(true);
+    expect(clampSettings({ sensitivity: 1, volume: 0.5 }).difficulty).toBe('normal');
+    expect(clampSettings({ sensitivity: 1, volume: 0.5, difficulty: 'easy' }).difficulty).toBe(
+      'normal',
+    );
+    expect(clampSettings({ sensitivity: 1, volume: 0.5, difficulty: 'hard' }).difficulty).toBe(
+      'hard',
+    );
   });
 
   it('falls back to defaults when nothing loads', () => {

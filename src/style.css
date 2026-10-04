@@ -88,6 +88,7 @@ h1.title {
   font-size: 1.35rem;
 }
 .page-text {
+  white-space: pre-line;
   min-height: 4.5em;
   margin: 0 0 8px;
 }
@@ -123,6 +124,15 @@ h1.title {
 .btn.primary {
   background: #3a2f6e;
   border-color: var(--accent);
+}
+.btn.on {
+  background: #3a2f6e;
+  border-color: var(--accent);
+}
+.small {
+  color: var(--dim);
+  font-size: 0.9rem;
+  margin: 6px 0 0;
 }
 .btn.quiet {
   background: transparent;

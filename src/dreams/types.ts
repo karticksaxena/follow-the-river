@@ -2,6 +2,7 @@ import type { AudioBus } from '../engine/audio';
 import type { KeyState } from '../engine/input';
 import type { PageHooks } from '../engine/menus';
 import type { Player } from '../engine/player';
+import type { Difficulty } from '../engine/settings';
 import type { Stage } from '../engine/stage';
 import type { Overlay } from '../engine/ui';
 
@@ -35,6 +36,9 @@ export interface DreamContext {
   hold: () => void;
   /** A cinematic owns the player: input off (the pause menu still opens on Esc) / back on. */
   cinematic: (on: boolean) => void;
+  /** The player's difficulty (read it when a wave or phase starts; the pause menu can change it). */
+  difficulty: () => Difficulty;
+  setDifficulty: (d: Difficulty) => void;
   /** End the dream and return to the dream cards (fades out first). */
   finish: () => void;
 }

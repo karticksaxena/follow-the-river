@@ -83,11 +83,19 @@ describe('the last stand', () => {
 
   it('Mom fills your guns, arrows and spare batteries, and gives you a pistol if you have none', () => {
     const run = { live: { ...restartPhase(freshRun()), guns: [] as GunKind[] } };
-    armForLastStand(run);
+    armForLastStand(run, 1);
     expect(run.live.guns).toEqual(['pistol']);
     expect(run.live.supplies.ammo).toBe(SUPPLY_LIMITS.ammo);
     expect(run.live.supplies.arrows).toBe(SUPPLY_LIMITS.arrows);
-    expect(run.live.supplies.cells).toBe(2);
+    expect(run.live.supplies.cells).toBe(1);
+  });
+
+  it("Mom's bag is a share of the limit and never takes away what you carry", () => {
+    const run = { live: { ...restartPhase(freshRun()), guns: ['pistol' as const] } };
+    run.live.supplies = { ...run.live.supplies, ammo: 20, arrows: 0 };
+    armForLastStand(run, 0.5);
+    expect(run.live.supplies.ammo).toBe(20);
+    expect(run.live.supplies.arrows).toBe(Math.round(SUPPLY_LIMITS.arrows * 0.5));
   });
 
   it('fades to dawn in 8 s', () => {
