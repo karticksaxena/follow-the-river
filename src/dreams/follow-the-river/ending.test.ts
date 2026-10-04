@@ -6,6 +6,7 @@ import { DAWN } from './dawn';
 import { HORDE_CAPACITY } from './difficulty';
 import {
   armForLastStand,
+  bedFade,
   ENDING_PAGES,
   nextEndingStep,
   nightEnd,
@@ -16,7 +17,7 @@ import {
   waveSpot,
   type EndingStep,
 } from './ending';
-import { FAREWELL, FAREWELL_PAGES, shoreFor } from './ending-farewell';
+import { FAREWELL, FAREWELL_PAGES, shoreFor, type Bed } from './ending-farewell';
 import {
   facing,
   LANTERN_OUT,
@@ -235,5 +236,31 @@ describe("Mom's lantern light", () => {
   it('lights her softly from outside, and is nearly out by sunrise', () => {
     expect(LANTERN_OUT).toBeGreaterThanOrEqual(0.3);
     expect(MOM_LANTERN.intensity).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('bedFade', () => {
+  it('fades the dawn beds out, then stops and frees them, leaving none for the ride', () => {
+    const log: string[] = [];
+    const fake = (name: string, volume: number): Bed => {
+      let v = volume;
+      return {
+        stop: () => log.push(`${name} stop`),
+        setVolume: (x: number) => (v = x),
+        getVolume: () => v,
+        disconnect: () => log.push(`${name} off`),
+      };
+    };
+    const water = fake('water', 0.25);
+    const birds = fake('birds', 0.3);
+    const beds = [water, birds];
+    const step = bedFade(beds, 0.5);
+    expect(step(0.25)).toBe(false);
+    expect(birds.getVolume()).toBeCloseTo(0.15);
+    expect(water.getVolume()).toBeCloseTo(0.125);
+    expect(beds).toHaveLength(2);
+    expect(step(0.3)).toBe(true);
+    expect(log).toEqual(['water stop', 'water off', 'birds stop', 'birds off']);
+    expect(beds).toHaveLength(0);
   });
 });

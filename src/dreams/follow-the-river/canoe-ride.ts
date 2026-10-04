@@ -141,6 +141,22 @@ interface Ride {
   blows: () => AudioBuffer | null;
 }
 
+/**
+ * Her Row clip keeps the blades 0.25-0.95 m above the water (measured), so the paddle is tilted
+ * `PADDLE_TILT_GAIN` times as steeply about her hands and sunk `PADDLE_DIP` m: the low blade then
+ * dips about 0.1 m into the river each stroke (well above the hull's bottom, and the blades work
+ * outside the hull, which is under 1 m wide) and the high blade clears the rim.
+ */
+export const PADDLE_TILT_GAIN = 1.8;
+export const PADDLE_DIP = 0.12;
+
+/** Pure: steepens the paddle's `along` (unit, hand to hand) and lowers its `mid` point. Returns `along` renormalised. */
+export function dipPaddle(along: THREE.Vector3, mid: THREE.Vector3): THREE.Vector3 {
+  along.y *= PADDLE_TILT_GAIN;
+  mid.y -= PADDLE_DIP;
+  return along.normalize();
+}
+
 /** Half the paddle's length: its blades sit this far from its middle, along x (see canoe-scene). */
 const BLADE_X = 1.2;
 
@@ -216,6 +232,7 @@ function holdPaddle(r: Ride): void {
   cs.canoe.worldToLocal(hands.right.getWorldPosition(handR));
   cs.paddle.position.addVectors(handL, handR).multiplyScalar(0.5);
   along.subVectors(handR, handL).normalize();
+  dipPaddle(along, cs.paddle.position);
   if (along.lengthSq() > 0) cs.paddle.quaternion.setFromUnitVectors(SHAFT, along);
 }
 

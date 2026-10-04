@@ -13,6 +13,7 @@ import {
   shoreFor,
   song,
   strand,
+  type Bed,
   type Script,
   type Shore,
 } from './ending-farewell';
@@ -164,7 +165,7 @@ interface State {
   /** The fish pack you lay on the water at the end (loaded with Mom). */
   pack: THREE.Object3D | null;
   /** The dawn's looping beds (birds, water), stopped at the end. */
-  beds: Array<{ stop(): unknown; setVolume(v: number): unknown; disconnect(): unknown }>;
+  beds: Bed[];
 }
 
 const until = (st: State, pred: Wait['pred']): Promise<void> =>
@@ -326,6 +327,7 @@ function scriptOf(h: EndingHost, st: State): Script | null {
     run: h.run,
     scene: st.scene,
     until: (pred) => until(st, pred),
+    track: (bed) => st.beds.push(bed),
     read: (pages) => read(h, pages),
     get cancelled() {
       return st.cancelled;
@@ -357,6 +359,7 @@ async function dawnAndHome(h: EndingHost, st: State): Promise<void> {
   if (st.cancelled) return;
   await comeToPlayer(h, st);
   if (!st.cancelled) await read(h, ENDING_PAGES.home);
+  if (!st.cancelled) await until(st, bedFade(st.beds, BED_FADE)); // the ride brings its own water and birds
 }
 
 /** One step of the ending (see ORDER). */
@@ -390,6 +393,30 @@ async function play(h: EndingHost, st: State): Promise<void> {
     step = nextEndingStep(step);
   }
   if (!st.cancelled) h.sys.ctx.finish();
+}
+
+/** Seconds the dawn's beds take to fade out before the ride starts its own. */
+const BED_FADE = 0.5;
+
+/**
+ * Pure-ish: a per-frame predicate that fades `beds` out over `seconds`, then stops and frees them
+ * (and empties the list). True once done.
+ */
+export function bedFade(beds: Bed[], seconds: number): (dt: number) => boolean {
+  const from = beds.map((b) => b.getVolume());
+  let t = 0;
+  return (dt) => {
+    t += dt;
+    const k = Math.min(1, t / seconds);
+    beds.forEach((b, i) => b.setVolume((from[i] ?? 0) * (1 - k)));
+    if (k < 1) return false;
+    for (const b of beds) {
+      b.stop();
+      b.disconnect();
+    }
+    beds.length = 0;
+    return true;
+  };
 }
 
 function stopBeds(st: State): void {

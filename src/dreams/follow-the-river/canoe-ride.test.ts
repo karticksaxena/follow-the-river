@@ -1,3 +1,4 @@
+import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
 import {
   CALF,
@@ -5,6 +6,8 @@ import {
   canoePose,
   CLOSING_PAGES,
   crossedDown,
+  dipPaddle,
+  PADDLE_DIP,
   RIDE,
   rowAmount,
   toWorld,
@@ -158,5 +161,45 @@ describe('crossedDown', () => {
       prev = y;
     }
     expect(strokes).toBe(6);
+  });
+});
+
+// Blade heights over one rowing cycle.
+function stroke(): { low: number[]; high: number[] } {
+  const low: number[] = [];
+  const high: number[] = [];
+  for (let i = 0; i <= 200; i++) {
+    const tilt = 0.29 * Math.sin((i / 200) * Math.PI * 2);
+    const along = new THREE.Vector3(Math.sqrt(1 - tilt * tilt), tilt, 0);
+    const mid = new THREE.Vector3(0, 0.6, 0);
+    dipPaddle(along, mid);
+    low.push(mid.y - 1.2 * along.y);
+    high.push(mid.y + 1.2 * along.y);
+  }
+  return { low, high };
+}
+
+describe('the paddle dips into the river', () => {
+  // Measured in the real ride: the blades swing 0.25-0.95 m above the water (mid 0.6, tilt +-0.29).
+  const HULL_BOTTOM = -0.3;
+  it('puts the low blade 8-15 cm under the water at the bottom of the stroke, above the hull bottom', () => {
+    const { low } = stroke();
+    for (const y of low) expect(y).toBeGreaterThan(HULL_BOTTOM);
+    const deepest = Math.min(...low, ...stroke().high);
+    expect(deepest).toBeLessThan(-0.08 + WATER_LEVEL);
+    expect(deepest).toBeGreaterThan(-0.15 + WATER_LEVEL);
+  });
+
+  it('plays one stroke per cycle per blade, and keeps the high blade above the rim', () => {
+    const { low, high } = stroke();
+    for (const blade of [low, high]) {
+      let strokes = 0;
+      for (let i = 1; i < blade.length; i++) {
+        if (crossedDown(blade[i - 1] ?? 0, blade[i] ?? 0, WATER_LEVEL)) strokes++;
+      }
+      expect(strokes).toBe(1);
+    }
+    expect(Math.max(...low, ...high)).toBeGreaterThan(0.5);
+    expect(PADDLE_DIP).toBeGreaterThan(0);
   });
 });

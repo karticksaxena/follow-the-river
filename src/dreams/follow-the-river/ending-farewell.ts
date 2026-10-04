@@ -55,6 +55,16 @@ export interface Script {
   until(pred: (dt: number) => boolean): Promise<void>;
   read(pages: readonly string[]): Promise<void>;
   readonly cancelled: boolean;
+  /** Hands a looping or one-shot sound to the ending, which stops and frees it if the ending is cancelled. */
+  track(bed: Bed): void;
+}
+
+/** A sound the ending owns (see `Script.track`). */
+export interface Bed {
+  stop(): unknown;
+  setVolume(v: number): unknown;
+  getVolume(): number;
+  disconnect(): unknown;
 }
 
 export interface Shore {
@@ -78,10 +88,18 @@ function callAt(s: Script, at: Shore, buffer: AudioBuffer, volume: number): void
   const sound = ctx.audio.positional(head, 6);
   sound.setBuffer(buffer);
   sound.setVolume(volume);
-  sound.onEnded = () => {
+  const free = (): void => {
     sound.disconnect();
     world.scene.remove(head);
   };
+  sound.onEnded = free;
+  // On a cancel the ending stops it (three drops onEnded then) and frees the head here.
+  s.track({
+    stop: () => sound.isPlaying && sound.stop(),
+    setVolume: (v) => sound.setVolume(v),
+    getVolume: () => sound.getVolume(),
+    disconnect: free,
+  });
   sound.play();
 }
 
