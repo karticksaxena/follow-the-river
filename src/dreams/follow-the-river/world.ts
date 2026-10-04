@@ -96,7 +96,7 @@ async function addWaters(scene: THREE.Scene, area: AreaDef): Promise<Railing | n
     return railing;
   }
   addRiver(scene, area.startZ, lake.z, { farBankColor, endOverrun: 0, embankment, bend });
-  const railing = addBanks(scene, area.bank, [area.startZ, lake.z], grass, 0, bend);
+  const railing = addBanks(scene, area.bank, [area.startZ, lake.z], grass, 0, bend, lake.z);
   addLake(scene, lake.z, area.ground, area.farBank);
   await addSkyline(scene, area.skyline, area.startZ, lake.z, 0, bend);
   return railing;

@@ -61,7 +61,8 @@ export function lakeRects(z: number): Record<'water' | 'shoreWest' | 'shoreEast'
   const band = z + LAKE.pebbleDepth;
   const wide = SHORE.sideAmp + 2; // the water reaches past the wandering side shores
   return {
-    water: { x0: LAKE.west - wide, x1: LAKE.east + wide, z0: z, z1: far },
+    // The lake's water starts where the river mouth's flare starts, so it can fill the flare.
+    water: { x0: LAKE.west - wide, x1: LAKE.east + wide, z0: z + SHORE.mouthRadius, z1: far },
     shoreWest: { x0: LAKE.west - LAKE.landMargin, x1: EDGE_X, z0: band, z1: far },
     shoreEast: { x0: FAR_EDGE_X, x1: LAKE.east + LAKE.landMargin, z0: band, z1: far },
   };
@@ -126,7 +127,6 @@ export function addRiver(
 ): void {
   const { farBankColor = 0x24271f, endOverrun = OVERRUN, embankment = false, bend = noBend } = o;
   const { z0, z1 } = riverSpan(fromZ, toZ, endOverrun);
-  const middle = (z0 + z1) / 2;
   // Where a lake takes over, the far land stops where the lake's shore begins.
   const landEnd = endOverrun === 0 ? z1 + LAKE.pebbleDepth : z1;
   const farX = FAR_EDGE_X + (embankment ? KERB_WIDTH : 0);
@@ -136,10 +136,13 @@ export function addRiver(
     [farX + FAR_LAND_WIDTH / 2, 0, (z0 + landEnd) / 2],
     bend,
   );
-  const water = createWaterMesh(RIVER_WIDTH, z0 - z1);
+  // At a lake the river's water ends where the lake's begins: at the top of the mouth's flare.
+  const wz1 = endOverrun === 0 ? z1 + SHORE.mouthRadius : z1;
+  const wmiddle = (z0 + wz1) / 2;
+  const water = createWaterMesh(RIVER_WIDTH, z0 - wz1);
   water.geometry.dispose();
-  water.geometry = new THREE.PlaneGeometry(RIVER_WIDTH, z0 - z1, 1, rowsFor(z0 - z1));
-  bendPlane(water.geometry, middle, bend);
-  water.position.set(RIVER_X, WATER_Y, middle);
+  water.geometry = new THREE.PlaneGeometry(RIVER_WIDTH, z0 - wz1, 1, rowsFor(z0 - wz1));
+  bendPlane(water.geometry, wmiddle, bend);
+  water.position.set(RIVER_X, WATER_Y, wmiddle);
   scene.add(farBank, water);
 }

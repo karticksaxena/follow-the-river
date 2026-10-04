@@ -4,6 +4,7 @@ import { FOREST } from './areas/forest';
 import { SUBURBS } from './areas/suburbs';
 import { KIT_SCALE, kitUrl } from './kits';
 import { EDGE_X, FAR_EDGE_X, LAKE, lakeRects, OVERRUN, riverSpan, shoreY, WATER_Y } from './river';
+import { SHORE } from './shore-shape';
 import { groundSpan, stripBlockers } from './world';
 
 describe('kits', () => {
@@ -31,7 +32,7 @@ describe('the lake', () => {
     expect(groundSpan(FOREST).z1).toBe(z + LAKE.pebbleDepth); // the sloped shore takes over
     expect(riverSpan(FOREST.startZ, z, 0).z1).toBe(z);
     const r = lakeRects(z);
-    expect(r.water.z0).toBe(z);
+    expect(r.water.z0).toBe(z + SHORE.mouthRadius); // it fills the mouth flare
     expect(r.water.z1).toBe(z - OVERRUN);
     expect(r.water.x0).toBeLessThan(FOREST.landX - 30); // far wider than the strip
     expect(r.water.x1).toBeGreaterThan(EDGE_X + 60);
@@ -54,7 +55,7 @@ describe('the lake', () => {
     const r = lakeRects(-392);
     expect(r.shoreWest.x1 <= r.shoreEast.x0).toBe(true);
     // The river's water ends where the lake's begins; the lake water never reaches back north.
-    expect(r.water.z0).toBe(-392);
+    expect(r.water.z0).toBe(-392 + SHORE.mouthRadius);
   });
 });
 

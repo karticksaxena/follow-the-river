@@ -9,8 +9,10 @@ import {
   farBankInset,
   lakeDepth,
   lakeEdgeZ,
+  mouthFlare,
   riverBend,
   rowsFor,
+  rowZs,
   SHORE,
 } from './shore-shape';
 
@@ -103,7 +105,7 @@ describe('Mom, the canoe and the strand point sit on the beach', () => {
   });
 
   it('lies inside the pinned beach with room to spare', () => {
-    expect(mom.x).toBeGreaterThan(SHORE.pinFrom + 5);
+    expect(mom.x).toBeGreaterThan(SHORE.pinFrom + 2);
     expect(canoe?.x ?? 0).toBeGreaterThan(SHORE.pinFrom);
   });
 });
@@ -141,5 +143,45 @@ describe('the bend', () => {
   it('keeps rows no taller than a lead, so the strip itself never moves', () => {
     expect(BEND.step).toBeLessThan(BEND.lead);
     expect(rowsFor(250)).toBe(25);
+  });
+});
+
+describe('the river mouth is filleted', () => {
+  const R = SHORE.mouthRadius;
+
+  it('flares along a circle of the fillet radius, tangent to the bank and to the shore', () => {
+    expect(R).toBeGreaterThanOrEqual(6);
+    expect(R).toBeLessThanOrEqual(8);
+    expect(R).toBeLessThanOrEqual(LAKE.pebbleDepth); // the strips and the terrain meet at the band
+    expect(mouthFlare(LAKE_Z + R, LAKE_Z)).toBe(0);
+    expect(mouthFlare(LAKE_Z + R + 50, LAKE_Z)).toBe(0);
+    expect(mouthFlare(LAKE_Z, LAKE_Z)).toBe(R);
+    expect(mouthFlare(LAKE_Z - 30, LAKE_Z)).toBe(R);
+    for (const u of range(0.1, R - 0.1, 0.1)) {
+      const s = mouthFlare(LAKE_Z + u, LAKE_Z);
+      expect((R - s) ** 2 + (R - u) ** 2).toBeCloseTo(R * R, 6);
+    }
+    expect(mouthFlare(LAKE_Z + R - 0.1, LAKE_Z)).toBeLessThan(0.01); // no kink where it starts
+  });
+
+  it('cuts rows finely only where the flare is', () => {
+    const zs = rowZs(134, LAKE_Z, 4, { near: LAKE_Z + R, step: 1 });
+    expect(zs[0]).toBe(134);
+    expect(zs.at(-1)).toBe(LAKE_Z);
+    expect(zs).toContain(LAKE_Z + R);
+    for (let i = 1; i < zs.length; i++) expect(zs[i - 1] - zs[i]).toBeLessThanOrEqual(4 + 1e-9);
+    expect(zs.filter((z) => z < LAKE_Z + R).length).toBe(R);
+  });
+
+  it('keeps the fixed spots dead straight within 2 m, and clear of the flare', () => {
+    const mom = FOREST.meetAt ?? { x: 0, z: 0 };
+    const canoe = FOREST.props.find((p) => p.model === 'canoe' && p.z < LAKE_Z + LAKE.pebbleDepth);
+    const nose = shoreFor(mom, LAKE_Z);
+    for (const s of [mom.x, canoe?.x ?? NaN, nose.noseX]) {
+      for (const x of range(s - 2, s + 2, 0.25)) expect(lakeEdgeZ(x, LAKE_Z)).toBe(LAKE_Z);
+    }
+    // The land the flare leaves reaches east of the nose and the canoe.
+    expect(EDGE_X - mouthFlare(nose.noseZ, LAKE_Z)).toBeGreaterThan(nose.noseX + 0.5);
+    expect(EDGE_X - mouthFlare(canoe?.z ?? 0, LAKE_Z)).toBeGreaterThan((canoe?.x ?? 0) + 0.5);
   });
 });

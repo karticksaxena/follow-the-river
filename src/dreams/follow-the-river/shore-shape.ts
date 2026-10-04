@@ -33,11 +33,14 @@ export const SHORE = {
     [27, 2.1, 0.4],
   ] as readonly Wave[],
   /**
-   * The shore stays dead straight (level with the lake's z) from `pinFrom` to `pinTo`: Mom's pebble
-   * beach, the canoe, the orca's strand point and the river mouth. It wanders freely `pinRamp` m on.
+   * The shore stays dead straight (level with the lake's z) from `pinFrom` to `pinTo`: 2 m either
+   * side of Mom, the canoe and the orca's strand point (x -6, -3, 1.5), the river mouth, and the
+   * fillets' tangent run east of it (33 + mouthRadius + 2). It wanders freely `pinRamp` m on.
    */
-  pinFrom: -10,
-  pinTo: 33,
+  pinFrom: -8,
+  pinTo: 41,
+  /** Where the river's banks flare out into the lake shore: the fillet radius (m). */
+  mouthRadius: 6,
   pinRamp: 18,
   /** The west and east shores wander this far (m) in x. Pines stand a few metres past it. */
   sideAmp: 3,
@@ -151,3 +154,36 @@ export const noBend: Bend = () => 0;
 /** Rows for a mesh `length` m long, none taller than `step`. */
 export const rowsFor = (length: number, step: number = BEND.step): number =>
   Math.max(1, Math.ceil(length / step));
+
+/**
+ * Pure: how far (m) the river's banks have flared outward at `z`, `lakeZ` being the lake's shore
+ * line. A quarter circle of `mouthRadius` that is tangent to the straight bank (0 at the top) and to
+ * the shore line (the full radius at the shore): a rounded river mouth instead of two right angles.
+ */
+export function mouthFlare(z: number, lakeZ: number): number {
+  const r = SHORE.mouthRadius;
+  const u = z - lakeZ;
+  if (u >= r) return 0;
+  if (u <= 0) return r;
+  return r - Math.sqrt(r * r - (r - u) * (r - u));
+}
+
+/**
+ * Pure: mesh rows from `z0` down to `z1`, `step` m apart, and `fine.step` m apart from `fine.near`
+ * on (where something curves quickly). The last row is exactly `z1`.
+ */
+export function rowZs(
+  z0: number,
+  z1: number,
+  step: number,
+  fine?: { near: number; step: number },
+): number[] {
+  const out: number[] = [];
+  const coarseEnd = fine ? Math.min(z0, fine.near) : z1;
+  const coarse = rowsFor(z0 - coarseEnd, step);
+  for (let i = 0; i < coarse; i++) out.push(z0 - ((z0 - coarseEnd) * i) / coarse);
+  if (!fine) return [...out, z1];
+  const finer = rowsFor(coarseEnd - z1, fine.step);
+  for (let i = 0; i < finer; i++) out.push(coarseEnd - ((coarseEnd - z1) * i) / finer);
+  return [...out, z1];
+}
