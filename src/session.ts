@@ -155,12 +155,25 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
     hold(); // freeze input so the pause menu can't open during the fade
     void app.overlay.fade(true).then(leave);
   };
+  const cinematic = (on: boolean): void => gate.player.setInputEnabled(!on);
   return {
     context(dream) {
       current = dream;
       const { stage, overlay, audio, keys } = app;
       const { player, isPaused } = gate;
-      return { stage, overlay, audio, keys, player, isPaused, read, choose, hold, finish };
+      return {
+        stage,
+        overlay,
+        audio,
+        keys,
+        player,
+        isPaused,
+        read,
+        choose,
+        hold,
+        cinematic,
+        finish,
+      };
     },
     cleanUp,
     begin: () => read(info.intro, () => current?.begin?.()),

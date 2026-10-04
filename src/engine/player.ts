@@ -20,6 +20,8 @@ export interface Player {
   unlock(): void;
   teleport(x: number, z: number, yaw: number): void;
   setSensitivity(sensitivity: number): void;
+  /** Off: no walking, mouse look or jumping (a cinematic); a jump in flight still lands. */
+  setInputEnabled(on: boolean): void;
   update(dt: number): void;
   dispose(): void;
 }
@@ -46,6 +48,7 @@ export function createPlayer(
   // Space must be let go before the next jump: no bunny-hopping, and the Space that closed a page
   // (still held as play resumes) doesn't jump.
   let spaceHeld = true;
+  let inputOn = true;
   const moveBy = (dx: number, dz: number): void => {
     const x = camera.position.x + dx;
     const z = camera.position.z + dz;
@@ -89,7 +92,17 @@ export function createPlayer(
     shove(dx, dz) {
       moveBy(dx, dz);
     },
+    setInputEnabled(on) {
+      inputOn = on;
+      controls.enabled = on; // gates PointerLockControls' mouse look
+      spaceHeld = true;
+    },
     update(dt) {
+      if (!inputOn) {
+        fall(air, dt);
+        moveBy(0, 0);
+        return;
+      }
       jump(dt);
       camera.getWorldDirection(forward);
       forward.y = 0;

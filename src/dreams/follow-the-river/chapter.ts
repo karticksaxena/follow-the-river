@@ -53,6 +53,7 @@ function newRun(save: RunSave): Run {
     dying: 'no',
     dyingTime: 0,
     ending: 'no',
+    cutscene: false,
   };
 }
 
@@ -62,7 +63,10 @@ function teardown(sys: Systems, stop: () => void): void {
   stop();
   // Free the scene first: the systems below remove their own nodes (alarm box, fish shadow plane).
   disposeScene(sys.world.scene);
-  if (import.meta.env.DEV) Reflect.deleteProperty(window, 'kdRiver');
+  if (import.meta.env.DEV) {
+    Reflect.deleteProperty(window, 'kdRiver');
+    Reflect.deleteProperty(window, 'kdRun');
+  }
   sys.ambience.dispose();
   sys.horde.dispose();
   sys.scares.dispose();
@@ -126,7 +130,7 @@ export async function startChapter(
     ending: () => ending.start(),
     checkpoint: (cleared) => checkpoint(f, cleared),
   };
-  if (import.meta.env.DEV) Object.assign(window, { kdRiver: sys });
+  if (import.meta.env.DEV) Object.assign(window, { kdRiver: sys, kdRun: run });
   const play = createPlay(sys, run, events);
   f.onReset = () => {
     ending.cancel(); // a death mid-wave restarts the night

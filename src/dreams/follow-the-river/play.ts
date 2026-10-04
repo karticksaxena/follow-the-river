@@ -224,6 +224,7 @@ function tickView(p: State, dt: number): void {
   hudState.health = run.health;
   const fighting = isNight(run.phase) && run.ending === 'no' && run.waves.fighting;
   hudState.wave = fighting ? run.waves.cleared + 1 : 0;
+  sys.hud.setHidden(run.cutscene);
   sys.hud.set(hudState);
   sys.hud.prompt(p.controls.prompt());
 }
@@ -256,6 +257,7 @@ function tick(p: State, dt: number): void {
   }
   run.time += dt;
   updateSense(p);
+  if (run.cutscene) sys.flashlight.on = false;
   p.controls.update(dt);
   tickWorld(p, dt);
   sys.scares.update(dt, sense, isNight(run.phase) && run.ending !== 'calm');

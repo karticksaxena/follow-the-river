@@ -33,6 +33,8 @@ export interface DreamContext {
   choose: (text: string, labels: readonly string[], focus?: number) => Promise<number>;
   /** Freeze input (no pause menu) until the next `read`/`choose` closes; for scene swaps. */
   hold: () => void;
+  /** A cinematic owns the player: input off (the pause menu still opens on Esc) / back on. */
+  cinematic: (on: boolean) => void;
   /** End the dream and return to the dream cards (fades out first). */
   finish: () => void;
 }

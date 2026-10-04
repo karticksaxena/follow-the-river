@@ -52,6 +52,8 @@ export interface Hud {
   prompt(text: string | null): void;
   hurt(): void;
   show(visible: boolean): void;
+  /** Cutscenes hide the HUD (class `hidden`, apart from `show`). */
+  setHidden(hidden: boolean): void;
   dispose(): void;
 }
 
@@ -199,6 +201,7 @@ export function createHud(root: HTMLElement): Hud {
     show(visible) {
       h.hud.hidden = !visible;
     },
+    setHidden: (hidden) => h.hud.classList.toggle('hidden', hidden),
     dispose() {
       h.hud.remove();
     },

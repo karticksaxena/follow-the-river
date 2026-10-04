@@ -6,7 +6,7 @@ import type { Gun } from './gun';
 import { collect, gunIn, isFull, nearestPickup, promptFor } from './pickups';
 import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
-import { AMMO_OF, isNight, spend, SUPPLY_LIMITS } from './state';
+import { AMMO_OF, isNight, spend, SUPPLY_LIMITS, type GunKind } from './state';
 import {
   canFire,
   newSwitcher,
@@ -163,6 +163,14 @@ function use(c: Ctl): void {
   else if (c.target === 'wait') c.events.wait();
 }
 
+/** A viewmodel shows only while its weapon is in hand, and never during a cutscene. */
+export const viewVisible = (
+  w: Weapon,
+  current: Weapon,
+  guns: readonly GunKind[],
+  cutscene: boolean,
+): boolean => !cutscene && w === current && owns(guns, w);
+
 /** Weapon keys start a switch; the tween lowers the old model, swaps, raises the new one. */
 function switchWeapons(c: Ctl, dt: number): void {
   const { keys } = c.sys.ctx;
@@ -173,7 +181,7 @@ function switchWeapons(c: Ctl, dt: number): void {
   const drop = stepSwitch(c.sw, dt) * LOWER;
   for (const w of SLOTS) {
     const v = c.views[w];
-    v.view.visible = w === c.sw.current && owns(guns, w);
+    v.view.visible = viewVisible(w, c.sw.current, guns, c.run.cutscene);
     v.view.position.y = v.y - drop;
   }
 }
@@ -181,6 +189,7 @@ function switchWeapons(c: Ctl, dt: number): void {
 function tick(c: Ctl, dt: number): void {
   const { keys } = c.sys.ctx;
   switchWeapons(c, dt);
+  if (c.run.cutscene) return; // no torch, reload, fire or E while a cinematic plays
   if (keys.consumePress('KeyF')) toggleLight(c);
   if (keys.consumePress('KeyR')) newBattery(c);
   trigger(c);

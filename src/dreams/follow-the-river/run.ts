@@ -62,6 +62,8 @@ export interface Run {
   dying: Dying;
   dyingTime: number;
   ending: EndingState;
+  /** True while a cinematic plays: no weapons, no HUD, no input (set with `ctx.cinematic`). */
+  cutscene: boolean;
 }
 
 export interface Interact {
