@@ -20,6 +20,7 @@ import {
 } from 'three/tsl';
 import * as THREE from 'three/webgpu';
 import { TIERS, type Tier } from '../../engine/quality';
+import { withoutShadowUpdates } from '../../engine/shadows';
 import { NO_REFLECTION_LAYER } from '../../engine/volume';
 
 /** Downstream speed in m/s and the water's colours. Tuning knobs. */
@@ -186,16 +187,11 @@ function fresnelNode(cosTheta: THREE.Node<'float'>, still: boolean): THREE.Node<
  * The reflector node is stored on `material.userData.reflection`; callers add its `target` to the
  * water mesh (`createWaterMesh` does). Disposing the material frees the reflection render target.
  */
-export function createRiverMaterial(look: WaterLook = RIVER_FLOW): THREE.MeshStandardNodeMaterial {
-  const reflection = reflector({ resolutionScale: reflectionScale(waterTier), bounces: false });
-  // The virtual camera is a clone of the player's: it must not see the unreflected layer.
-  const base = reflection.reflector;
-  const virtualCamera = base.getVirtualCamera.bind(base);
-  base.getVirtualCamera = (camera) => {
-    const virtual = virtualCamera(camera);
-    virtual.layers.disable(NO_REFLECTION_LAYER);
-    return virtual;
-  };
+export function createRiverMaterial(
+  look: WaterLook = RIVER_FLOW,
+  group?: string,
+): THREE.MeshStandardNodeMaterial {
+  const { reflection, release } = acquireReflection(group);
   const material = new THREE.MeshStandardNodeMaterial({ metalness: 0.15 });
   material.userData.reflection = reflection;
   buildNodes(material, look, reflection);
@@ -203,9 +199,52 @@ export function createRiverMaterial(look: WaterLook = RIVER_FLOW): THREE.MeshSta
   // disposeScene only frees textures it finds on the material; the render target lives in the node.
   material.addEventListener('dispose', () => {
     live.delete(material);
-    reflection.dispose();
+    release();
   });
   return material;
+}
+
+interface SharedReflection {
+  reflection: THREE.ReflectorNode;
+  refs: number;
+}
+const groups = new Map<string, SharedReflection>();
+
+function newReflection(): THREE.ReflectorNode {
+  const reflection = reflector({ resolutionScale: reflectionScale(waterTier), bounces: false });
+  const base = reflection.reflector;
+  // The virtual camera is a clone of the player's: it must not see the unreflected layer.
+  const virtualCamera = base.getVirtualCamera.bind(base);
+  base.getVirtualCamera = (camera) => {
+    const virtual = virtualCamera(camera);
+    virtual.layers.disable(NO_REFLECTION_LAYER);
+    return virtual;
+  };
+  // The reflection samples the shadow maps the main camera drew; it never redraws them.
+  const updateBefore = base.updateBefore.bind(base);
+  base.updateBefore = (frame) => withoutShadowUpdates(() => updateBefore(frame));
+  return reflection;
+}
+
+/**
+ * The reflector for water `group` (all surfaces of a group lie in one plane, so one reflection
+ * pass serves them all; no group: its own). `release` frees it when its last user is disposed.
+ */
+function acquireReflection(group?: string): {
+  reflection: THREE.ReflectorNode;
+  release: () => void;
+} {
+  const entry = (group && groups.get(group)) || { reflection: newReflection(), refs: 0 };
+  if (group) groups.set(group, entry);
+  entry.refs++;
+  return {
+    reflection: entry.reflection,
+    release() {
+      if (--entry.refs > 0) return;
+      if (group && groups.get(group) === entry) groups.delete(group);
+      entry.reflection.dispose();
+    },
+  };
 }
 
 /** The reflector's resolution share for a tier (Low never renders it: any value, kept above 0). */
@@ -256,7 +295,7 @@ function buildNodes(
   const strength = fresnelNode(toEye.dot(worldNormal), still);
 
   // The default reflector UV (ReflectorNode._defaultUV) wobbled by the ripples.
-  reflection.uvNode = screenUV.flipX().add(slope.mul(REFLECTION.distortion));
+  const reflected = reflection.sample(screenUV.flipX().add(slope.mul(REFLECTION.distortion)));
 
   const streaks = slope.y.mul(2).add(0.5).clamp(0, 1).pow(2).toVar();
   // Foam: a band along the waterline, broken up by the fine noise that drifts with the current.
@@ -286,7 +325,7 @@ function buildNodes(
   material.roughnessNode = float(0.45).sub(streaks.mul(0.35)).add(foam.mul(0.5));
   material.emissiveNode = color(look.glow)
     .mul(streaks)
-    .add((waterTier === 'low' ? color(REFLECTION.lowColor) : reflection.rgb).mul(strength))
+    .add((waterTier === 'low' ? color(REFLECTION.lowColor) : reflected.rgb).mul(strength))
     .add(color(FOAM.color).mul(foam.mul(FOAM.glow)))
     .add(color(SPECKS.color).mul(specks.mul(SPECKS.glow)))
     .add(glintColor.mul(glint));
@@ -301,18 +340,20 @@ export function waterReflection(material: THREE.Material): THREE.ReflectorNode {
 
 /**
  * A flat water surface `width` (x) by `length` (z), lying in the xz plane, centred on its origin.
- * The caller only positions it. Everything about how water looks (reflections included) lives here.
+ * The caller only positions it. Surfaces of one `group` (same height) share a reflection pass. Everything about how water looks (reflections included) lives here.
  */
 export function createWaterMesh(
   width: number,
   length: number,
   look: WaterLook = RIVER_FLOW,
+  group?: string,
 ): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardNodeMaterial> {
-  const material = createRiverMaterial(look);
+  const material = createRiverMaterial(look, group);
   const geo = new THREE.PlaneGeometry(width, length);
   setWaterAttribute(geo, (x) => width / 2 - Math.abs(x));
   const mesh = new THREE.Mesh(geo, material);
   mesh.rotation.x = -Math.PI / 2;
-  mesh.add(waterReflection(material).target);
+  const { target } = waterReflection(material);
+  if (!target.parent) mesh.add(target); // a shared reflector sits on its first surface only
   return mesh;
 }

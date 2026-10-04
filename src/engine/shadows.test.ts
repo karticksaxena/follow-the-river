@@ -7,6 +7,7 @@ import {
   KEY_SHADOWS,
   needsShadowChange,
   syncKeyShadows,
+  withoutShadowUpdates,
 } from './shadows';
 
 type Listen = (type: string, fn: () => void) => void;
@@ -75,5 +76,42 @@ describe('syncKeyShadows', () => {
     expect(add).toHaveBeenCalledTimes(2); // no rebuild when nothing changed
     syncKeyShadows(light, 'low');
     expect([cascades(light), light.castShadow]).toEqual([null, false]);
+  });
+});
+
+describe('withoutShadowUpdates', () => {
+  // oxlint-disable-next-line unicorn/consistent-function-scoping
+  const frame = (id: number): THREE.NodeFrame =>
+    ({
+      renderer: { _isPreCompiling: false },
+      camera: new THREE.PerspectiveCamera(),
+      frameId: id,
+    }) as never; // oxlint-disable-line typescript/no-unsafe-type-assertion
+
+  it('stops shadow maps being redrawn inside the callback only', () => {
+    const light = new THREE.DirectionalLight();
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const node = new THREE.ShadowNode(light, light.shadow) as THREE.ShadowNode & {
+      updateShadow(): void; // in three's source, missing from its typings
+    };
+    const draw = vi.spyOn(node, 'updateShadow').mockImplementation(() => undefined);
+    const run = (id: number): void => {
+      try {
+        node.updateBefore(frame(id));
+      } catch {
+        // the stubbed pass has no depth texture to read back
+      }
+    };
+    withoutShadowUpdates(() => run(1));
+    expect(draw).not.toHaveBeenCalled();
+    run(2);
+    expect(draw).toHaveBeenCalledOnce();
+    expect(() =>
+      withoutShadowUpdates(() => {
+        throw new Error('x');
+      }),
+    ).toThrow('x');
+    run(3);
+    expect(draw).toHaveBeenCalledTimes(2); // restored even after a throw
   });
 });

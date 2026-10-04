@@ -70,6 +70,27 @@ describe('createWaterMesh', () => {
     expect(reflection.reflector.bounces).toBe(false);
   });
 
+  it('shares one reflector (and one target) across a group, freed with its last surface', () => {
+    const river = createWaterMesh(10, 10, RIVER_FLOW, 'test-group');
+    const lake = createWaterMesh(10, 10, LAKE_FLOW, 'test-group');
+    const alone = createWaterMesh(10, 10, LAKE_FLOW);
+    const shared = waterReflection(river.material);
+    expect(waterReflection(lake.material)).toBe(shared);
+    expect(waterReflection(alone.material)).not.toBe(shared);
+    expect(river.children).toContain(shared.target);
+    expect(lake.children).not.toContain(shared.target);
+    expect(reflectsPlanar(lake.material)).toBe(true);
+    const spy = vi.spyOn(shared, 'dispose');
+    river.material.dispose();
+    expect(spy).not.toHaveBeenCalled();
+    lake.material.dispose();
+    expect(spy).toHaveBeenCalledOnce();
+    alone.material.dispose();
+    const again = createWaterMesh(10, 10, RIVER_FLOW, 'test-group');
+    expect(waterReflection(again.material)).not.toBe(shared); // a fresh one once all were freed
+    again.material.dispose();
+  });
+
   it('frees the reflection with the scene', () => {
     const scene = new THREE.Scene();
     const mesh = createWaterMesh(10, 10, LAKE_FLOW);

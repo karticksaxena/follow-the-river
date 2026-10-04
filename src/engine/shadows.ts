@@ -103,6 +103,37 @@ export function syncKeyShadows(light: THREE.DirectionalLight, tier: Tier): void 
   }
 }
 
+let shadowsPaused = false;
+let patched = false;
+
+/** Once: shadow nodes skip their map pass while `shadowsPaused` (three has no per-pass switch). */
+function patchShadowNode(): void {
+  if (patched) return;
+  patched = true;
+  const proto = THREE.ShadowNode.prototype;
+  // oxlint-disable-next-line typescript/unbound-method
+  const original = proto.updateBefore;
+  proto.updateBefore = function (frame) {
+    if (!shadowsPaused) original.call(this, frame);
+  };
+}
+
+/**
+ * Runs `fn` (a reflection pass) without redrawing any shadow map: three re-renders every map once per
+ * camera per frame, and a reflector's virtual camera is another camera. The pass samples the maps the
+ * main camera last drew; nothing about the main view's shadows (cascade fit, flags) changes.
+ */
+export function withoutShadowUpdates<T>(fn: () => T): T {
+  patchShadowNode();
+  const was = shadowsPaused;
+  shadowsPaused = true;
+  try {
+    return fn();
+  } finally {
+    shadowsPaused = was;
+  }
+}
+
 function setOne(shadow: THREE.LightShadow, strength: number, on: boolean, refresh: boolean): void {
   shadow.intensity = strength;
   shadow.autoUpdate = on;

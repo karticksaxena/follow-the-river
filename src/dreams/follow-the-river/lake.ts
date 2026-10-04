@@ -95,7 +95,12 @@ export function addLake(
 ): void {
   const r = lakeRects(z);
   const frame: LakeFrame = { z, west: LAKE.west, east: LAKE.east };
-  const water = createWaterMesh(r.water.x1 - r.water.x0, r.water.z0 - r.water.z1, LAKE_FLOW);
+  const water = createWaterMesh(
+    r.water.x1 - r.water.x0,
+    r.water.z0 - r.water.z1,
+    LAKE_FLOW,
+    'forest',
+  );
   const cx = (r.water.x0 + r.water.x1) / 2;
   const cz = (r.water.z0 + r.water.z1) / 2;
   // A grid, so each vertex can carry its distance to the wandering shore (the foam's band).

@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { type SurfaceName, surfaceMaterial } from '../../engine/surfaces';
 import { type Bend, noBend, rowsFor, SHORE } from './shore-shape';
-import { createWaterMesh, setWaterAttribute } from './water';
+import { createWaterMesh, RIVER_FLOW, setWaterAttribute } from './water';
 
 /** The river: its near edge sits at x = 3, right beside the walkable bank. Tuning knobs. */
 export const RIVER_WIDTH = 30;
@@ -156,7 +156,7 @@ export function addRiver(
   // At a lake the river's water ends where the lake's begins: at the top of the mouth's flare.
   const wz1 = endOverrun === 0 ? z1 + SHORE.mouthRadius : z1;
   const wmiddle = (z0 + wz1) / 2;
-  const water = createWaterMesh(RIVER_WIDTH, z0 - wz1);
+  const water = createWaterMesh(RIVER_WIDTH, z0 - wz1, RIVER_FLOW, 'forest');
   water.geometry.dispose();
   water.geometry = new THREE.PlaneGeometry(
     RIVER_WIDTH,
