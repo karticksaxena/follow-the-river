@@ -66,6 +66,7 @@ export function beginPhase(f: Flow): void {
   run.appliedDim = 0;
   run.frozen = false;
   run.dying = 'no';
+  sys.hud.prompt(null); // the day's "E: wait for dark" must not hang over the night's pages
   applyLighting(sys.world.lights, night ? LIGHTING.night : LIGHTING.day);
   if (night && sys.area.nightFog) setFogFar(sys.world.lights, sys.area.nightFog);
   f.lantern.intensity = night ? LANTERN_NIGHT : 0;
