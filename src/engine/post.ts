@@ -8,6 +8,9 @@ import { traa } from 'three/addons/tsl/display/TRAANode.js';
 import {
   builtinAOContext,
   float,
+  Fn,
+  fract,
+  Loop,
   mrt,
   normalView,
   packNormalToRGB,
@@ -15,6 +18,7 @@ import {
   renderOutput,
   sample,
   screenUV,
+  sin,
   smoothstep,
   uniform,
   unpackRGBToNormal,
@@ -147,6 +151,21 @@ const BUILD: Record<Tier, (camera: THREE.PerspectiveCamera) => Graph> = {
   high: (camera) => aoGraph(camera, POST.ao.high),
 };
 
+/** DEV only: `?gpuload=N` makes the final pass do N loops of per-pixel busywork (simulates a slower GPU). */
+const GPU_LOAD =
+  import.meta.env.DEV && typeof location !== 'undefined'
+    ? Math.min(2000, Math.max(0, Number(new URLSearchParams(location.search).get('gpuload')) || 0))
+    : 0;
+
+const busy = (color: THREE.Node<'vec4'>, loops: number): THREE.Node<'vec4'> =>
+  Fn(() => {
+    const v = screenUV.x.toVar();
+    Loop(loops, ({ i }) => {
+      v.assign(fract(sin(v.mul(12.9898).add(float(i)).add(screenUV.y)).mul(43758.5453)));
+    });
+    return vec4(color.rgb.add(v.mul(1e-7)), color.a);
+  })();
+
 /** Screen-space effects at full resolution. Works on WebGPU and WebGL 2 (TSL). */
 export function createPost(
   renderer: THREE.WebGPURenderer,
@@ -185,7 +204,8 @@ export function createPost(
       owned.push(edges);
       shown = vec4(edges.getTextureNode());
     }
-    return film(grading.node(shown), grain);
+    const graded = grading.node(shown);
+    return film(GPU_LOAD > 0 ? busy(graded, GPU_LOAD) : graded, grain);
   };
 
   /** The mist, added to the resolved HDR colour (Low has none). */

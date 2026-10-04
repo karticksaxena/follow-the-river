@@ -1,3 +1,4 @@
+import { MAX_FPS, type MaxFps } from './frame-cap';
 import { GRAPHICS, type Graphics } from './quality';
 import type { SaveStore } from './save';
 
@@ -11,14 +12,17 @@ export interface Settings {
   volume: number;
   /** How hard the nights are (the pause menu changes it; new runs ask). */
   difficulty: Difficulty;
-  /** Image quality: a fixed tier, or `auto` (starts at High, steps down when slow). */
+  /** Image quality: a fixed tier, or `auto` (starts from the GPU, steps down when slow). */
   graphics: Graphics;
+  /** Frame cap: 90 (default), 60, or the display's own rate. */
+  maxFps: MaxFps;
 }
 
 /** What a save may hold: older settings lack the difficulty and graphics. */
-export type SavedSettings = Omit<Settings, 'difficulty' | 'graphics'> & {
+export type SavedSettings = Omit<Settings, 'difficulty' | 'graphics' | 'maxFps'> & {
   difficulty?: unknown;
   graphics?: unknown;
+  maxFps?: unknown;
 };
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = {
@@ -26,6 +30,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   volume: 0.8,
   difficulty: 'normal',
   graphics: 'auto',
+  maxFps: '90',
 };
 export const SENSITIVITY_RANGE = { min: 0.2, max: 3 } as const;
 
@@ -51,6 +56,7 @@ export function clampSettings(settings: SavedSettings): Settings {
     volume: clamp(settings.volume, 0, 1, DEFAULT_SETTINGS.volume),
     difficulty: DIFFICULTIES.find((d) => d === settings.difficulty) ?? DEFAULT_SETTINGS.difficulty,
     graphics: GRAPHICS.find((g) => g === settings.graphics) ?? DEFAULT_SETTINGS.graphics,
+    maxFps: MAX_FPS.find((m) => m === settings.maxFps) ?? DEFAULT_SETTINGS.maxFps,
   };
 }
 

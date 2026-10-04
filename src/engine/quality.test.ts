@@ -66,4 +66,12 @@ describe('adaptQuality', () => {
     expect(lowerTier('low')).toBe('low');
     expect(lowerTier('high')).toBe('medium');
   });
+
+  it('steps down within 3 s when frames miss 60 FPS, even only just (18 ms)', () => {
+    const q: Quality = { ...fresh(), ema: 12 };
+    let t = 0;
+    for (; t < 3 && !stepQuality(q, 18, 1 / 55); t += 1 / 55);
+    expect(q.step).toBe(1);
+    expect(t).toBeLessThan(3);
+  });
 });

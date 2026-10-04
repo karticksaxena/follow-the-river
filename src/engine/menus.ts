@@ -1,3 +1,4 @@
+import { MAX_FPS, type MaxFps } from './frame-cap';
 import { toggleFullscreen } from './fullscreen';
 import { pagerActionForKeyEvent, startPager, stepPager, type PagerAction } from './pager';
 import { GRAPHICS, type Graphics, type Tier } from './quality';
@@ -152,6 +153,12 @@ const GRAPHICS_LABEL: Readonly<Record<Graphics, string>> = {
   high: 'High',
 };
 
+const MAX_FPS_LABEL: Readonly<Record<MaxFps, string>> = {
+  '90': '90',
+  '60': '60',
+  display: 'Screen rate',
+};
+
 /** A titled row of buttons, the current one pressed (`on`), with a small note under it. */
 function choiceRow<T extends string>(
   title: string,
@@ -220,7 +227,15 @@ export function showPauseMenu(overlay: Overlay, options: PauseMenuOptions): void
         GRAPHICS_LABEL,
         settings.graphics,
         (graphics) => change({ graphics }),
-        `In use: ${GRAPHICS_LABEL[options.tier]}. Auto starts at High and lowers itself if the game runs slow.`,
+        `In use: ${GRAPHICS_LABEL[options.tier]}. Auto starts from your graphics card and lowers itself if the game runs slow.`,
+      ),
+      choiceRow(
+        'Frame rate',
+        MAX_FPS,
+        MAX_FPS_LABEL,
+        settings.maxFps,
+        (maxFps) => change({ maxFps }),
+        'The most frames drawn per second. 60 saves power and heat on laptops.',
       ),
       button('Quit to dreams', options.onQuit, 'btn quiet'),
     );

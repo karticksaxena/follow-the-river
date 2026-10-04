@@ -3,8 +3,8 @@ export const QUALITY = {
   /** Resolution multipliers, best first. */
   steps: [1, 0.85, 0.72, 0.6, 0.5],
   maxPixelRatio: 1.5,
-  /** Smoothed frame time above this for `slowFor` s steps quality down. */
-  slowMs: 18.5,
+  /** Smoothed frame time above this (a 60 FPS miss, with room for vsync jitter) for `slowFor` s steps quality down. */
+  slowMs: 17.5,
   /** Below this for `fastFor` s steps it back up. Between the two nothing changes. */
   fastMs: 12.5,
   slowFor: 2,

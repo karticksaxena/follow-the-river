@@ -1,6 +1,9 @@
 import * as THREE from 'three/webgpu';
 import { initEnvironment } from './environment';
+import { newPacer, shouldRender, type MaxFps } from './frame-cap';
+import { autoStartTier, readGpuInfo } from './gpu-class';
 import type { GradePreset } from './grade';
+import { createPerf, type Perf } from './perf';
 import { createPost, POST } from './post';
 import {
   adaptQuality,
@@ -26,10 +29,14 @@ export interface Stage {
   readonly backend: Backend;
   /** Adaptive resolution state (dev: `kd.stage.quality`). */
   readonly quality: Readonly<Quality>;
-  /** The graph in use (Auto starts at High and steps down). */
+  /** The graph in use (Auto starts from the GPU and steps down). */
   readonly tier: Tier;
   /** Player's Graphics setting: a fixed tier, or `auto`. */
   setGraphics(graphics: Graphics): void;
+  /** Frame cap from the pause menu. */
+  setMaxFps(cap: MaxFps): void;
+  /** Dev only: frame and GPU timing probe (`kd.perf.sample(10)`). */
+  readonly perf?: Perf;
   /** Colour grade for the scene, blended over `seconds`; returns the preset it left. */
   grade(preset: GradePreset, seconds?: number): GradePreset;
   /** The mist box's material (its box is in the scene on the volume layer), or `null` to drop the pass. */
@@ -55,7 +62,10 @@ function fit(renderer: THREE.WebGPURenderer, camera: THREE.PerspectiveCamera, q:
 /** Creates the one renderer the whole app shares. `?webgl` in the URL forces the WebGL 2 backend. */
 export async function createStage(container: HTMLElement): Promise<Stage> {
   const forceWebGL = new URLSearchParams(location.search).has('webgl');
-  const renderer = new THREE.WebGPURenderer({ antialias: false, forceWebGL });
+  // GPU timestamp queries cost a little, so they are on only in dev with `?perf`.
+  const trackTimestamp = import.meta.env.DEV && new URLSearchParams(location.search).has('perf');
+  const autoStart = forceWebGL ? 'medium' : autoStartTier(await readGpuInfo());
+  const renderer = new THREE.WebGPURenderer({ antialias: false, forceWebGL, trackTimestamp });
   await renderer.init();
   initEnvironment(renderer);
   renderer.toneMapping = THREE.AgXToneMapping;
@@ -68,7 +78,10 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   const quality = newQuality();
   let auto = true;
   let setting: Graphics = 'auto';
-  let tier: Tier = 'high';
+  let tier: Tier = autoStart;
+  let cap: MaxFps = '90';
+  const pacer = newPacer();
+  const perf = import.meta.env.DEV ? createPerf(renderer) : undefined;
   const post = createPost(renderer, camera, tier);
   tier = post.setTier(tier);
   setSurfaceTier(tier);
@@ -91,10 +104,14 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
       if (graphics === setting) return; // a volume slider save must not reset a tier Auto stepped down
       setting = graphics;
       auto = graphics === 'auto';
-      tier = post.setTier(graphics === 'auto' ? 'high' : graphics);
+      tier = post.setTier(graphics === 'auto' ? autoStart : graphics);
       setSurfaceTier(tier);
       quality.since = 0;
     },
+    setMaxFps(next) {
+      cap = next;
+    },
+    perf,
     grade: (preset, seconds) => post.grade(preset, seconds),
     mist: (material) => post.mist(material),
     focus: (on, distance) => post.focus(on, distance),
@@ -125,11 +142,14 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   };
   await renderer.setAnimationLoop((time) => {
     timer.update(time);
-    const dt = clampDelta(timer.getDelta());
+    if (!shouldRender(pacer, timer.getDelta(), cap)) return;
+    perf?.begin(time);
+    const dt = clampDelta(pacer.dt);
     runUpdaters(updaters, dt);
     post.update(dt);
     post.render(stage.scene);
     if (dt > 0) adapt(dt);
+    perf?.end();
   });
   return stage;
 }

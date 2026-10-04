@@ -53,12 +53,14 @@ async function boot(): Promise<void> {
       store.save(app.settings);
       audio.setVolume(app.settings.volume);
       stage.setGraphics(app.settings.graphics);
+      stage.setMaxFps(app.settings.maxFps);
     },
   };
   audio.setVolume(app.settings.volume);
   stage.setGraphics(app.settings.graphics);
-  // Dev-only handle for browser checks, e.g. `kd.stage.camera.position`.
-  if (import.meta.env.DEV) Object.assign(window, { kd: app });
+  stage.setMaxFps(app.settings.maxFps);
+  // Dev-only handle for browser checks, e.g. `kd.stage.camera.position`, `await kd.perf.sample(10)`.
+  if (import.meta.env.DEV) Object.assign(window, { kd: Object.assign(app, { perf: stage.perf }) });
   const goHome = async (): Promise<void> => {
     try {
       const home = await startHome(app, async (info) => {
