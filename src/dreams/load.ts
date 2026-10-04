@@ -6,14 +6,20 @@ export const LOAD_TIMEOUT_MS = 20_000;
 
 export type LoadResult = { ok: true; dream: DreamModule } | { ok: false; message: string };
 
-/** Loads a dream's code. A failed download becomes a message instead of a crash. */
+/** Attempts at fetching a dream's code before giving up (a blip on the network, or a dev reload). */
+export const LOAD_ATTEMPTS = 2;
+
+/** Loads a dream's code, trying again once. A failed download becomes a message, not a crash. */
 export async function loadDream(info: DreamInfo): Promise<LoadResult> {
-  try {
-    return { ok: true, dream: await withTimeout(info.load(), LOAD_TIMEOUT_MS) };
-  } catch {
-    return {
-      ok: false,
-      message: `Couldn't load "${info.title}". Check your internet connection and try again.`,
-    };
+  for (let attempt = 1; attempt <= LOAD_ATTEMPTS; attempt++) {
+    try {
+      return { ok: true, dream: await withTimeout(info.load(), LOAD_TIMEOUT_MS) };
+    } catch {
+      // try again, then fall through to the message
+    }
   }
+  return {
+    ok: false,
+    message: `Couldn't load "${info.title}". Check your internet connection and try again.`,
+  };
 }
