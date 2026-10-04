@@ -8,7 +8,7 @@
 
 **Goal:** fix every one of Kartik's play-test complaints (sections 2 and 3) and ship the graphics and animation upgrades he chose, so the game can launch with no visible issue.
 
-**Architecture:** Two tracks. **Track A** (Tasks A1–A16) is launch acceptance: every numbered complaint plus his answers (Dras rename and naming tape, difficulty, Kartik's model, the farewell cinematic, the canoe ending). **Track B** (Tasks B1–B5) is the look-and-feel upgrade (full-resolution render, AgX, GTAO, SMAA, a physical sky, Quaternius nature models, wind, extra mocap clips). If time runs out, A done and B partial is shippable; the reverse is not. Each task ends with a player's-eye Chrome check (section 0), not only unit tests.
+**Architecture:** Two tracks. **Track A** (Tasks A1–A17) is launch acceptance: every numbered complaint plus his answers (Dras rename and naming tape, difficulty, Kartik's model, the farewell cinematic, the canoe ending). **Track B** (Tasks B1–B4) is the rest of the look-and-feel upgrade (the physical sky everywhere with moon and sun shadows, Quaternius nature models with wind, splash and mist particles, first-person arms on the weapons). The render pipeline (full resolution, AgX, GTAO, SMAA) is Task A13 (see the rulings). If time runs out, A done and B partial is shippable; the reverse is not. Each task ends with a player's-eye Chrome check (section 0), not only unit tests.
 
 **Tech Stack:** Vite, TypeScript strict, three.js r186.1 `WebGPURenderer` + TSL (`three/webgpu`, `three/tsl`, `three/addons/...`), Vitest, oxlint, Prettier, Blender 4.x headless for assets, macOS `afconvert` and Python stdlib for sounds.
 
@@ -199,6 +199,11 @@ window.__gpuFrames = async (n) => { const dev = kd.stage.renderer.backend.device
 | 25 | Black screen after the credits | `session.finish` fades to black then `leave()`; `startHome` never fades back in. |
 | 26 | Mom's face "firing like a firecracker" at dawn (new, screenshot 32) | `ending-scene.ts update()` hangs the lantern's PointLight in world space at `(mom.x + 0.5, 1.3, mom.z)`: face height, 0.5 m from her face, intensity 5, distance 28; with no tone mapping and bloom threshold 0.7 her face and eyes blow out. The lantern mesh rides her wrist in the pack slot, so the light and the lamp are not even in the same place. |
 | 27 | "No realism at all" (new) | 540-row render scaled up, no anti-aliasing, no tone mapping (raw sRGB clipping), no ambient occlusion, a two-colour painted sky dome, Kenney's flat low-poly nature kit, no wind, lights placed by eye. Track B. |
+| 6b | Held zombie looks dead on the ground (confirmed by screenshot this session) | The model has no mouth: the zombie is posed flat under the snout tip at ground level (`GRAB.jawAhead` 3.5 = the nose tip, `jawBelow` 0.1), so it reads as a body lying on the bank in front of a white blob. |
+| 7b | Night 2 wall (confirmed this session) | Walking +x at z −150 stops at x 2.7 against `{minX 3, maxX 33, minZ −417, maxZ 16}` (the river blocker); a 4 m dark mud strip lies between the player and the water (screenshot). |
+| 28 | Flashlight at point blank blows the whole screen white (found this session) | A zombie 0.5 m away in the 80 cd beam, no tone mapping, bloom threshold 0.7: the frame went white-green behind the "You are hurt" page. |
+| 29 | "Don't tell people how many zombies are left" (Kartik, this session) | `hud.ts waveText` shows `Wave 2/3 · 5 left`. |
+| 30 | "Still white, where are its small eyes, it looks like a turd" (Kartik, this session, screenshot 33) | Besides the tint bug: `tools/blender/orca.py` builds a 5-bone blob with no eyeballs (the eye is only a white patch), no mouth, a male-sized straight dorsal fin and soft round proportions. Task A7 rebuilds it to real orca anatomy, done by the controller (not a Sonnet agent) with renders checked against reference photos. |
 | 2 | Phone missing | `intro.ts` goodbye plays `Idle_Gun_Pointing` with nothing in her hand. |
 | 1 | Baseball throw | `intro.ts throwAction` plays the retargeted UAL2 `OverhandThrow` (`Throw`, release 0.8 s). |
 
@@ -210,5 +215,9 @@ window.__gpuFrames = async (n) => { const dev = kd.stage.renderer.backend.device
 - Ruling: the canoe ride keeps running behind its dialogue pages (it is ambient; nothing can happen to you), so the conversation never freezes the river.
 - Ruling: difficulty lives in `Settings` (shared, saved, changeable from the pause menu) and is asked once when a new run starts. Old settings without it default to Normal.
 - Ruling: zombies take two body hits on Normal and Hard (a head hit always kills; the shotgun's close blast always kills), one on Story. This, scarce ammo, no recovering an arrow that killed, and short stuns are together what makes the creature and the guns matter.
+- Ruling: the render pipeline upgrade (tone mapping, AA, full resolution, GTAO) moves from Track B into Track A as Task A13: the sunrise (`SkyMesh` outputs HDR), Mom's lantern glare (#26) and the flashlight blowout (#28) all need tone mapping, and "no realism" (#27) is a launch complaint.
+- Ruling: the creature model rebuild (A7) is done by the controller itself in Blender, not a Sonnet agent: it is the game's centrepiece and Kartik has rejected it twice. Kartik's character and Mom's clips (A10) go to Sonnet agents with exact briefs; their renders are reviewed by eye before use.
+- Ruling: Dras is female (Mom already says "Here, girl"): a female orca's dorsal fin is shorter (about 0.9 m on a 7 m body) and curved back (falcate), unlike the 1.45 m straight fin today.
+- Ruling: the HUD shows the wave number only ("Wave 2 of 3"), never how many are left (Kartik, #29).
 - Ruling: one sky system. `SkyMesh` (r186, verified in `node_modules/three/examples/jsm/objects/SkyMesh.js`: `turbidity`, `rayleigh`, `mieCoefficient`, `mieDirectionalG`, `sunPosition`, `showSunDisc`, cloud uniforms) for dusk, day, dawn and sunrise; at night the sun is below the horizon, so a dark star dome plus the moon disc (kept from today) take over, blended by sun elevation. Every night preset is checked "never bright" by screenshot.
 
