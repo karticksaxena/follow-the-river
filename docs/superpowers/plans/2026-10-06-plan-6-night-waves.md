@@ -79,3 +79,25 @@
 7. **Waves:** wave defs per area, `waves.ts`, gates, crates as night pickups, checkpoint restart; HUD "Wave 1/3 · 5 left"; with tests.
 8. **Head bob;** with a test of the pure function.
 9. **Chrome play-through:** every night, a death mid-wave, a resume, and the ending.
+
+## Results (2026-10-06)
+
+All tasks shipped on `plan-6`. `pnpm run check` passes with 374 tests.
+
+**Checked in Chrome on :5176:**
+- **Night 1.**
+  - Wave 1 starts at its crate, which gives the pistol (equipped straight away), a spare battery, arrows and a fish pack. The HUD reads "Wave 1/3 · 6 left".
+  - Five pistol shots cleared it. The barricade fell, "The way is clear." showed, and the checkpoint was saved (`wave: 1`).
+- **Death in wave 2.** "You are back at the last barricade." You come back at z −183 (just past barricade 1), with full health, supplies topped up and gates [open, shut, shut].
+- **Guns.**
+  - The shotgun crate works: 8 shells, a muzzle flash, one shell spent per blast.
+  - The rifle crate (Night 2) works: holding the trigger fires 5 rounds in 0.5 s.
+- **Torch.** It died about 83 s after being switched on, switched itself off, and recharged to about half over the next ~15 s. After 20 s off it was full.
+- **Feeding at night.** "E: feed the orca"; the orca's grabs went 4 → 8.
+- **Night 3.** Two forest waves cleared, then the lake trigger started the ending: Mom's lines and the orca's last stand.
+
+**Fixed during play-test:**
+- The barricades read as passable (spaced fence loops). Each is now a solid row sized from the model, with extras in front.
+- The HUD's gun row assumed guns are found in order. It now uses the set of guns you own, since crates are optional.
+
+**Kartik checks by hand:** how the gun sounds feel, wave difficulty with a real mouse, and whether the shotgun/rifle viewmodels sit right.
