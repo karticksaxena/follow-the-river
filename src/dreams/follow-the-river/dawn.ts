@@ -18,8 +18,16 @@ import {
  */
 export const DAWN = { seconds: 14, moonSets: 0.35, volume: 0.35 } as const;
 
-/** The sun's elevation when the physical sky takes over (about -2 degrees). */
+/**
+ * The sun's path: elevation when the physical sky takes over (about -2 degrees) and when the dawn
+ * ends (about 11 degrees: clear of the far pines), and its azimuth (radians; the camera faces pi, so
+ * this is about 42 degrees left of the dam, over the pine line). Tuning knobs.
+ */
 const SUN_START = -0.035;
+const SUN_END = 0.2;
+const SUN_AZIMUTH = -2.4;
+/** The key light takes this share of the dawn after the moon sets to swing from the moon's direction to the sun's. */
+const HANDOVER = 0.1;
 /** Seconds between image-based light refreshes while the dawn blends (six 128 px faces each). */
 const ENV_EVERY = 0.5;
 /** How much of the lantern's light is left once the moon has set. */
@@ -51,8 +59,30 @@ export function dawnFades(k: number, out: Fades): Fades {
 export function dawnSun(k: number, out: { x: number; y: number; z: number }): typeof out | null {
   if (k < DAWN.moonSets) return null;
   const u = Math.min(1, (k - DAWN.moonSets) / (1 - DAWN.moonSets));
-  const elevation = SUN_START + (LIGHTING.sunrise.key.elevation - SUN_START) * u;
-  return skyDirection(elevation, LIGHTING.sunrise.key.azimuth, out);
+  return skyDirection(SUN_START + (SUN_END - SUN_START) * u, SUN_AZIMUTH, out);
+}
+
+/** Share 0..1 of the way the key light has swung from the moon's direction to the sun's. Pure. */
+export function handover(k: number): number {
+  const t = clamp01((k - DAWN.moonSets) / HANDOVER);
+  return t * t * (3 - 2 * t);
+}
+
+/** The key light's direction: the unit blend of the moon's and the sun's, `s` of the way to the sun. Writes `out`. */
+export function swingKey(
+  sun: { x: number; y: number; z: number },
+  moon: { x: number; y: number; z: number },
+  s: number,
+  out: { x: number; y: number; z: number },
+): typeof out {
+  const x = moon.x + (sun.x - moon.x) * s;
+  const y = moon.y + (sun.y - moon.y) * s;
+  const z = moon.z + (sun.z - moon.z) * s;
+  const len = Math.hypot(x, y, z) || 1;
+  out.x = x / len;
+  out.y = y / len;
+  out.z = z / len;
+  return out;
 }
 
 export interface Dawn {
@@ -71,6 +101,12 @@ export function createDawn(
   const colors = createLightColors();
   const fades: Fades = { dome: 1, stars: 1, moon: 1 };
   const sun = { x: 0, y: 0, z: 0 };
+  const lit = { x: 0, y: 0, z: 0 };
+  const moonDir = skyDirection(LIGHTING.predawn.key.elevation, LIGHTING.predawn.key.azimuth, {
+    x: 0,
+    y: 0,
+    z: 0,
+  });
   const sunrise = LIGHTING.sunrise;
   let lanternFull = -1;
   let nextEnv = 0;
@@ -90,11 +126,13 @@ export function createDawn(
         mixPresetInto(night, LIGHTING.predawn, moon, scratch);
         mixColorsInto(night, LIGHTING.predawn, moon, colors);
         frame.sun = null;
+        frame.key = null;
       } else {
         const u = Math.min(1, (k - DAWN.moonSets) / (1 - DAWN.moonSets));
         mixPresetInto(LIGHTING.predawn, sunrise, u, scratch);
         mixColorsInto(LIGHTING.predawn, sunrise, u, colors);
-        frame.sun = dawnSun(k, sun); // pinned over the dam
+        frame.sun = dawnSun(k, sun);
+        frame.key = swingKey(sun, moonDir, handover(k), lit);
       }
       applyLighting(lights, scratch, frame);
     },

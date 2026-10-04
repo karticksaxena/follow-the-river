@@ -79,7 +79,6 @@ function loadBodies(
   }));
 }
 
-/** Frees what a cancelled build made. Only touches the camera if the scene still owns it. */
 /** `compileAsync` skips objects off the camera's layers, so compile the mist box with only its layer on. */
 async function compileMist(
   renderer: THREE.WebGPURenderer,
@@ -95,6 +94,7 @@ async function compileMist(
   }
 }
 
+/** Frees what a cancelled build made. Only touches the camera if the scene still owns it. */
 function free(scene: THREE.Scene, camera: THREE.Camera, parts?: Partial<Systems>): void {
   // Scene first (as in the chapter teardown), while the viewmodels still hang off the camera.
   disposeScene(scene);

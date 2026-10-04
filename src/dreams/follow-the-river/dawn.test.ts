@@ -61,7 +61,7 @@ describe('one sun', () => {
     const lights = createWorldLights(new THREE.Scene());
     const dawn = createDawn(lights, LIGHTING.night, new THREE.PointLight());
     const out = { x: 0, y: 0, z: 0 };
-    for (const k of [0.4, 0.6, 0.8, 1]) {
+    for (const k of [0.5, 0.6, 0.8, 1]) {
       dawn.step(k, k * DAWN.seconds);
       expect(dawnSun(k, out)).not.toBeNull();
       const dir = lights.key.position.clone().normalize();
@@ -69,5 +69,28 @@ describe('one sun', () => {
       expect(dir.y).toBeCloseTo(out.y, 5);
       expect(dir.z).toBeCloseTo(out.z, 5);
     }
+  });
+});
+
+describe('the key light never jumps', () => {
+  it('turns less than 2 degrees between frames across the whole dawn, handover included', () => {
+    const lights = createWorldLights(new THREE.Scene());
+    const dawn = createDawn(lights, LIGHTING.night, new THREE.PointLight());
+    const step = 1 / 60;
+    dawn.step(0, 0);
+    let last = lights.key.position.clone().normalize();
+    for (let t = step; t <= DAWN.seconds; t += step) {
+      dawn.step(t / DAWN.seconds, t);
+      const now = lights.key.position.clone().normalize();
+      expect(last.angleTo(now)).toBeLessThan((2 * Math.PI) / 180);
+      last = now;
+    }
+  });
+  it('puts the sun well left of straight ahead (the dam) and clear of the horizon by the end', () => {
+    const out = { x: 0, y: 0, z: 0 };
+    dawnSun(1, out);
+    expect(out.x).toBeLessThan(-0.5);
+    expect(out.z).toBeLessThan(0);
+    expect(out.y).toBeGreaterThan(0.15);
   });
 });

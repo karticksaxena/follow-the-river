@@ -64,3 +64,9 @@ describe('bloom', () => {
     expect(GRADES.sunrise.bloom).toBeCloseTo(SUNRISE_BLOOM);
   });
 });
+
+describe('the sunrise bloom', () => {
+  it('stays modest so the sun is a disc with a halo, not a washed-out sky', () => {
+    expect(SUNRISE_BLOOM).toBeLessThanOrEqual(0.5);
+  });
+});

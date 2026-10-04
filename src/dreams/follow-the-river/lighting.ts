@@ -121,6 +121,8 @@ export function createWorldLights(scene: THREE.Scene): WorldLights {
 export interface LightFrame {
   refreshEnv: boolean;
   sun: { x: number; y: number; z: number } | null;
+  /** The key light's direction when it is not the sun's (a blend between the moon's and the sun's). */
+  key: { x: number; y: number; z: number } | null;
   colors: LightColors | null;
   dome: number | null;
   stars: number | null;
@@ -131,6 +133,7 @@ export interface LightFrame {
 export const STILL: Readonly<LightFrame> = {
   refreshEnv: true,
   sun: null,
+  key: null,
   colors: null,
   dome: null,
   stars: null,
@@ -196,8 +199,9 @@ export function applyLighting(
   const d = skyDirection(preset.key.elevation, preset.key.azimuth, sunScratch);
   key.color.set(c?.key ?? preset.key.color);
   applyDim(lights, preset, 0);
-  const aim = frame.sun ?? d; // the sun you see is the sun that lights and shadows
-  key.position.set(aim.x * KEY_DISTANCE, aim.y * KEY_DISTANCE, aim.z * KEY_DISTANCE);
+  const aim = frame.sun ?? d;
+  const lit = frame.key ?? aim; // the sun you see is the sun that lights and shadows
+  key.position.set(lit.x * KEY_DISTANCE, lit.y * KEY_DISTANCE, lit.z * KEY_DISTANCE);
   setShadowStrength(key, preset.shadow);
   const night = preset.stars ? 1 : 0;
   const moonAmount = frame.moon ?? night;
