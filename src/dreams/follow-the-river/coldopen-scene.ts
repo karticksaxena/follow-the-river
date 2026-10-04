@@ -123,7 +123,7 @@ export async function buildColdOpenScene(ctx: DreamContext): Promise<ColdOpenSce
   const area = { ...CITY, props: CITY.props.filter((p) => p.z > CUT_Z), shacks: [] };
   setWaterTier(ctx.stage.tier);
   const [world, sounds, house] = await Promise.all([
-    buildWorld(area, ctx.stage.tier),
+    buildWorld(area, ctx.stage.tier, ctx.stage.camera),
     loadSounds(ctx.audio),
     loadModel(kitUrl('suburb', 'building-type-a')),
   ]);

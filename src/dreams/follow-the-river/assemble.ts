@@ -126,7 +126,7 @@ export async function assemble(
   const camera = ctx.stage.camera;
   setWaterTier(ctx.stage.tier); // before the first build, so Medium/Low never builds High first
   const [world, sounds] = await Promise.all([
-    buildWorld(area, ctx.stage.tier),
+    buildWorld(area, ctx.stage.tier, ctx.stage.camera),
     loadSounds(ctx.audio),
   ]);
   const scene = world.scene;

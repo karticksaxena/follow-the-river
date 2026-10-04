@@ -3,7 +3,6 @@ import { seeded } from './skyline';
 import {
   COMMON_TREES,
   DEAD_TREES,
-  farModel,
   GRASS,
   grassTufts,
   NEAR_RANGE,
@@ -29,7 +28,7 @@ export interface CanoeGround {
  * (full meshes) and beyond it out to `FAR_TO` (thinned `-far` meshes), ferns, rocks, pebbles.
  * Trees thin out on lower tiers. Tuning knobs.
  */
-const PER_100M = { near: 22, far: 34, ferns: 40, rocks: 9, pebbles: 45 } as const;
+const PER_100M = { near: 12, far: 22, ferns: 40, rocks: 9, pebbles: 45 } as const;
 const TREE_DENSITY: Readonly<Record<Tier, number>> = { high: 1, medium: 0.8, low: 0.6 };
 const FAR_TO = 95;
 const TREE_FROM = 1.5;
@@ -71,7 +70,7 @@ const tree =
   (far: boolean) =>
   (r: () => number): Omit<Plant, 'x' | 'z' | 'y'> & { sink: number } => {
     const { model, scale } = treeModel(r);
-    return { model: far ? farModel(model) : model, yaw: r() * TAU, scale, far, sink: SINK.tree };
+    return { model, yaw: r() * TAU, scale, far, sink: SINK.tree };
   };
 
 /** Pure, deterministic: every tree, fern, rock and pebble of the river, and the grass (tier). */

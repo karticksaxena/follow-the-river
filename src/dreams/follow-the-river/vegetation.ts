@@ -78,25 +78,45 @@ export const GRASS: Readonly<
     { perM2: number; fade: { from: number; to: number }; scale: readonly [number, number] }
   >
 > = {
-  high: { perM2: 1.2, fade: { from: 18, to: 32 }, scale: [0.3, 0.6] },
-  medium: { perM2: 0.6, fade: { from: 13, to: 24 }, scale: [0.3, 0.6] },
-  low: { perM2: 0.18, fade: { from: 8, to: 16 }, scale: [0.35, 0.65] },
+  high: { perM2: 0.65, fade: { from: 18, to: 30 }, scale: [0.3, 0.6] },
+  medium: { perM2: 0.38, fade: { from: 12, to: 22 }, scale: [0.3, 0.6] },
+  low: { perM2: 0.14, fade: { from: 8, to: 15 }, scale: [0.35, 0.65] },
 };
 
 /**
- * Far trees use a smaller set of models (every model is its own mesh, and a mesh is a draw call in
- * every pass); at 35+ m, in fog, nobody counts the species.
+ * Every model is its own mesh in every 60 m cell, and every mesh is a draw call in every pass: so
+ * the species are cut to a few per kind (scale, yaw and tint vary them anyway). Maps each model to
+ * the one that is really built.
  */
-const FAR_MODEL: Readonly<Record<string, string>> = {
-  Pine_4: 'Pine_1',
-  Pine_5: 'Pine_2',
-  CommonTree_4: 'CommonTree_1',
-  CommonTree_5: 'CommonTree_2',
+const BUILT_MODEL: Readonly<Record<string, string>> = {
+  Pine_3: 'Pine_1',
+  Pine_4: 'Pine_2',
+  Pine_5: 'Pine_1',
+  CommonTree_3: 'CommonTree_1',
+  CommonTree_4: 'CommonTree_2',
+  CommonTree_5: 'CommonTree_1',
+  DeadTree_2: 'DeadTree_1',
   DeadTree_3: 'DeadTree_1',
+  Rock_Medium_2: 'Rock_Medium_1',
+  Rock_Medium_3: 'Rock_Medium_1',
+  Pebble_Round_2: 'Pebble_Round_1',
+  Pebble_Round_3: 'Pebble_Round_1',
+  Plant_1: 'Fern_1',
+  Plant_7: 'Fern_1',
+  Grass_Common_Tall: 'Grass_Common_Short',
 };
 
-/** Pure: the model a far tree is drawn with. */
-export const farModel = (model: string): string => FAR_MODEL[model] ?? model;
+/** The thinned (far) trees, in fog, come in one model per kind. */
+const FAR_ONE: Readonly<Record<string, string>> = {
+  Pine_2: 'Pine_1',
+  CommonTree_2: 'CommonTree_1',
+};
+
+/** Pure: the thinned tree built for a far tree of `model`. */
+export const farTree = (model: string): string => FAR_ONE[builtModel(model)] ?? builtModel(model);
+
+/** Pure: the model that is built for `model`. */
+export const builtModel = (model: string): string => BUILT_MODEL[model] ?? model;
 
 /** Pure: true for the tree models (they have `-far` variants). */
 export const isTree = (model: string): boolean =>
@@ -108,25 +128,35 @@ export function triangles(p: Pick<Plant, 'model' | 'far'>): number {
   return t ? t[p.far ? 1 : 0] : DEFAULT_TRIS;
 }
 
-/**
- * Pure: the triangles drawn with the camera at (cx, cz) and everything within `radius` metres
- * in view (an upper bound: no frustum cull; grass past its tier's fade is gone).
- */
-export function drawnTriangles(
-  plants: readonly Plant[],
-  cx: number,
-  cz: number,
-  radius: number,
-  tier: Tier,
-): number {
-  let sum = 0;
-  const fadeTo = GRASS[tier].fade.to;
-  for (const p of plants) {
-    const d = Math.hypot(p.x - cx, p.z - cz);
-    const reach = p.model.startsWith('Grass') ? Math.min(radius, fadeTo) : radius;
-    if (d <= reach) sum += triangles(p);
+/** How a built cell is shown: near trees up close, their thinned twin farther, grass/small by distance. */
+export type Kind = 'near' | 'far' | 'farOnly' | 'grass' | 'small';
+
+/** Draw distances (m) per tier. Tuning knobs. Low has no near trees at all: thinned ones only. */
+export const REACH = {
+  nearTree: { high: 35, medium: 22, low: 0 },
+  /** Ferns, plants, rocks and pebbles. */
+  small: { high: 45, medium: 35, low: 25 },
+  /** Trees are drawn to the fog's far plane plus this, up to the max. */
+  treeMargin: 10,
+  treeMax: 110,
+} as const satisfies Record<string, unknown>;
+
+/** Pure: is a cell of `kind` at `distance` m from the camera drawn? Grass ends where its fade ends. */
+export function visible(kind: Kind, distance: number, tier: Tier, fogFar: number): boolean {
+  const trees = Math.min(REACH.treeMax, fogFar + REACH.treeMargin);
+  const near = REACH.nearTree[tier];
+  switch (kind) {
+    case 'near':
+      return distance < near;
+    case 'far':
+      return distance >= near && distance <= trees;
+    case 'farOnly':
+      return distance <= trees;
+    case 'grass':
+      return distance <= GRASS[tier].fade.to;
+    default:
+      return distance <= REACH.small[tier];
   }
-  return sum;
 }
 
 /** Pure: how many plants of a placement list are far variants / near ones. */
@@ -162,7 +192,7 @@ export function plantsOf(area: AreaDef): Plant[] {
   return area.props
     .filter((p: PropPlacement) => p.kit === 'megakit')
     .map((p) => ({
-      model: isTree(p.model) && isFar(zone, p.x, p.z) ? farModel(p.model) : p.model,
+      model: p.model,
       x: p.x,
       y: p.y ?? 0,
       z: p.z,

@@ -185,8 +185,18 @@ function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
 const GROUND = { pathX, meshY, terrainY, riverHalf: RIVER_HALF };
 
 /** MegaKit trees, ferns, rocks, pebbles and the tier's grass on both banks (nature.ts instances them). */
-function addBanks(scene: THREE.Scene, zNear: number, zFar: number, tier: Tier): Promise<void> {
-  return addVegetation(scene, canoePlants(zNear, zFar, tier, GROUND), tier);
+async function addBanks(
+  scene: THREE.Scene,
+  zNear: number,
+  zFar: number,
+  stage: CanoeStage,
+): Promise<void> {
+  await addVegetation(
+    scene,
+    canoePlants(zNear, zFar, stage.tier, GROUND),
+    stage.tier,
+    stage.camera,
+  );
 }
 
 /** A double-bladed paddle of dark wood lying along x, pivoting about its middle. */
@@ -248,6 +258,7 @@ export const CANOE_SCALE = KIT_SCALE.nature * 0.7;
 /** What the scene needs of the stage: its camera's shadow cascades and the graphics tier. */
 export interface CanoeStage {
   tier: Tier;
+  camera: THREE.Camera;
 }
 
 /** Builds the whole sunrise forest river; `length` is how far down the river (metres) the ride goes. */
@@ -267,7 +278,7 @@ export async function buildCanoeScene(length: number, stage: CanoeStage): Promis
     makeCanoe(),
     loadSkinned(characterUrl('mom')),
     loadSkinned(characterUrl('orca')),
-    addBanks(scene, zNear, zFar, stage.tier),
+    addBanks(scene, zNear, zFar, stage),
     texturesReady(),
   ]);
   const mom = createMom(momAsset, new THREE.Group());

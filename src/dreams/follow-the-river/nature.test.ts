@@ -6,12 +6,30 @@ import { SUBURBS } from './areas/suburbs';
 import type { AreaDef } from './areas/types';
 import { meshY, pathX, RIVER_HALF, TERRAIN, terrainY } from './canoe-scene';
 import { canoePlants } from './canoe-vegetation';
-import { addVegetation } from './nature';
+import { addVegetation, type Vegetation } from './nature';
 import { shackBounds } from './shack';
 import { type Plant, plantsOf, stripGrass } from './vegetation';
 
 /** Vegetation meshes per scene: every one is a draw call in every pass. */
+/** Vegetation meshes shown per pass: every one is a draw call. */
+const MAX_MESHES = 60;
 const TIERS: readonly Tier[] = ['low', 'medium', 'high'];
+/** Triangles in one pass (every mesh in view, all around: an upper bound), per tier. */
+const TRIANGLES: Record<Tier, number> = { low: 400_000, medium: 800_000, high: 1_500_000 };
+/** Fog far planes tried: night (60) and day (100). */
+const FOGS = [60, 100];
+/** Camera spots (x, z): start, middle and end of each area, and along the canoe path. */
+const SPOTS = {
+  forest: [14, -60, -200, -300, -380].flatMap((z): [number, number][] => [
+    [-4, z],
+    [-16, z],
+  ]),
+  suburbs: [14, -60, -200, -300, -480].flatMap((z): [number, number][] => [
+    [-4, z],
+    [-16, z],
+  ]),
+  canoe: [0, -150, -300, -450, -600].map((z): [number, number] => [pathX(z), z]),
+};
 const GROUND = { pathX, meshY, terrainY, riverHalf: RIVER_HALF };
 
 type ReadFile = (path: string) => Uint8Array<ArrayBuffer>;
@@ -49,11 +67,19 @@ beforeAll(async () => {
 });
 afterAll(() => vi.unstubAllGlobals());
 
-async function build(plants: Plant[], tier: Tier): Promise<THREE.InstancedMesh[]> {
-  const scene = new THREE.Scene();
-  await addVegetation(scene, plants, tier);
-  return scene.children.filter((c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh);
+async function built(plants: Plant[], tier: Tier): Promise<Vegetation> {
+  return addVegetation(new THREE.Scene(), plants, tier);
 }
+
+async function build(plants: Plant[], tier: Tier): Promise<THREE.InstancedMesh[]> {
+  const vegetation = await built(plants, tier);
+  return vegetation.children.filter(
+    (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh,
+  );
+}
+
+/** Triangles a mesh draws in one pass: instances x triangles per instance. */
+const drawn = (m: THREE.InstancedMesh): number => m.count * ((m.geometry.index?.count ?? 0) / 3);
 
 const materialName = (m: THREE.Mesh): string => (Array.isArray(m.material) ? '' : m.material.name);
 
@@ -65,19 +91,34 @@ const canoe = (tier: Tier): Plant[] =>
   canoePlants(TERRAIN.behind, -600 - TERRAIN.ahead, tier, GROUND);
 
 describe('addVegetation', () => {
-  it('makes at most 60 meshes per scene on every tier', async () => {
-    const scenes: [string, (t: Tier) => Plant[]][] = [
-      ['forest', (t) => area(FOREST, t)],
-      ['suburbs', (t) => area(SUBURBS, t)],
-      ['canoe', canoe],
+  it('stays in budget per pass at the sample camera spots: triangles and meshes, every tier', async () => {
+    // [scene, plants per tier, camera spots (x, z)]
+    const scenes: [string, (t: Tier) => Plant[], [number, number][]][] = [
+      ['forest', (t) => area(FOREST, t), SPOTS.forest],
+      ['suburbs', (t) => area(SUBURBS, t), SPOTS.suburbs],
+      ['canoe', canoe, SPOTS.canoe],
     ];
-    for (const [, plants] of scenes) {
+    for (const [name, plants, spots] of scenes) {
       for (const tier of TIERS) {
-        const meshes = await build(plants(tier), tier);
-        expect(meshes.length).toBeGreaterThan(10);
+        const vegetation = await built(plants(tier), tier);
+        let worst = 0;
+        let most = 0;
+        for (const fog of FOGS) {
+          for (const [x, z] of spots) {
+            const shown = vegetation.cull(x, z, fog);
+            worst = Math.max(
+              worst,
+              shown.reduce((sum, m) => sum + drawn(m), 0),
+            );
+            most = Math.max(most, shown.length);
+          }
+        }
+        expect(worst, `${name} ${tier} triangles`).toBeLessThanOrEqual(TRIANGLES[tier]);
+        expect(most, `${name} ${tier} meshes`).toBeLessThanOrEqual(MAX_MESHES);
+        expect(vegetation.children.length).toBeGreaterThan(10);
       }
     }
-  }, 60000);
+  }, 120000);
 
   it('casts shadows and reflects trees on High only', async () => {
     for (const tier of TIERS) {

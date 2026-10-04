@@ -2,40 +2,26 @@ import { describe, expect, it } from 'vitest';
 import type { Tier } from '../../engine/quality';
 import { FOREST } from './areas/forest';
 import { SUBURBS } from './areas/suburbs';
-import type { AreaDef } from './areas/types';
 import { shackBounds } from './shack';
 import { lakeEdgeZ } from './shore-shape';
 import {
   countVariants,
   distanceTo,
-  drawnTriangles,
   GRASS,
   isFar,
   NEAR_RANGE,
   plantsOf,
+  REACH,
   scatterGrass,
   stripGrass,
   stripZone,
   triangles,
+  visible,
 } from './vegetation';
 
 const TIERS: readonly Tier[] = ['low', 'medium', 'high'];
-const BUDGET = 1_500_000;
-/** Beyond this the fog (45-50 m at night) has hidden everything. */
-const VIEW = 70;
 const flat = (): number => 0;
 const slope = (x: number): number | null => (x > 8 ? null : x * 0.1);
-
-function sweep(area: AreaDef, tier: Tier): number {
-  const plants = [...plantsOf(area), ...stripGrass(area, tier, area.shacks.map(shackBounds))];
-  const zone = stripZone(area);
-  let worst = 0;
-  for (let z = zone.maxZ; z >= zone.minZ; z -= 10) {
-    for (const x of [zone.minX + 1, -4])
-      worst = Math.max(worst, drawnTriangles(plants, x, z, VIEW, tier));
-  }
-  return worst;
-}
 
 describe('grass density per tier', () => {
   const region = { x0: 0, x1: 10, z0: 0, z1: -10 };
@@ -44,7 +30,7 @@ describe('grass density per tier', () => {
   it('is sparser on every lower tier, much sparser on Low', () => {
     expect(count('high')).toBeGreaterThan(count('medium'));
     expect(count('medium')).toBeGreaterThan(count('low'));
-    expect(count('low')).toBeLessThan(count('high') / 5);
+    expect(count('low')).toBeLessThan(count('high') / 4);
   });
 
   it('matches the tier density (tufts per m²) and stays on the region', () => {
@@ -70,7 +56,7 @@ describe('grass density per tier', () => {
   it('sits on the ground it is given and skips holes and avoided zones', () => {
     const avoid = { minX: 2, maxX: 4, minZ: -10, maxZ: 0 };
     const tufts = scatterGrass(region, 'high', 2, (x) => slope(x), [avoid]);
-    expect(tufts.length).toBeGreaterThan(50);
+    expect(tufts.length).toBeGreaterThan(30);
     for (const t of tufts) {
       expect(t.y).toBeCloseTo(t.x * 0.1);
       expect(t.x).toBeLessThanOrEqual(8);
@@ -147,14 +133,33 @@ describe('forest and suburbs vegetation', () => {
       expect(g.z).toBeGreaterThan(lakeEdgeZ(g.x, lakeZ) + 6); // past the pebble band
     }
   });
+});
 
-  it('stays within 1.5 M triangles drawn at every spot on every tier', () => {
-    for (const area of [FOREST, SUBURBS]) {
-      for (const tier of TIERS) expect(sweep(area, tier)).toBeLessThan(BUDGET);
+describe('visible', () => {
+  it('shows near trees up close and their thinned twin from there out, never both', () => {
+    for (const tier of ['medium', 'high'] as const) {
+      for (let d = 0; d < 150; d += 5) {
+        expect(visible('near', d, tier, 60) && visible('far', d, tier, 60)).toBe(false);
+      }
+      const edge = REACH.nearTree[tier];
+      expect(visible('near', edge - 1, tier, 60)).toBe(true);
+      expect(visible('far', edge + 1, tier, 60)).toBe(true);
     }
   });
 
-  it('draws fewer triangles on lower tiers (grass)', () => {
-    expect(sweep(FOREST, 'low')).toBeLessThan(sweep(FOREST, 'high'));
+  it('draws no near trees on Low, and thinned ones out to the fog plus a margin', () => {
+    expect(visible('near', 0, 'low', 60)).toBe(false);
+    expect(visible('farOnly', 60 + REACH.treeMargin, 'low', 60)).toBe(true);
+    expect(visible('farOnly', 60 + REACH.treeMargin + 1, 'low', 60)).toBe(false);
+    expect(visible('farOnly', 500, 'high', 500)).toBe(false); // capped at treeMax
+  });
+
+  it('ends grass where its fade ends and small plants sooner on lower tiers', () => {
+    for (const tier of ['low', 'medium', 'high'] as const) {
+      expect(visible('grass', GRASS[tier].fade.to, tier, 60)).toBe(true);
+      expect(visible('grass', GRASS[tier].fade.to + 1, tier, 60)).toBe(false);
+    }
+    expect(REACH.small.low).toBeLessThan(REACH.small.medium);
+    expect(REACH.small.medium).toBeLessThan(REACH.small.high);
   });
 });

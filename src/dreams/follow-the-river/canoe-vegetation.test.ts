@@ -2,14 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { Tier } from '../../engine/quality';
 import { meshY, pathX, RIVER_HALF, TERRAIN, terrainY } from './canoe-scene';
 import { canoePlants } from './canoe-vegetation';
-import { drawnTriangles, NEAR_RANGE, type Plant } from './vegetation';
+import { NEAR_RANGE, type Plant } from './vegetation';
 
 const GROUND = { pathX, meshY, terrainY, riverHalf: RIVER_HALF };
 const Z_NEAR = TERRAIN.behind;
 const Z_FAR = -600 - TERRAIN.ahead;
-const TIERS: readonly Tier[] = ['low', 'medium', 'high'];
-const BUDGET = 1_500_000;
-const VIEW = 90;
 const plants = (tier: Tier): Plant[] => canoePlants(Z_NEAR, Z_FAR, tier, GROUND);
 const grass = (t: Tier): number => plants(t).filter((p) => p.model.startsWith('Grass')).length;
 
@@ -65,16 +62,5 @@ describe('canoePlants', () => {
 
   it('is deterministic', () => {
     expect(plants('medium')).toEqual(plants('medium'));
-  });
-
-  it('stays within 1.5 M triangles drawn from every spot of the ride, on every tier', () => {
-    for (const tier of TIERS) {
-      const all = plants(tier);
-      let worst = 0;
-      for (let z = 0; z > -600; z -= 15) {
-        worst = Math.max(worst, drawnTriangles(all, pathX(z), z, VIEW, tier));
-      }
-      expect(worst).toBeLessThan(BUDGET);
-    }
   });
 });

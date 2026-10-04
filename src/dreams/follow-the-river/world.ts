@@ -137,13 +137,22 @@ async function addWaters(scene: THREE.Scene, area: AreaDef): Promise<Railing | n
 }
 
 /** MegaKit trees, ferns, rocks and the tier's grass, instanced (`nature.ts`). */
-function addPlants(scene: THREE.Scene, area: AreaDef, tier: Tier): Promise<void> {
+async function addPlants(
+  scene: THREE.Scene,
+  area: AreaDef,
+  tier: Tier,
+  camera: THREE.Camera | null,
+): Promise<void> {
   const grass = stripGrass(area, tier, area.shacks.map(shackBounds));
-  return addVegetation(scene, [...plantsOf(area), ...grass], tier);
+  await addVegetation(scene, [...plantsOf(area), ...grass], tier, camera);
 }
 
 /** Builds an area: lights, ground, river, skyline, props, plants, shacks and every blocker. */
-export async function buildWorld(area: AreaDef, tier: Tier = 'high'): Promise<World> {
+export async function buildWorld(
+  area: AreaDef,
+  tier: Tier = 'high',
+  camera: THREE.Camera | null = null,
+): Promise<World> {
   const scene = new THREE.Scene();
   const lights = createWorldLights(scene);
   addGround(scene, area);
@@ -153,7 +162,7 @@ export async function buildWorld(area: AreaDef, tier: Tier = 'high'): Promise<Wo
     Promise.all(area.props.filter((p) => p.kit !== 'megakit').map((p) => loadProp(p, paved))),
     addCampfire(scene, area.waitSpot.x, area.waitSpot.z),
     addWaters(scene, area),
-    addPlants(scene, area, tier),
+    addPlants(scene, area, tier, camera),
     ...area.shacks.map((shack) => addShack(scene, shack)),
   ]);
   await texturesReady(); // the ground never pops in
