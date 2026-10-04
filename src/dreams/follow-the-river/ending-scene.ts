@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { loadSkinned } from '../../engine/models';
+import { TORCH_EXPOSURE, WATCH } from './flashlight';
 import { createMom, type Mom } from './intro-scene';
 import { characterUrl } from './kits';
 import { createMomActor, type MomActor, type Pt } from './mom-actor';
@@ -15,16 +16,25 @@ const LANTERN_GLOW_UP = 0.05;
 export const LANTERN_OUT = 0.45;
 const lamp = new THREE.Vector3();
 
-/** Pure: where the lantern's light goes: `LANTERN_OUT` m from `hand` toward `cam` on the ground plane. Writes `out`. */
+/**
+ * Pure: where the lantern's light goes, `LANTERN_OUT` m from `hand`. Outward from her body axis
+ * `body` through the hand (so it never crosses her torso), or toward `cam` when that also points
+ * away from the axis (the light then faces the player). Writes `out`.
+ */
 export function lanternSpot(
   hand: { x: number; y: number; z: number },
+  body: { x: number; z: number },
   cam: { x: number; z: number },
   out: { x: number; y: number; z: number },
 ): typeof out {
-  const dx = cam.x - hand.x;
-  const dz = cam.z - hand.z;
-  const len = Math.hypot(dx, dz);
-  const [ux, uz] = len > 1e-6 ? [dx / len, dz / len] : [0, 1];
+  const rx = hand.x - body.x;
+  const rz = hand.z - body.z;
+  const cx = cam.x - hand.x;
+  const cz = cam.z - hand.z;
+  const rl = Math.hypot(rx, rz);
+  const cl = Math.hypot(cx, cz);
+  const toCam = cl > 1e-6 && cx * rx + cz * rz > 0;
+  const [ux, uz] = toCam ? [cx / cl, cz / cl] : rl > 1e-6 ? [rx / rl, rz / rl] : [0, 1];
   out.x = hand.x + ux * LANTERN_OUT;
   out.y = hand.y + LANTERN_GLOW_UP;
   out.z = hand.z + uz * LANTERN_OUT;
@@ -97,7 +107,12 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
       if (lakeZ !== null) mom.group.position.y = shoreY(mom.group.position.z - lakeZ);
       if (held) {
         mom.pack.getWorldPosition(lamp); // the lantern mesh rides her right hand
-        lanternSpot(lamp, sys.ctx.stage.camera.position, held.position);
+        lanternSpot(lamp, mom.group.position, sys.ctx.stage.camera.position, held.position);
+      }
+      sys.flashlight.clearWatch(WATCH.mom);
+      if (mom.group.visible) {
+        const { x, z } = mom.group.position;
+        sys.flashlight.watch(WATCH.mom, x, mom.group.position.y + TORCH_EXPOSURE.chest, z);
       }
     },
     place(toX, toZ, lantern) {

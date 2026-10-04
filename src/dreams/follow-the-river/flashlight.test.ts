@@ -1,6 +1,16 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { BATTERY, beamLevel, chargeBattery, createFlashlight, torchAim } from './flashlight';
+import {
+  BATTERY,
+  beamLevel,
+  chargeBattery,
+  createFlashlight,
+  FLASHLIGHT,
+  inBeamDistance,
+  TORCH_EXPOSURE,
+  torchAim,
+  torchScale,
+} from './flashlight';
 
 const EYE = 1.6;
 const smoothstep = (a: number, b: number, x: number): number => {
@@ -96,5 +106,37 @@ describe('battery', () => {
     const levels = Array.from({ length: 200 }, (_, i) => beamLevel(BATTERY.low / 2, i * 0.05));
     expect(Math.min(...levels)).toBeLessThan(0.6);
     expect(Math.max(...levels)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('torchScale (the eye adjusts to a close face)', () => {
+  const { intensity, decay } = FLASHLIGHT;
+  const lit = (d: number): number =>
+    (torchScale(d, intensity, decay, TORCH_EXPOSURE.cap) * intensity) / d ** decay;
+
+  it('is full when nothing is in the beam', () => {
+    expect(torchScale(Infinity, intensity, decay, TORCH_EXPOSURE.cap)).toBe(1);
+  });
+
+  it('caps the light on the nearest face at 1, 2 and 3 m', () => {
+    for (const d of [1, 2, 3]) expect(lit(d)).toBeLessThanOrEqual(TORCH_EXPOSURE.cap + 1e-9);
+    expect(lit(1)).toBeCloseTo(TORCH_EXPOSURE.cap);
+  });
+
+  it('is continuous where the cap starts to bite, and leaves far targets at full power', () => {
+    const edge = (intensity / TORCH_EXPOSURE.cap) ** (1 / decay);
+    expect(torchScale(edge * 0.999, intensity, decay, TORCH_EXPOSURE.cap)).toBeCloseTo(1, 2);
+    expect(torchScale(edge * 1.001, intensity, decay, TORCH_EXPOSURE.cap)).toBe(1);
+    expect(torchScale(20, intensity, decay, TORCH_EXPOSURE.cap)).toBe(1);
+  });
+});
+
+describe('inBeamDistance', () => {
+  const eye = { x: 0, y: 1.6, z: 0 };
+  const fwd = { x: 0, y: 0, z: -1 };
+  it('is the distance for a point in the cone, infinite outside it or behind', () => {
+    expect(inBeamDistance(eye, fwd, 0, 1.6, -3)).toBeCloseTo(3);
+    expect(inBeamDistance(eye, fwd, 5, 1.6, -3)).toBe(Infinity);
+    expect(inBeamDistance(eye, fwd, 0, 1.6, 3)).toBe(Infinity);
   });
 });

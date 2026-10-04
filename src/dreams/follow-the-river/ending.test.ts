@@ -201,20 +201,25 @@ describe("Mom's movement", () => {
 });
 
 describe("Mom's lantern light", () => {
-  it('sits out from the hand toward the camera, clear of her body', () => {
-    const hand = { x: 2, y: 1, z: 5 };
+  const body = { x: 2, z: 5 };
+  const hand = { x: 2.25, y: 1, z: 5.1 };
+  const axisClearance = (p: { x: number; z: number }): number =>
+    Math.hypot(p.x - body.x, p.z - body.z);
+
+  it('sits clear of her body axis and her hand, whichever side the camera is on', () => {
     for (const cam of [
-      { x: 2, y: 1.6, z: 9 },
-      { x: -4, y: 1.6, z: 5 },
-      { x: 2, y: 1.6, z: 5 },
+      { x: 2, z: 9 }, // front
+      { x: 2, z: 1 }, // behind her
+      { x: -4, z: 5 }, // her left
+      { x: 8, z: 5 }, // her right
+      { x: 2.25, z: 5.1 }, // on the hand
     ]) {
       const out = { x: 0, y: 0, z: 0 };
-      lanternSpot(hand, cam, out);
-      const d = Math.hypot(out.x - hand.x, out.z - hand.z);
-      expect(Math.hypot(d, out.y - hand.y)).toBeGreaterThanOrEqual(0.25);
-      expect(d).toBeCloseTo(LANTERN_OUT);
-      const toCam = (cam.x - hand.x) * (out.x - hand.x) + (cam.z - hand.z) * (out.z - hand.z);
-      expect(toCam >= 0).toBe(true);
+      lanternSpot(hand, body, cam, out);
+      expect(axisClearance(out)).toBeGreaterThanOrEqual(0.3);
+      expect(Math.hypot(out.x - hand.x, out.y - hand.y, out.z - hand.z)).toBeGreaterThanOrEqual(
+        0.25,
+      );
     }
   });
 

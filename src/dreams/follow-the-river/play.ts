@@ -4,7 +4,7 @@ import type { AmbushDef } from './areas/types';
 import { createControls, cutsceneChange, type Controls } from './controls';
 import { DIFFICULTY, nightTuning, type DifficultyTuning } from './difficulty';
 import { nightEnd } from './ending';
-import { BEAM, chargeBattery } from './flashlight';
+import { BEAM, chargeBattery, TORCH_EXPOSURE, WATCH } from './flashlight';
 import { nearSpot, takeDamage } from './flow';
 import { gunBits, type HudState } from './hud';
 import { applyDim, LIGHTING } from './lighting';
@@ -54,6 +54,8 @@ export interface Play {
 
 /** What the per-frame functions share (everything preallocated, so frames allocate nothing). */
 interface State {
+  /** Offers a zombie to the torch's eye adjustment (built once: no closure per frame). */
+  watchZombie: (id: number, x: number, z: number) => void;
   sys: Systems;
   run: Run;
   events: Events;
@@ -106,6 +108,7 @@ function createState(sys: Systems, run: Run, events: Events): State {
   const sense = newSense();
   const chapter = chapterOf(run.phase);
   const state: State = {
+    watchZombie: (_id, x, z) => sys.flashlight.watch(WATCH.horde, x, TORCH_EXPOSURE.chest, z),
     sys,
     run,
     events,
@@ -185,7 +188,9 @@ function tickWorld(p: State, dt: number): void {
   p.offFor = sys.flashlight.on ? 0 : p.offFor + dt;
   supplies.battery = chargeBattery(supplies.battery, sys.flashlight.on, p.offFor, dt);
   if (supplies.battery <= 0) sys.flashlight.on = false; // dead: off, so it starts recharging
-  sys.flashlight.apply(supplies.battery, run.time);
+  sys.flashlight.clearWatch(WATCH.horde);
+  sys.horde.forEachAlive(p.watchZombie);
+  sys.flashlight.apply(supplies.battery, run.time, dt);
   sys.horde.update(dt, sense, p.onHit);
   sys.armory.update(dt);
   sys.gates.update(dt);
