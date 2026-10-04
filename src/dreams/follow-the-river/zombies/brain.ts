@@ -1,3 +1,6 @@
+import { THROWN_SECONDS } from './thrown';
+export { THROWN_SECONDS };
+
 export type ZombieState =
   | 'lying'
   | 'rising'
@@ -7,21 +10,13 @@ export type ZombieState =
   | 'recover'
   | 'stunned'
   | 'dying'
-  | 'taken'
+  /** Knocked into the lake by the orca: flies, splashes, sinks (posed by the body, not alive). */
+  | 'thrown'
   /** In the orca's jaws: posed by the orca, not by the brain, until it drowns. */
   | 'held'
   | 'dead';
 export type Intent =
-  | 'lie'
-  | 'rise'
-  | 'stand'
-  | 'walk'
-  | 'run'
-  | 'strike'
-  | 'stagger'
-  | 'fall'
-  | 'dragged'
-  | 'struggle';
+  'lie' | 'rise' | 'stand' | 'walk' | 'run' | 'strike' | 'stagger' | 'fall' | 'thrown' | 'struggle';
 
 export interface Tuning {
   /** Notices the player within this many metres. */
@@ -44,7 +39,6 @@ export const DAY_TUNING: Tuning = { sight: 7, speed: 1.1, giveUp: 22, ...NORMAL_
 export const NIGHT_TUNING: Tuning = { sight: 45, speed: 3.5, giveUp: 80, ...NORMAL_HARM };
 export const ATTACK = { range: 1.3, windup: 0.45, recover: 0.9 } as const;
 export const FALL_SECONDS = 3;
-export const TAKEN_SECONDS = 1.6;
 /** A lying zombie wakes when the player is this close (m) or makes noise, then takes RISE_SECONDS to get up. */
 export const WAKE = 4;
 export const RISE_SECONDS = 1.2;
@@ -100,7 +94,7 @@ export const newMind = (lying = false): Mind => ({
 export function isAlive(mind: Mind): boolean {
   return (
     mind.state !== 'dying' &&
-    mind.state !== 'taken' &&
+    mind.state !== 'thrown' &&
     mind.state !== 'held' &&
     mind.state !== 'dead'
   );
@@ -112,10 +106,11 @@ export function kill(mind: Mind): void {
   mind.timer = FALL_SECONDS;
 }
 
-export function takeByFish(mind: Mind): void {
+/** The orca knocks it aside into the lake (see thrown.ts). */
+export function throwByFish(mind: Mind): void {
   if (!isAlive(mind)) return;
-  mind.state = 'taken';
-  mind.timer = TAKEN_SECONDS;
+  mind.state = 'thrown';
+  mind.timer = THROWN_SECONDS;
 }
 
 /** The orca has it: returns false if it was already dead (killed while the orca came in). */
@@ -147,7 +142,7 @@ function moveIntent(tuning: Tuning): Intent {
 
 function ending(mind: Mind, dt: number, out: Thought): Thought {
   mind.timer -= dt;
-  const intent = mind.state === 'taken' ? 'dragged' : 'fall';
+  const intent = mind.state === 'thrown' ? 'thrown' : 'fall';
   if (mind.timer <= 0) mind.state = 'dead';
   return set(out, intent);
 }
@@ -217,7 +212,7 @@ export function think(
     case 'rising':
       return waitThen(mind, dt, out, 'rise');
     case 'dying':
-    case 'taken':
+    case 'thrown':
       return ending(mind, dt, out);
     case 'stunned':
       return waitThen(mind, dt, out, 'stagger');

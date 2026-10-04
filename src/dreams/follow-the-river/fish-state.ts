@@ -97,6 +97,11 @@ export interface FishState {
   readonly onBreach: (z: number) => void;
   /** Set once by createFish (they play the orca's sounds). */
   hooks: GrabHooks;
+  /** The big splash where a zombie she threw hits the water (the horde calls it). */
+  onThrown: (x: number, z: number) => void;
+  /** Her jaw bone (null if the model has none), and what she may take: only zombies near these points. */
+  readonly jaw: THREE.Object3D | null;
+  guards: readonly { x: number; z: number }[];
 }
 
 function makeClips(
@@ -208,6 +213,9 @@ export function createState(
     waterline: bank.waterline,
     onBreach: bank.onBreach,
     hooks: { breach: () => undefined, splash: () => undefined },
+    onThrown: () => undefined,
+    jaw: body.getObjectByName('Jaw') ?? null,
+    guards: [],
   };
   return f;
 }

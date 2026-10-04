@@ -5,19 +5,22 @@ import type { Horde } from './zombies/horde';
 /** All a grab needs from the horde. */
 export type Prey = Pick<
   Horde,
-  'locate' | 'seize' | 'hold' | 'drown' | 'forEachAlive' | 'takeByFish'
+  'locate' | 'seize' | 'hold' | 'drown' | 'forEachAlive' | 'throwByFish'
 >;
 
 /**
  * How the orca strikes: seconds between grabs, reach from the water (m), pace (1 normal, below 1
  * faster) and sweep: zombies this close to its jaws when it lands are knocked into the river too
- * (0 = only the one it bites). The ending's last stand is far, fast and sweeping.
+ * (0 = only the one it bites), and guard: she only takes zombies within this many metres of a guard
+ * point (you, Mom; see `Fish.setGuards`; Infinity = anyone). The ending's last stand is far, fast,
+ * sweeping and guarding.
  */
 export interface StrikeStyle {
   cooldown: number;
   reach: number;
   pace: number;
   sweep: number;
+  guard: number;
 }
 
 /**
@@ -56,6 +59,10 @@ export const GRAB = {
   jawBelow: ANATOMY.bite.below,
   /** A zombie further than this from the jaws when they close got away. */
   biteRange: 2.5,
+  /** How far her jaws stay open (0 shut .. 1 open) while they hold the zombie. */
+  hold: 0.25,
+  /** The jaws start to open this share of the way through the approach. */
+  openAt: 0.6,
   /** Root depth it slides back to, below cruise depth: the zombie goes under too. */
   sink: 1.4,
 } as const;
@@ -256,11 +263,24 @@ function bite(g: Grab, horde: Prey): boolean {
   return horde.seize(g.victim);
 }
 
-/** The orca lands among them: the ones beside its jaws are knocked into the river. Allocates: rare. */
+/**
+ * How open her jaws are (0 shut .. 1 open): shut until `openAt` of the approach, wide by the bite,
+ * `hold` once the zombie is between them (shut if the bite missed), shut again once she is back under.
+ */
+export function jawAt(g: Grab): number {
+  const shut = g.approach + g.burst;
+  if (g.underAgain) return 0;
+  if (g.bitten) return g.victim >= 0 ? GRAB.hold : 0;
+  const from = g.approach * GRAB.openAt;
+  return smooth(clamp01((g.t - from) / (shut - from)));
+}
+
+/** The orca lands among them: the ones beside its jaws are thrown into the lake. Allocates: rare. */
 function sweepAside(g: Grab, horde: Prey): void {
   if (g.sweep <= 0) return;
   horde.forEachAlive((id, x, z) => {
-    if (id !== g.victim && Math.hypot(x - jaw.x, z - jaw.z) <= g.sweep) horde.takeByFish(id);
+    if (id !== g.victim && Math.hypot(x - jaw.x, z - jaw.z) <= g.sweep)
+      horde.throwByFish(id, jaw.x, jaw.z);
   });
 }
 

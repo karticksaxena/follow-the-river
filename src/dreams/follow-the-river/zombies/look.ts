@@ -42,7 +42,8 @@ export const CLIP_FOR: Readonly<Record<Intent, string>> = {
   // stunned zombie looked dead, then sprang up again.)
   stagger: 'Idle',
   fall: 'Death',
-  dragged: 'Hit',
+  // Knocked aside by the orca: tumbling through the air.
+  thrown: 'Hit',
   // Kicking in the orca's jaws (the body is tipped sideways, so running legs read as flailing).
   struggle: 'Run',
 };

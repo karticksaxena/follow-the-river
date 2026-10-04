@@ -103,11 +103,10 @@ function callAt(s: Script, at: Shore, buffer: AudioBuffer, volume: number): void
   sound.play();
 }
 
-/** Its last leap onto the pebbles; the zombies still on the bank go into the water with the wave. */
+/** Its last leap onto the pebbles: she swims in across the lake first (the fight ended with the last zombie). */
 export async function strand(s: Script, at: Shore): Promise<void> {
   const { fish, horde, sounds } = s.sys;
   fish.strand(at.noseX, at.noseZ, (z) => shoreY(z - at.lakeZ), horde);
-  horde.forEachAlive((id) => horde.takeByFish(id));
   await s.until(() => fish.beached);
   if (s.cancelled) return;
   callAt(s, at, sounds.cry, FAREWELL.cryVolume);

@@ -12,8 +12,9 @@ import {
   NIGHT_TUNING,
   RISE_SECONDS,
   seize,
-  takeByFish,
   think,
+  throwByFish,
+  THROWN_SECONDS,
   WAKE,
   type Senses,
   type Thought,
@@ -106,12 +107,13 @@ describe('zombie brain', () => {
     expect(run(mind, touching, 5).mind.state).toBe('dead');
   });
 
-  it('is dragged away by the fish and cannot be killed twice', () => {
+  it('is thrown by the fish, cannot be killed twice, and is gone once it has sunk', () => {
     const mind = newMind();
-    takeByFish(mind);
+    throwByFish(mind);
     kill(mind);
-    expect(mind.state).toBe('taken');
-    expect(run(mind, touching, 0.1).last.intent).toBe('dragged');
+    expect([mind.state, isAlive(mind)]).toEqual(['thrown', false]);
+    expect(run(mind, touching, 0.1).last.intent).toBe('thrown');
+    expect(run(mind, touching, THROWN_SECONDS + 0.1).mind.state).toBe('dead');
   });
 
   it("struggles in the orca's jaws, never hits, and can't be seized twice or shot", () => {

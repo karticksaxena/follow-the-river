@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import { resolveCircle } from '../../../engine/collide';
 import type { BoxGrid } from '../../../engine/grid';
 import type { SkinnedAsset } from '../../../engine/models';
+import { EDGE_X } from '../river';
 import {
   DAY_TUNING,
   newMind,
@@ -14,15 +15,14 @@ import {
 } from './brain';
 import { CLIP_FOR, LOOPING, pickOutfit } from './look';
 import { steer } from './steer';
+import { THROWN, thrownPose } from './thrown';
 
 /** Tuning knobs. */
 const FADE = 0.25;
 const RADIUS = 0.35;
 const TURN_RATE = 6;
-const DRAG_SPEED = 2;
 /** Share of its speed a zombie keeps while winding up a blow. */
 const LUNGE = 0.45;
-const SINK_SPEED = 1.2;
 const PARK_Y = -50;
 
 export interface Body {
@@ -37,6 +37,12 @@ export interface Body {
   heard: boolean;
   /** Body hits taken so far (see `hitKills`). */
   wounds: number;
+  /** Thrown by the orca (thrown.ts): seconds since, where from, the sideways push (m/s), and the splash is due. */
+  fly: number;
+  fromX: number;
+  fromZ: number;
+  push: number;
+  splashDue: boolean;
   x: number;
   y: number;
   z: number;
@@ -99,6 +105,11 @@ export function createBody(i: number, assets: Record<'m' | 'f', SkinnedAsset>): 
     order: 0,
     heard: false,
     wounds: 0,
+    fly: 0,
+    fromX: 0,
+    fromZ: 0,
+    push: 0,
+    splashDue: false,
     x: 0,
     y: 0,
     z: 0,
@@ -113,7 +124,9 @@ export function park(b: Body): void {
   b.active = false;
   b.root.visible = false;
   b.root.position.set(0, PARK_Y, 0);
-  b.root.rotation.set(0, 0, 0); // a body the orca shook ends tilted
+  b.root.rotation.set(0, 0, 0); // a body the orca shook or threw ends tilted
+  b.fly = 0;
+  b.splashDue = false;
   b.mixer.stopAllAction();
   b.action = null;
   b.intent = null;
@@ -143,12 +156,24 @@ export function play(b: Body, intent: Intent, fade = FADE): void {
   b.action = next;
 }
 
+const air = { x: 0, y: 0 };
+
+/** The orca knocked it aside: it flies into the lake, splashes once, and sinks (see `thrownPose`). */
+function fly(b: Body, dt: number): void {
+  b.fly += dt;
+  const inWater = thrownPose(b.fly, { x: b.fromX, z: b.fromZ }, EDGE_X, air);
+  b.x = air.x;
+  b.y = air.y;
+  b.z = b.fromZ + b.push * Math.min(b.fly, THROWN.flight);
+  if (inWater && b.fly - dt < THROWN.flight) b.splashDue = true; // the frame it lands
+}
+
 export function turn(yaw: number, target: number, maxStep: number): number {
   const d = Math.atan2(Math.sin(target - yaw), Math.cos(target - yaw));
   return yaw + Math.max(-maxStep, Math.min(maxStep, d));
 }
 
-/** Walks/runs toward the player (or drifts downriver when dragged) and turns to face the way it moves. */
+/** Walks/runs toward the player (or flies when thrown) and turns to face the way it moves. */
 export function move(
   b: Body,
   dt: number,
@@ -178,9 +203,9 @@ export function move(
     face = Math.atan2(player.x - b.x, player.z - b.z);
   } else if (intent === 'struggle') {
     return; // the orca poses it (Horde.hold)
-  } else if (intent === 'dragged') {
-    b.x += DRAG_SPEED * dt;
-    b.y -= SINK_SPEED * dt;
+  } else if (intent === 'thrown') {
+    fly(b, dt);
+    return;
   }
   b.yaw = turn(b.yaw, face, TURN_RATE * dt);
 }

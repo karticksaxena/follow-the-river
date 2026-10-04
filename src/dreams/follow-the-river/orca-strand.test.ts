@@ -1,29 +1,96 @@
 import { describe, expect, it } from 'vitest';
-import { beached, newStrand, STRAND, strandPose, strandRest, strandRoll } from './orca-strand';
+import {
+  beached,
+  newStrand,
+  restGaps,
+  STRAND,
+  strandPhases,
+  strandPose,
+  strandRest,
+  swimming,
+} from './orca-strand';
+import { shoreY } from './river';
 
-const shore = (z: number): number => (z > -392 ? Math.min(0, (z + 392) / 4 - 1) : -1);
+const LAKE_Z = -392;
+const shore = (z: number): number => shoreY(z - LAKE_Z);
+const CRUISE_Y = -0.45;
 
-describe('the last leap', () => {
-  const rest = strandRest(1, -388.5, shore);
-  const from = { x: 7, y: -2.6, z: -380, yaw: 0, pitch: 0 };
+describe('where she lies', () => {
+  const rest = strandRest(1.5, LAKE_Z + 3.5, shore);
 
-  it('comes to rest lying up the shore, nose on the pebbles, tail back in the lake', () => {
+  it('lies up the shore facing the pebbles, nose up the slope, tail back in the lake', () => {
     expect(rest.yaw).toBeCloseTo(Math.PI);
-    expect(rest.z).toBeCloseTo(-388.5 - 3.5);
-    expect(rest.pitch).toBeGreaterThan(0); // nose up the slope
-    expect(rest.y).toBeGreaterThan(shore(rest.z));
+    expect(rest.z).toBeCloseTo(LAKE_Z);
+    expect(rest.pitch).toBeGreaterThan(0.1); // nose up the 14 degree slope
   });
 
-  it('swims in under the water, leaps, lands on its rest pose and breathes until still', () => {
-    const s = newStrand(from, rest);
-    const out = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
-    s.t = STRAND.approach;
+  it('lies ON the pebbles: her lowest point (the pectoral tips) touches, nothing is under the shore', () => {
+    const gaps = restGaps(rest, shore); // chin, belly, pectoral tips, rear belly, tail
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(-0.001); // not buried
+    expect(Math.min(...gaps)).toBeLessThan(0.05); // and resting on something
+    expect(gaps[2]).toBeLessThan(0.05); // the pectoral tips are what she rests on
+  });
+
+  it('keeps the chin and the tail close above the slope (the rigid body cannot touch at all three)', () => {
+    const gaps = restGaps(rest, shore);
+    expect(gaps[0]).toBeLessThan(0.45);
+    expect(gaps[gaps.length - 1]).toBeLessThan(0.45);
+  });
+
+  it('is not half buried or floating on flat pebbles either', () => {
+    const flat = strandRest(1.5, 3.5, () => 0);
+    expect(Math.min(...restGaps(flat, () => 0))).toBeGreaterThanOrEqual(-0.001);
+    expect(flat.y).toBeGreaterThan(0.5);
+    expect(flat.y).toBeLessThan(1.1);
+  });
+});
+
+describe('the last leap', () => {
+  const rest = strandRest(1.5, LAKE_Z + 3.5, shore);
+  const from = { x: 20, y: -2.6, z: LAKE_Z + 28, yaw: 0, pitch: 0 };
+  const out = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+
+  it('swims in at the surface where you can see her (fin up) before the leap', () => {
+    const s = newStrand(from, rest, CRUISE_Y);
+    const { rise, swim } = strandPhases(s);
+    expect(s.swim).toBeGreaterThanOrEqual(4);
+    expect(s.swim).toBeLessThanOrEqual(9);
+    expect(swim - rise).toBeCloseTo(s.swim);
+    for (let t = rise + 0.05; t < swim; t += 0.5) {
+      s.t = t;
+      strandPose(s, out);
+      expect(out.y).toBeCloseTo(CRUISE_Y, 1); // at the surface the whole way
+      expect(swimming(s)).toBe(true);
+    }
+    s.t = swim;
+    expect(swimming(s)).toBe(false);
+  });
+
+  it('rises to the surface first, and swims for as long as the distance takes (4 to 9 s)', () => {
+    const near = newStrand({ ...from, x: rest.x, z: LAKE_Z - 5 }, rest, CRUISE_Y);
+    const far = newStrand({ ...from, z: LAKE_Z + 200 }, rest, CRUISE_Y);
+    expect(near.swim).toBe(STRAND.swimMin);
+    expect(far.swim).toBe(STRAND.swimMax);
+    const s = newStrand(from, rest, CRUISE_Y);
+    s.t = 0;
+    expect(strandPose(s, out).y).toBeCloseTo(from.y);
+    s.t = STRAND.rise / 2;
+    const half = strandPose(s, out).y;
+    expect(half).toBeGreaterThan(from.y);
+    expect(half).toBeLessThan(CRUISE_Y);
+  });
+
+  it('dips, leaps, lands on its rest pose and breathes until still', () => {
+    const s = newStrand(from, rest, CRUISE_Y);
+    const { dip, leap } = strandPhases(s);
+    s.t = dip;
     strandPose(s, out);
     expect(out.y).toBeLessThan(-2); // under the water at the launch
-    s.t = STRAND.approach + STRAND.leap / 2;
+    expect(out.z).toBeCloseTo(rest.z - STRAND.launchOut);
+    s.t = dip + STRAND.leap / 2;
     expect(strandPose(s, out).y).toBeGreaterThan(rest.y); // in the air
     expect(beached(s)).toBe(false);
-    s.t = STRAND.approach + STRAND.leap;
+    s.t = leap;
     strandPose(s, out);
     expect([out.x, out.z]).toEqual([rest.x, rest.z]);
     expect(beached(s)).toBe(true);
@@ -32,7 +99,11 @@ describe('the last leap', () => {
     s.still = true;
     expect(strandPose(s, out).y).toBeCloseTo(rest.y);
     expect(breathing).not.toBeCloseTo(rest.y, 3);
-    s.t += 5;
-    expect(strandRoll(s)).toBeCloseTo(STRAND.roll);
+  });
+
+  it('faces the shore by the time she leaps', () => {
+    const s = newStrand(from, rest, CRUISE_Y);
+    s.t = strandPhases(s).dip;
+    expect(Math.cos(strandPose(s, out).yaw - rest.yaw)).toBeCloseTo(1);
   });
 });

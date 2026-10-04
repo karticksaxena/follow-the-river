@@ -3,7 +3,7 @@ import { CITY } from './areas/city';
 import { FOREST } from './areas/forest';
 import { SUBURBS } from './areas/suburbs';
 import { DAWN } from './dawn';
-import { HORDE_CAPACITY } from './difficulty';
+import { DIFFICULTY, HORDE_CAPACITY } from './difficulty';
 import {
   armForLastStand,
   bedFade,
@@ -13,6 +13,7 @@ import {
   REPLAY_PAGES,
   sickenToEnd,
   WAVE,
+  waveCount,
   waveDue,
   waveSpot,
   type EndingStep,
@@ -81,12 +82,26 @@ describe('the last stand', () => {
     expect(waveDue(WAVE.gap)).toBe(2 * WAVE.group);
     expect(waveDue(1000)).toBe(WAVE.count);
     expect(waveDue(-5)).toBe(WAVE.group);
+    expect(waveDue(1000, 18)).toBe(18); // an easier night sends fewer
     expect(WAVE.count).toBeGreaterThan(HORDE_CAPACITY); // more than can be alive at once
   });
 
-  it('lets the orca outlast the horde, and every group arrives before the time runs out', () => {
-    expect(WAVE.strikes).toBeGreaterThan(WAVE.count);
-    expect(Math.ceil(WAVE.count / WAVE.group) * WAVE.gap).toBeLessThan(WAVE.seconds);
+  it('sends 30 times the difficulty quota, and all of them must die', () => {
+    expect(waveCount('normal')).toBe(Math.round(30 * DIFFICULTY.normal.quota));
+    expect(waveCount('story')).toBeLessThan(waveCount('normal'));
+    expect(waveCount('hard')).toBeGreaterThan(waveCount('normal'));
+  });
+
+  it('fights beside you: she guards a 9 m ring around you and Mom, strikes fast, sweeps', () => {
+    expect(WAVE.orca).toEqual({ cooldown: 0.5, reach: 7, pace: 0.7, sweep: 2, guard: 9 });
+  });
+
+  it('lets the orca outlast the horde, and every group arrives long before her guard lifts', () => {
+    for (const d of ['story', 'normal', 'hard'] as const) {
+      expect(WAVE.strikes).toBeGreaterThan(waveCount(d));
+      expect(Math.ceil(waveCount(d) / WAVE.group) * WAVE.gap).toBeLessThan(WAVE.safety);
+    }
+    expect(WAVE.safety).toBe(150);
   });
 
   it('spawns on the bank, upstream of the player, within reach of the water', () => {

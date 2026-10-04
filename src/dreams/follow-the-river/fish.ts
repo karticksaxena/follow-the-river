@@ -1,4 +1,4 @@
-import type * as THREE from 'three/webgpu';
+import * as THREE from 'three/webgpu';
 import type { AudioBus } from '../../engine/audio';
 import { loadModel, loadSkinned } from '../../engine/models';
 import type { Vec3 } from '../../engine/ray';
@@ -7,8 +7,11 @@ import { ANATOMY } from './dras-anatomy';
 import {
   cruiseHeading,
   cruiseTargetX,
+  FIGHT,
+  fightSurfacing,
   FISH,
   inWaterX,
+  LANE_OFFSET,
   nextSurfacing,
   NIGHT_STRIKE,
   pickStrike,
@@ -21,15 +24,15 @@ import {
 import { callOut, playBlow, playSplash } from './fish-sound';
 import { createState, type Finale, type FishState, type Rise } from './fish-state';
 import { characterUrl, propUrl } from './kits';
-import { newGrab, stepGrab, type GrabHooks, type StrikeStyle } from './orca-grab';
+import { jawAt, newGrab, stepGrab, type GrabHooks, type StrikeStyle } from './orca-grab';
 import { blowAt, mistColor, SICK } from './orca-sick';
 import {
   beached,
   newStrand,
-  STRAND,
+  strandPhases,
   strandPose,
   strandRest,
-  strandRoll,
+  swimming,
   type Strand,
 } from './orca-strand';
 import { EDGE_X, WATER_Y } from './river';
@@ -67,6 +70,11 @@ export interface Fish {
   setSickness(k: number): void;
   /** Called when a zombie she took drowns (the run counts it and sickens her). */
   onEat: (() => void) | null;
+  /**
+   * The points she guards in the last stand (references, read every frame: the player's camera,
+   * Mom's group): she only takes zombies within the style's `guard` of one of them.
+   */
+  setGuards(points: readonly { x: number; z: number }[]): void;
   /** Night: strikes left this phase. */
   readonly strikes: number;
   /** Arms `strikes` for the night, struck in `style` (a normal night's by default). */
@@ -78,6 +86,21 @@ export interface Fish {
   reset(): void;
   dispose(): void;
 }
+
+const OPEN_AXIS = new THREE.Vector3(1, 0, 0);
+const jawTurn = new THREE.Quaternion();
+
+/** Opens her jaw bone `k` (0 shut .. 1 open) on top of the animation (call after `mixer.update`). */
+function openJaw(f: FishState, k: number): void {
+  f.jaw?.quaternion.multiply(jawTurn.setFromAxisAngle(OPEN_AXIS, -ANATOMY.jawOpen * k));
+}
+
+/** In the last stand she fights beside you: a finite guard (see `Fish.setGuards`). */
+const besideYou = (f: FishState): boolean => Number.isFinite(f.style.guard);
+
+/** Seconds until her next surfacing: oftener beside you in the last stand. */
+const nextUp = (f: FishState): number =>
+  besideYou(f) ? fightSurfacing(Math.random()) : nextSurfacing(Math.random(), f.sickness);
 
 /** It breathes out: the blow's sound and its mist. */
 function blowOut(f: FishState): void {
@@ -149,8 +172,13 @@ function stepRise(f: FishState, r: Rise, dt: number): void {
 
 function cruise(f: FishState, dt: number, player: { x: number; z: number }): void {
   const pos = f.root.position;
-  const targetZ = player.z - LAG_Z;
-  const targetX = cruiseTargetX(f.waterline, f.time);
+  const beside = besideYou(f);
+  const targetZ = beside ? player.z : player.z - LAG_Z;
+  const targetX = cruiseTargetX(
+    f.waterline,
+    f.time,
+    beside ? LANE_OFFSET - FIGHT.laneIn : LANE_OFFSET,
+  );
   const dz = targetZ - pos.z;
   const follow = FISH.follow * (1 - SICK.slow * f.sickness);
   const stepZ = Math.sign(dz) * Math.min(Math.abs(dz), follow * dt);
@@ -164,7 +192,7 @@ function cruise(f: FishState, dt: number, player: { x: number; z: number }): voi
 function tryStrike(f: FishState, player: { x: number; z: number }, horde: Horde): void {
   f.count = 0;
   horde.forEachAlive(f.collect);
-  const id = pickStrike(f.buffer, f.count, player, EDGE_X, f.style.reach);
+  const id = pickStrike(f.buffer, f.count, player, EDGE_X, f.style.reach, f.guards, f.style.guard);
   if (id === null) return;
   let zx = 0;
   let zz = 0;
@@ -202,6 +230,7 @@ function stepOrcaGrab(f: FishState, dt: number, horde: Horde | null): void {
   f.root.position.set(pose.x, pose.y, pose.z);
   f.root.rotation.x = pose.pitch;
   f.yaw = pose.yaw;
+  openJaw(f, jawAt(g));
   if (before < g.approach && g.t >= g.approach) {
     f.lunge.reset().play();
     f.lunge.crossFadeFrom(f.swim, FADE, false);
@@ -243,7 +272,10 @@ function placeWake(f: FishState): void {
   const { x, z } = f.root.position;
   f.wake.position.set(x + Math.sin(f.yaw) * behind, WATER_Y + 0.02, z + Math.cos(f.yaw) * behind);
   f.wake.rotation.set(-Math.PI / 2, f.yaw, 0, 'YXZ');
-  f.wake.visible = f.root.position.y < WAKE_HIDE_Y && f.finale === 'no';
+  // The wake shows while she swims in across the lake, never once she is leaping or lying.
+  f.wake.visible = f.strand
+    ? swimming(f.strand)
+    : f.root.position.y < WAKE_HIDE_Y && f.finale === 'no';
 }
 
 function startTake(f: FishState): void {
@@ -259,7 +291,7 @@ function startTake(f: FishState): void {
 
 function startSurface(f: FishState): void {
   const { x, z } = f.root.position;
-  f.surfaceIn = nextSurfacing(Math.random(), f.sickness);
+  f.surfaceIn = nextUp(f);
   startRise(f, {
     toX: x,
     toZ: z - SURFACE_DRIFT,
@@ -286,22 +318,31 @@ function startStrand(
   f.takePending = false;
   f.finale = 'stranded';
   const { x, y, z } = f.root.position;
-  f.strand = newStrand({ x, y, z, yaw: f.yaw, pitch: 0 }, strandRest(noseX, noseZ, ground));
+  f.strand = newStrand(
+    { x, y, z, yaw: f.yaw, pitch: 0 },
+    strandRest(noseX, noseZ, ground),
+    f.cruiseY,
+  );
 }
 
 function stepStrand(f: FishState, s: Strand, dt: number): void {
-  const was = beached(s);
+  const { rise, dip } = strandPhases(s);
+  const was = s.t;
   s.t += dt;
   strandPose(s, f.pose);
   const { pose } = f;
   f.root.position.set(pose.x, pose.y, pose.z);
   f.yaw = pose.yaw;
-  f.root.rotation.set(pose.pitch, pose.yaw, strandRoll(s));
-  if (!was && s.t >= STRAND.approach) {
+  f.root.rotation.set(pose.pitch, pose.yaw, 0);
+  if (was < rise && s.t >= rise) {
+    playSplash(f, pose.x, pose.z); // she breaks the surface and blows
+    blowOut(f);
+  }
+  if (was < dip && s.t >= dip) {
     f.lunge.reset().play();
     f.lunge.crossFadeFrom(f.swim, FADE, false);
   }
-  if (!was && beached(s)) playSplash(f, pose.x, pose.z - 3, true);
+  if (was < s.ends.leap && beached(s)) playSplash(f, pose.x, pose.z - 3, true);
 }
 
 function updateFish(
@@ -316,11 +357,12 @@ function updateFish(
   if (!(dt > 0)) return;
   f.time += dt;
   f.mixer.update(dt);
+  if (horde && horde.onSplash !== f.onThrown) horde.onSplash = f.onThrown;
   if (!f.placed) {
     f.placed = true;
     f.root.visible = true; // hidden until placed, so it never flashes at the origin
     f.root.position.set(cruiseTargetX(f.waterline, 0), f.cruiseY, player.z - LAG_Z);
-    f.surfaceIn = nextSurfacing(Math.random(), f.sickness);
+    f.surfaceIn = nextUp(f);
   }
   f.cooldown = Math.max(0, f.cooldown - dt);
   stepMist(f, dt);
@@ -374,6 +416,8 @@ function resetFish(f: FishState): void {
   f.mistT = -1;
   f.mist.visible = false;
   f.surfaceIn = nextSurfacing(Math.random(), f.sickness);
+  f.guards = [];
+  f.style = { ...NIGHT_STRIKE };
   f.root.rotation.set(0, f.yaw, 0);
 }
 
@@ -418,6 +462,7 @@ export async function createFish(
   ]);
   const f = createState(scene, audio, sounds, asset, packModel, bank);
   f.hooks = grabHooks(f);
+  f.onThrown = (x, z) => playSplash(f, x, z, true);
   return {
     get finale() {
       return f.finale;
@@ -448,6 +493,10 @@ export async function createFish(
     arm(n, style = NIGHT_STRIKE) {
       f.strikes = n;
       f.style = { ...style };
+      if (besideYou(f)) f.surfaceIn = Math.min(f.surfaceIn, nextUp(f));
+    },
+    setGuards(points) {
+      f.guards = points;
     },
     // A second feed() before the first pack lands replaces it (one pack in flight at a time).
     feed: (from) => feedFish(f, from),

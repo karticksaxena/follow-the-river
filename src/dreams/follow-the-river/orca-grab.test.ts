@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { NIGHT_STRIKE } from './fish-parts';
+import { NIGHT_STRIKE, pickStrike } from './fish-parts';
 import {
   FACE_LAND,
   GRAB,
   grabPose,
   grabSeconds,
+  jawAt,
   jawOf,
   landX,
   newGrab,
@@ -47,7 +48,7 @@ function fakePrey(x: number, z: number): FakePrey {
       if (alive) fn(7, x, z);
       fn(8, x, z + 1.5);
     },
-    takeByFish(id) {
+    throwByFish(id) {
       prey.swept.push(id);
     },
     locate(id, out) {
@@ -166,5 +167,55 @@ describe('the orca grab', () => {
       EDGE_X,
     );
     expect(near.approach).toBe(GRAB.approachMin);
+  });
+
+  it('opens her jaws on the way in, snaps them shut on the bite, holds the zombie between them', () => {
+    const g = newGrab({ x: 10, y: -2, z: 0, yaw: 0, pitch: 0 }, 3, 1, 0, -2, NIGHT_STRIKE, EDGE_X);
+    g.t = g.approach * 0.5;
+    expect(jawAt(g)).toBeLessThan(0.2);
+    g.t = g.approach + g.burst * 0.8;
+    expect(jawAt(g)).toBeGreaterThan(0.8);
+    g.bitten = true;
+    g.t = g.approach + g.burst + 0.1;
+    expect(jawAt(g)).toBeCloseTo(GRAB.hold, 1);
+    g.victim = -1; // the bite missed: the jaws close on nothing
+    expect(jawAt(g)).toBe(0);
+  });
+
+  it('holds the zombie with its middle at the jaws (crosswise), not beside them', () => {
+    const prey = fakePrey(EDGE_X - 2, -40);
+    const g = start(EDGE_X - 2);
+    const out = pose();
+    const jaw = { x: 0, y: 0, z: 0 };
+    let worst = 0;
+    prey.hold = (_id, x, y, z, yaw, tilt) => {
+      prey.held++;
+      jawOf(out, jaw);
+      // The zombie's middle: its feet plus 0.9 m along its tipped "up" (rotation order XYZ).
+      const mid = {
+        x: x - 0.9 * Math.sin(tilt) * Math.cos(yaw),
+        y: y + 0.9 * Math.cos(tilt),
+        z: z + 0.9 * Math.sin(tilt) * Math.sin(yaw),
+      };
+      worst = Math.max(worst, Math.hypot(mid.x - jaw.x, mid.y - jaw.y, mid.z - jaw.z));
+    };
+    const hooks = { breach: (): void => undefined, splash: (): void => undefined };
+    while (stepGrab(g, 1 / 60, prey, ground, hooks, out));
+    expect(prey.held).toBeGreaterThan(30);
+    expect(worst).toBeLessThan(0.05);
+  });
+});
+
+describe('the last stand: she only takes zombies near you or Mom', () => {
+  it('ignores zombies far from every guard', () => {
+    const buf = new Float32Array([1, 2, -40, 2, 2, -8]); // id 1 is 40 m upstream, id 2 is 8 m away
+    const guards = [
+      { x: 0, z: 0 },
+      { x: -3, z: -3 },
+    ];
+    expect(pickStrike(buf, 2, { x: 0, z: 0 }, EDGE_X, 7, guards, 9)).toBe(2);
+    expect(
+      pickStrike(new Float32Array([1, 2, -40]), 1, { x: 0, z: 0 }, EDGE_X, 7, guards, 9),
+    ).toBeNull();
   });
 });

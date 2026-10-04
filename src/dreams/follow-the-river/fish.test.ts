@@ -6,8 +6,13 @@ import {
   BODY_HALF_WIDTH,
   cruiseTargetX,
   cruiseYFor,
+  FIGHT,
+  fightSurfacing,
   inWaterX,
+  LANE_OFFSET,
   nextSurfacing,
+  NIGHT_STRIKE,
+  styleFor,
   SURFACE_MAX,
   SURFACE_MIN,
   surfaceYFor,
@@ -84,5 +89,21 @@ describe('fish', () => {
       expect(Math.min(nose, tail)).toBeGreaterThan(edge + BODY_HALF_WIDTH);
     }
     expect(inWaterX(9, 0, edge)).toBe(9); // already well out: unchanged
+  });
+});
+
+describe('the last stand beside you', () => {
+  it('only guards in the last stand: normal nights take anyone', () => {
+    expect(NIGHT_STRIKE.guard).toBe(Infinity);
+    expect(styleFor(3).guard).toBe(Infinity);
+  });
+
+  it('cruises a lane 2 m nearer the shore, and surfaces every 6 to 10 s', () => {
+    expect(cruiseTargetX(EDGE_X, 0, LANE_OFFSET - FIGHT.laneIn)).toBe(
+      cruiseTargetX(EDGE_X, 0) - FIGHT.laneIn,
+    );
+    expect(FIGHT.laneIn).toBe(2);
+    expect(fightSurfacing(0)).toBe(6);
+    expect(fightSurfacing(0.999)).toBeLessThan(10);
   });
 });

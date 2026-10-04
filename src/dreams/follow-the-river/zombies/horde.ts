@@ -12,11 +12,12 @@ import {
   kill as killMind,
   newMind,
   seize as seizeMind,
-  takeByFish as takeMind,
   think,
+  throwByFish as throwMind,
   type Tuning,
 } from './brain';
 import { bodyHit, CLIP_FOR, timeScaleFor } from './look';
+import { THROWN, thrownTilt } from './thrown';
 import { createVoices, type Voices } from './voices';
 
 export interface PlayerSense {
@@ -41,7 +42,10 @@ export interface Horde {
   /** A bullet or arrow struck `id`: true if it died (a head hit, or enough body hits), else it flinches. */
   hurt(id: number, head: boolean): boolean;
   kill(id: number): void;
-  takeByFish(id: number): void;
+  /** The orca knocks `id` into the lake (the jaws are at fromX, fromZ): it flies, splashes, sinks. */
+  throwByFish(id: number, fromX: number, fromZ: number): void;
+  /** Called where a thrown zombie hits the water (the orca's big splash). */
+  onSplash: ((x: number, z: number) => void) | null;
   /** The orca bites `id`: false if it is no longer alive. Pose it with hold(), end with drown(). */
   seize(id: number): boolean;
   /** Puts a held zombie in the orca's jaws: position, facing and sideways tilt (radians). */
@@ -104,6 +108,7 @@ interface HordeState {
   readonly s: Scratch;
   readonly voices: Voices;
   readonly timers: { shadow: number; groan: number };
+  onSplash: ((x: number, z: number) => void) | null;
   readonly shadowDistances: Float32Array;
   readonly picked: Uint8Array;
   seq: number;
@@ -138,7 +143,14 @@ function tick(
   b.mixer.update(dt);
   b.root.position.set(b.x, b.y, b.z);
   b.root.rotation.y = b.yaw;
-  if (t.intent === 'dragged' && b.mind.state === 'dead') {
+  if (t.intent === 'thrown') {
+    b.root.rotation.z = thrownTilt(b.fly);
+    if (b.splashDue) {
+      b.splashDue = false;
+      h.onSplash?.(b.x, b.z);
+    }
+  }
+  if (t.intent === 'thrown' && b.mind.state === 'dead') {
     h.voices.release(id);
     park(b);
   }
@@ -277,6 +289,17 @@ function holdBody(b: Body, x: number, y: number, z: number, yaw: number, tilt: n
   b.root.rotation.set(0, yaw, tilt);
 }
 
+/** Knocks it aside: it flies from where it stands, away from the jaws (at `jawZ`) along the bank. */
+function throwBody(b: Body, jawZ: number): void {
+  if (!b.active || !isAlive(b.mind)) return;
+  throwMind(b.mind);
+  b.fly = 0;
+  b.fromX = b.x;
+  b.fromZ = b.z;
+  b.push = b.z >= jawZ ? THROWN.push : -THROWN.push;
+  b.splashDue = false;
+}
+
 function drownBody(h: HordeState, id: number): void {
   const b = h.bodies[id];
   if (b.mind.state !== 'held') return;
@@ -339,6 +362,7 @@ function createState(
     },
     voices: createVoices(audio, groans, bodies),
     timers: { shadow: 0, groan: GROAN_MIN },
+    onSplash: null,
     shadowDistances: new Float32Array(capacity),
     picked: new Uint8Array(capacity),
     seq: 0,
@@ -364,7 +388,13 @@ export async function createHorde(
     rayHit: (origin, dir, maxDistance) => rayHitHorde(bodies, origin, dir, maxDistance),
     hurt: (id, head) => hurtBody(bodies[id], head),
     kill: (id) => killMind(bodies[id].mind),
-    takeByFish: (id) => takeMind(bodies[id].mind),
+    throwByFish: (id, _fromX, fromZ) => throwBody(bodies[id], fromZ),
+    get onSplash() {
+      return h.onSplash;
+    },
+    set onSplash(fn) {
+      h.onSplash = fn;
+    },
     seize: (id) => seizeBody(h, id),
     hold: (id, x, y, z, yaw, tilt) => holdBody(bodies[id], x, y, z, yaw, tilt),
     drown: (id) => drownBody(h, id),

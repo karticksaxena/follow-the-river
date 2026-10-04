@@ -1,4 +1,5 @@
 import type * as THREE from 'three/webgpu';
+import type { Difficulty } from '../../engine/settings';
 import { precompileSky } from '../../engine/sky';
 import type { AreaDef } from './areas/types';
 import { playCanoeRide } from './canoe-ride';
@@ -85,15 +86,16 @@ export const WAVE = {
   /** Zombies per spawn group, and the pause between groups. */
   group: 5,
   gap: 3.5,
-  /** The fight ends when the horde is dead, or after this long (the orca's last leap takes the rest). */
-  seconds: 75,
+  /** The fight ends only when every one of them is dead; after this long her guard lifts so she clears the rest. */
+  safety: 150,
   /** Strikes the orca is armed with: far more than the wave has zombies. */
   strikes: 99,
   /**
-   * Its last stand (a normal night: 1.1 s apart, 4.5 m, pace 1, no sweep): grabs close together,
-   * further up the bank, quicker, and its body knocks the zombies beside its jaws into the river.
+   * Its last stand (a normal night: 1.1 s apart, 4.5 m, pace 1, no sweep, anyone): grabs close
+   * together, further up the bank, quicker, its body throws the zombies beside its jaws into the
+   * lake, and she only takes those within `guard` m of you or Mom (she fights beside you).
    */
-  orca: { cooldown: 0.4, reach: 7, pace: 0.6, sweep: 2.5 },
+  orca: { cooldown: 0.5, reach: 7, pace: 0.7, sweep: 2, guard: 9 },
   /** Upstream of the player (+z), and the spread between lanes along the bank (m). */
   upstream: 34,
   laneGap: 1.5,
@@ -103,9 +105,12 @@ export const WAVE = {
 } as const;
 const FLINCH = { lookUp: 12 } as const; // m up the bank Mom watches during the fight
 
-/** How many zombies of the wave should exist `elapsed` seconds in (all of them once the last group is due). */
-export function waveDue(elapsed: number): number {
-  return Math.min(WAVE.count, (Math.floor(Math.max(0, elapsed) / WAVE.gap) + 1) * WAVE.group);
+/** How many zombies the wave sends: `WAVE.count` times the difficulty's quota. */
+export const waveCount = (d: Difficulty): number => Math.round(WAVE.count * DIFFICULTY[d].quota);
+
+/** How many zombies of the wave (`count` in all) should exist `elapsed` seconds in (all of them once the last group is due). */
+export function waveDue(elapsed: number, count: number = WAVE.count): number {
+  return Math.min(count, (Math.floor(Math.max(0, elapsed) / WAVE.gap) + 1) * WAVE.group);
 }
 
 /** Where wave zombie `i` appears, relative to the player's z: a lane along the river bank. */
@@ -209,12 +214,12 @@ const read = (h: EndingHost, pages: readonly string[]): Promise<void> =>
   });
 
 /** Spawns every wave zombie that is due and has not appeared yet; they come running. */
-function spawnWave(h: EndingHost, spawned: { n: number }, elapsed: number): void {
+function spawnWave(h: EndingHost, spawned: { n: number }, elapsed: number, count: number): void {
   const { horde, ctx } = h.sys;
   const cam = ctx.stage.camera.position;
   const tuning = nightTuning(h.sys.area.chapter, ctx.difficulty());
   // The pool is smaller than the horde: when it is full, the rest wait for the dead to make room.
-  while (spawned.n < waveDue(elapsed)) {
+  while (spawned.n < waveDue(elapsed, count)) {
     const at = waveSpot(spawned.n, cam.z);
     const yaw = Math.atan2(cam.x - at.x, cam.z - at.z);
     if (horde.spawn(at.x, at.z, yaw, tuning) < 0) return;
@@ -249,16 +254,25 @@ export function armForLastStand(run: Pick<Run, 'live'>, share: number): void {
 }
 
 /**
- * The last stand: you and the orca against a horde too big for you. It ends when the horde is
- * dead (or after WAVE.seconds); the orca gets sicker with every one it takes (`fish.onEat`).
+ * The last stand: you and the orca against a horde too big for you, `waveCount` zombies. She fights
+ * beside you, taking only the ones near you or Mom (`fish.setGuards`); it ends only when every one
+ * is dead. After `WAVE.safety` s her guard lifts so she clears any the pool left far upstream. The
+ * orca gets sicker with every one it takes (`fish.onEat`). Mom holds the lantern up behind you.
  */
 async function fight(h: EndingHost, st: State): Promise<void> {
   const { fish, horde, ctx } = h.sys;
   const cam = ctx.stage.camera.position;
+  const count = waveCount(ctx.difficulty());
   const spawned = { n: 0 };
   let t = 0;
   let left: number = WAVE.strikes;
+  let lifted = false;
   backOff(h, st);
+  if (st.scene) {
+    st.scene.mom.rest = 'Lantern'; // she stands behind you, lantern held up
+    st.scene.mom.play('Lantern');
+    fish.setGuards([cam, st.scene.mom.group.position]);
+  } else fish.setGuards([cam]);
   fish.arm(WAVE.strikes, WAVE.orca);
   await until(st, (dt) => {
     t += dt;
@@ -266,11 +280,15 @@ async function fight(h: EndingHost, st: State): Promise<void> {
       left = fish.strikes;
       st.scene?.mom.play('HitRecieve', true); // the orca struck: she flinches
     }
-    spawnWave(h, spawned, t);
+    if (!lifted && t >= WAVE.safety) {
+      lifted = true;
+      fish.arm(fish.strikes, { ...WAVE.orca, guard: Infinity });
+    }
+    spawnWave(h, spawned, t, count);
     horde.alert(cam.x, cam.z, WAVE.hearing);
-    const done = spawned.n >= WAVE.count && horde.aliveCount() === 0;
-    return done || t >= WAVE.seconds;
+    return spawned.n >= count && horde.aliveCount() === 0;
   });
+  fish.setGuards([]);
 }
 
 /** Night 3's own night: the area's tighter fog, as `setFogFar` left it. Built once per dawn. */

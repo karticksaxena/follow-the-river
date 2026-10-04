@@ -79,8 +79,15 @@ export const surfaceTime = (k: number): number => {
 };
 
 /** Cruise lane x at `time`: `water` m (the waterline) plus the lane, weaving. */
-export const cruiseTargetX = (water: number, time: number): number =>
-  water + LANE_OFFSET + Math.sin(time * 0.4) * WEAVE_X;
+export const cruiseTargetX = (water: number, time: number, lane = LANE_OFFSET): number =>
+  water + lane + Math.sin(time * 0.4) * WEAVE_X;
+
+/** The last stand (a finite `guard`): she cruises beside you, her fin in view, blowing every 6-10 s. */
+export const FIGHT = { laneIn: 2, surfaceMin: 6, surfaceMax: 10 } as const;
+
+/** Seconds until the next blow while she fights beside you; `rand` is in [0, 1). */
+export const fightSurfacing = (rand: number): number =>
+  FIGHT.surfaceMin + rand * (FIGHT.surfaceMax - FIGHT.surfaceMin);
 
 /** Slow roll while surfacing, s in 0..1. */
 export const surfaceRoll = (s: number): number => Math.sin(Math.PI * s) * SURFACE_ROLL;
@@ -114,6 +121,7 @@ export const NIGHT_STRIKE = {
   reach: FISH.reach,
   pace: 1,
   sweep: 0,
+  guard: Infinity,
 } as const;
 
 export function strikesFor(fed: number): number {
@@ -136,24 +144,41 @@ export function styleFor(fed: number): StrikeStyle {
     reach: Math.min(FED.reach.limit, FISH.reach + FED.reach.per * n),
     pace: Math.max(FED.pace.limit, 1 + FED.pace.per * n),
     sweep: Math.min(FED.sweep.limit, FED.sweep.per * n),
+    guard: Infinity,
   };
 }
 
-/** The zombie to take: alive, within `reach` of the edge, nearest to the player. */
+/** Is (x, z) within `guard` of one of the guard points? (No guard points: anywhere.) */
+function guarded(
+  guards: readonly { x: number; z: number }[],
+  guard: number,
+  x: number,
+  z: number,
+): boolean {
+  if (guards.length === 0 || guard === Infinity) return true;
+  for (const p of guards) if (Math.hypot(x - p.x, z - p.z) <= guard) return true;
+  return false;
+}
+
+/** The zombie to take: alive, within `reach` of the edge, within `guard` of a guard point (if any), nearest to the player. */
 export function pickStrike(
   candidates: ArrayLike<number>,
   count: number,
   player: { x: number; z: number },
   edgeX: number,
   reach: number = FISH.reach,
+  guards: readonly { x: number; z: number }[] = [],
+  guard = Infinity,
 ): number | null {
   let best: number | null = null;
   let bestDist = Infinity;
   for (let i = 0; i < count; i++) {
     const x = candidates[i * 3 + 1];
     if (edgeX - x > reach) continue;
+    const z = candidates[i * 3 + 2];
+    if (!guarded(guards, guard, x, z)) continue;
     const dx = x - player.x;
-    const dz = candidates[i * 3 + 2] - player.z;
+    const dz = z - player.z;
     const dist = dx * dx + dz * dz;
     if (dist < bestDist) {
       bestDist = dist;
