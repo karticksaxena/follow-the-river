@@ -115,6 +115,8 @@ interface Ride {
   fading: boolean;
   /** The end shot has faded to black: the ride ends as soon as the game is not paused. */
   ended: boolean;
+  /** Seconds the ride has waited, ended, for the pause menu to close. */
+  endedFor: number;
   onEnd: () => void;
   /** Mom's and Kartik's head bones. */
   heads: { mom: THREE.Object3D; kartik: THREE.Object3D };
@@ -312,6 +314,16 @@ function stepShot(r: Ride, shot: NonNullable<Ride['shot']>): void {
   }
 }
 
+/** How long (s) a faded-out ride waits for the pause menu to close before it ends anyway: nothing may soft-lock. */
+export const END_WAIT = 20;
+
+/** Once the picture has faded out: true when the ride should end (not paused, or it has waited long enough). */
+function endWait(r: Ride, dt: number): boolean {
+  if (!r.ctx.isPaused()) return true;
+  r.endedFor += dt;
+  return r.endedFor >= END_WAIT;
+}
+
 /** Pure: the ride (and the end shot) runs while a page is open over it, or once started and not paused. */
 export function rideLive(reading: boolean, started: boolean, paused: boolean): boolean {
   return reading || (started && !paused);
@@ -381,6 +393,7 @@ function makeRide(ctx: DreamContext, sounds: Sounds, cs: CanoeScene): Ride {
     shotT: 0,
     fading: false,
     ended: false,
+    endedFor: 0,
     onEnd: () => {
       r.ended = true;
     },
@@ -455,7 +468,7 @@ async function run(
     if (stage.scene !== cs.scene) return teardown(); // someone else took the stage
     try {
       frame(r, dt);
-      if (r.ended && !ctx.isPaused()) return teardown(true); // never open the credits over the pause menu
+      if (r.ended && endWait(r, dt)) return teardown(true);
       birds?.setVolume(VOLUME.birds * Math.min(1, r.t / VOLUME.birdsFade));
     } catch (error) {
       teardown();

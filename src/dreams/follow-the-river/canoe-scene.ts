@@ -72,6 +72,14 @@ const WATER_LOOK: WaterLook = { speed: 1.6, deep: 0x2b5750, streak: 0x9cc2b0, gl
  */
 const CANOE_BANK = { gain: 0.36, saturation: 1.7 } as const;
 
+/**
+ * The river's haze. The sunrise preset's pale fog (0x887a68, from 12 m) washes the whole land to a
+ * pink-grey snowfield seen from the canoe and from the crane shot: albedo (texture x gain x grade x
+ * vertex colour) is dark, so the fog was what coloured the banks. A darker earthy haze that starts
+ * farther out keeps the land earth and grass to the treeline. Tuning knobs.
+ */
+const CANOE_FOG = { color: 0x3c3a2a, near: 30, far: 150 } as const;
+
 /** Canoe, wood and ground colours (sRGB hex). Tuning knobs. */
 const COLORS = {
   leaves: [0x74ae3e],
@@ -79,7 +87,7 @@ const COLORS = {
   canoe: 0x8a5a36,
   mud: 0x4f3e26,
   meadow: [0x4c7d2a, 0x3d6b25],
-  hullFloor: 0x2a1c12,
+  hullFloor: 0x6b4a2e,
 } as const;
 
 export interface CanoeScene {
@@ -313,6 +321,11 @@ export async function buildCanoeScene(length: number, stage: CanoeStage): Promis
   const lights = createWorldLights(scene);
   attachKeyShadows(lights.key, stage.tier); // the sun's shadows: the forest, the canoe, Mom
   applyLighting(lights, LIGHTING.sunrise);
+  if (scene.fog instanceof THREE.Fog) {
+    scene.fog.color.set(CANOE_FOG.color);
+    scene.fog.near = CANOE_FOG.near;
+    scene.fog.far = CANOE_FOG.far;
+  }
   const terrain = makeTerrain(zNear, zFar);
   const water = createWaterMesh(TERRAIN.halfWidth * 2.4, zNear - zFar, WATER_LOOK);
   water.rotation.x = -Math.PI / 2;
