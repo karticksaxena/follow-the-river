@@ -932,3 +932,125 @@ function wasting(k: THREE.UniformNode<number>) {
 - [ ] **Step 4:** tests PASS; `pnpm run check`.
 - [ ] **Step 5: Chrome check (the colour Kartik complained about):** for k in 0, 0.15, 0.45, 0.9, 1 call `kdRiver.fish.setSickness(k)` on Night 1 with Dras surfaced beside you (force a surfacing), screenshot side views: black body black, white patches white at every k; blotches, rings and specks appear only from about 0.15 and grow; the dent behind the blowhole shows from about 0.5; at 1 the breath is red. Also `?webgl`. Put the five screenshots side by side in the ledger notes.
 - [ ] **Step 6: commit** `fix: Dras keeps her black and white; sickness shows as lesions and wasting that grow with every zombie she eats`.
+
+### Task A9: Kills in her jaws, thrown into the water, the last stand beside you, and a visible swim in
+
+**Files:**
+- Modify: `src/dreams/follow-the-river/orca-grab.ts` (+test: jaw, held pose, guard), `fish.ts` (jaw bone, `setGuards`, ending lane), `fish-parts.ts` (`pickStrike` guard), `zombies/brain.ts` (`thrown` replaces `taken`), `zombies/body.ts` (thrown motion), `zombies/look.ts` (`thrown` clip), `zombies/horde.ts` (`throwByFish`), `orca-strand.ts` (+test: swim phase), `ending.ts` (`WAVE`, `fight`), `ending-farewell.ts` (`strand` no longer drags the living), `ending-scene.ts` (Mom with the lantern).
+
+**Interfaces:**
+- Produces: `StrikeStyle.guard: number` (∞ on normal nights; 9 m in the last stand) and `Fish.setGuards(points: readonly { x: number; z: number }[])`; `jawAt(g: Grab): number` (0 shut … 1 open); `Horde.throwByFish(id: number, fromX: number, fromZ: number): void` and `thrownPose(t, from, waterline, out)`; `STRAND.swimSpeed`, `strandPhases(s)`.
+- Removes: `takeByFish`, mind state `taken`, intent `dragged`, `TAKEN_SECONDS`, `DRAG_SPEED`, `SINK_SPEED` (dead after this task; grep must find none).
+
+- [ ] **Step 1: failing tests.**
+```ts
+// orca-grab.test.ts
+it('opens her jaws on the way in, snaps them shut on the bite, holds the zombie between them', () => {
+  const g = newGrab({ x: 10, y: -2, z: 0, yaw: 0, pitch: 0 }, 3, 1, 0, -2, NIGHT_STRIKE);
+  g.t = g.approach * 0.5; expect(jawAt(g)).toBeLessThan(0.2);
+  g.t = g.approach + g.burst * 0.8; expect(jawAt(g)).toBeGreaterThan(0.8);
+  g.bitten = true; g.t = g.approach + g.burst + 0.1; expect(jawAt(g)).toBeCloseTo(GRAB.hold, 1);
+});
+it('in the last stand she only takes zombies near you or Mom', () => {
+  const buf = new Float32Array([1, 2, -40, 2, 2, -8]); // id 1 is 40 m upstream, id 2 is 8 m away
+  const guards = [{ x: 0, z: 0 }, { x: -3, z: -3 }];
+  expect(pickStrike(buf, 2, { x: 0, z: 0 }, EDGE_X, 7, guards, 9)).toBe(2);
+  expect(pickStrike(new Float32Array([1, 2, -40]), 1, { x: 0, z: 0 }, EDGE_X, 7, guards, 9)).toBeNull();
+});
+// zombies/body or horde test
+it('a zombie she knocks aside flies into the water, never sinks into the bank', () => {
+  const out = { x: 0, y: 0 };
+  let landed = false;
+  for (let t = 0; t < 3; t += 1 / 60) {
+    const inWater = thrownPose(t, { x: 1.5, z: 0 }, 3.4, out);
+    if (out.x < 3.4) expect(out.y).toBeGreaterThanOrEqual(0); // over land: above the ground
+    if (inWater) landed = true;
+  }
+  expect(landed).toBe(true);
+  expect(out.x).toBeGreaterThan(3.4 + 1);
+});
+// orca-strand.test.ts
+it('swims in at the surface where you can see her (fin up) before the leap', () => {
+  const rest = strandRest(1.5, -388.5, (z) => shoreY(z + 392));
+  const s = newStrand({ x: 20, y: -2.6, z: -420, yaw: 0, pitch: 0 }, rest, CRUISE_Y);
+  expect(s.swim).toBeGreaterThanOrEqual(4);
+  const out = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+  for (let t = 0.5; t < s.swim; t += 0.5) {
+    s.t = t;
+    strandPose(s, out);
+    expect(out.y).toBeCloseTo(CRUISE_Y, 1); // at the surface the whole way
+  }
+});
+```
+- [ ] **Step 2: the jaws.** `GRAB.hold = 0.25`; `jawAt(g)`: 0 until 60 % of the approach, rises to 1 by the bite (`approach + burst`), then `hold` after `bitten` (0 if the bite missed), 0 once she is back under. `fish.ts` finds `Jaw` once (`body.getObjectByName('Jaw')`) and after `mixer.update` sets `jaw.rotation.x = -ANATOMY.jawOpen * jawAt(g)` (the axis sign checked against the A7 close-up render). `holdVictim` puts the zombie's middle at the bite point (`ANATOMY.bite`), crosswise between the jaws, tilted, legs kicking (`struggle` → `Run`). Screenshot must show the zombie in the mouth (Step 6).
+- [ ] **Step 3: thrown, not dragged.** The sweep (`sweepAside`) calls `horde.throwByFish(id, jaw.x, jaw.z)`: state `thrown` (not alive), clip `Hit`, the body follows `thrownPose` (launch 3.5 m/s up, horizontal speed chosen to land 2 m past the waterline, gravity 9.8, a tumble about z), a splash where it hits the water (the fish's `playSplash` through a horde hook), then it sinks 1 m/s for 1.2 s and is parked. Nothing a zombie does ever moves it below y 0 while over land.
+- [ ] **Step 4: the last stand beside you.** `WAVE.orca = { cooldown: 0.5, reach: 7, pace: 0.7, sweep: 2, guard: 9 }`; `fight()` calls `fish.setGuards([camera.position, mom.group.position])` (references, updated live) and `fish.arm(WAVE.strikes, WAVE.orca)`; normal nights use `guard: Infinity`. During the fight her cruise target z is the player's z (not 6 m behind) and her lane is 2 m nearer the shore, so her fin is in view beside you; between strikes she surfaces every 6–10 s (blow). The wave count is `Math.round(30 * DIFFICULTY[d].quota)`; the fight ends only when every one of them is dead (no 75 s cut-off; safety: after 150 s the guard lifts so she clears the rest). Mom stands behind you on the pebbles holding the lantern up (`Lantern` clip from Task A10, fallback `Idle_Neutral` if A10 is not merged yet) and flinches (`HitRecieve`) when Dras strikes near her.
+- [ ] **Step 5: she swims in.** `newStrand(from, rest, cruiseY)` computes `swim = clamp(distance(from, launch) / STRAND.swimSpeed, 4, 9)` with `STRAND.swimSpeed = 3.2` and a launch point 10 m out from her rest spot; phases: rise to `cruiseY` over 0.8 s (a blow when she breaks the surface), swim at the surface to the launch point (fin up, wake on: `placeWake` shows the wake while `strand.t < swim`), a 0.6 s dip, then the existing leap. `ending-farewell.ts strand()` no longer throws the living into the lake (the fight only ends when all are dead).
+- [ ] **Step 6:** tests PASS; grep shows no `takeByFish`/`dragged`/`taken`; `pnpm run check`.
+- [ ] **Step 7: Chrome check (as a player):**
+  - Night 1: spawn one zombie at the edge (keep `horde.spawn`'s original!), watch from 6 m side-on: screenshot when the jaws open, at the bite, during the thrash, at the drop: the zombie is visibly in her mouth the whole way and goes under with her.
+  - Night 3 ending: the fight: screenshots show Dras striking zombies that are within ~9 m of you or Mom, never far upstream; sweep victims arc into the lake with a splash; her fin cruises beside you between strikes.
+  - The strand: a sequence of screenshots every 0.5 s from the moment the last zombie dies: her fin and wake come in across the lake toward the shore (visible from the shore), then the leap.
+- [ ] **Step 8: commit** `feat: Dras takes them in her jaws or throws them into the water, fights beside you, and swims in to the shore`.
+
+### Task A10: Kartik's body and arm, Mom's new clips, head-look and hand IK
+
+Two Sonnet implementers in parallel on disjoint files (asset agents: no commits; the controller reviews renders, runs checks and commits), then the controller's code step.
+
+**Files:**
+- Create: `tools/blender/ual_retarget.py` (the retarget helpers moved out of `mom_clips.py`: bone map, rest frames, `bake`), `tools/blender/kartik.py`, `public/assets/characters/kartik.glb`, `public/assets/characters/kartik-arm.glb`, `src/dreams/follow-the-river/rig.ts` (+ `rig.test.ts`).
+- Modify: `tools/blender/mom_clips.py` (imports `ual_retarget`, more SOURCES), `public/assets/characters/mom.glb`, `kits.ts` (`characterUrl` names), `intro-scene.ts` (`createMom` → `createCharacter`, rename via LSP `findReferences`/rename; `Mom` type → `Character`), `public/assets/LICENSES.md`, `tools/assets/README.md`.
+
+**Interfaces:**
+- Produces: `createCharacter(asset, prop?: THREE.Object3D, propBone = 'WristR'): Character` (`Character` = today's `Mom` plus `attach(prop, bone): void`); clips on Mom (exact names, `CharacterArmature|<name>`): `Talk`, `SitTalk`, `SitDown`, `StandUp`, `Lantern`, `Film`, `Crouch`, `Yes`, `No` (her 28 existing clips kept); on Kartik: his 24 Quaternius clips plus `Sit`, `SitTalk`, `Kneel`, `Crouch`, `Talk`; `kartik-arm.glb`: a static right forearm and hand, palm down, fingers forward, the sleeve hem at the elbow, origin at the elbow, +Z toward the fingers.
+- `rig.ts`: `lookAt(head: THREE.Object3D, target: THREE.Vector3, weight: number, limits: { yaw: number; pitch: number }): void` (after `mixer.update`, turns the head bone toward the target within limits, eased by weight); `reach(upper: THREE.Object3D, lower: THREE.Object3D, hand: THREE.Object3D, target: THREE.Vector3, pole: THREE.Vector3): void` (two-bone IK, scratch vectors module-level, no allocation).
+
+- [ ] **Step 1 (agent 1, Kartik):** brief = this task's Kartik bullets. Source `scratchpad/assets/modular-chars/men/kZ3DmIoGip.glb` (Quaternius Ultimate Modular Men "Casual2", CC0). Recolour (it is also the casual zombie's outfit, so the change must be unmistakable): `Skin` → medium brown `#8a5a3c`, `Skin_Darker` → `#6e4530`, `Hair` and `Eyebrows` → near black `#17120f`, `White` (the T-shirt) → charcoal navy `#1f2633`, `Red_Dark` → `#2b2b2e`, `LightBlue` (jeans) → denim `#33475f`, `LightBrown` (shoes) → `#3a2a20`. Add clips with `ual_retarget.py`: `Sit` ← UAL1 `Sitting_Idle_Loop`, `SitTalk` ← `Sitting_Talking_Loop`, `Kneel` ← `Fixing_Kneeling` (a seamless hold like Mom's), `Crouch` ← `Crouch_Idle_Loop`, `Talk` ← `Idle_Talking_Loop`. Cut `kartik-arm.glb` from the same mesh (right forearm and hand plus a sleeve hem, posed palm down). Compress (meshopt). Renders: front, side, back, three-quarter close-up of the face, the Kneel and Sit poses, the arm alone. The controller compares with a casual zombie render side by side: they must not look alike.
+- [ ] **Step 2 (agent 2, Mom):** move the helpers to `ual_retarget.py` (re-running `mom_clips.py` must reproduce today's four clips bit-for-bit in pose), add SOURCES `Talk` ← UAL1 `Idle_Talking_Loop`, `SitTalk` ← `Sitting_Talking_Loop`, `SitDown` ← `Sitting_Enter`, `StandUp` ← `Sitting_Exit`, `Lantern` ← UAL2 `Idle_Lantern_Loop`, `Crouch` ← `Crouch_Idle_Loop`, `Yes` ← UAL2 `Yes`, `No` ← UAL2 `Idle_No_Loop`, and `Film`: render both UAL1 `Idle_Torch_Loop` and `Pistol_Aim_Neutral` on Mom and keep the one where her right hand is held up in front of her face like filming with a phone (ledger the choice). Renders of every new clip at its middle frame.
+- [ ] **Step 3 (controller): failing tests** `rig.test.ts`:
+```ts
+it('reach puts the hand on a reachable target, bending at the elbow toward the pole', () => {
+  const upper = new THREE.Object3D(); const lower = new THREE.Object3D(); const hand = new THREE.Object3D();
+  upper.add(lower); lower.add(hand); lower.position.set(0, -0.3, 0); hand.position.set(0, -0.28, 0);
+  const root = new THREE.Group(); root.add(upper); upper.position.set(0, 1.4, 0); root.updateMatrixWorld(true);
+  const target = new THREE.Vector3(0.35, 1.05, 0.3);
+  reach(upper, lower, hand, target, new THREE.Vector3(0, 1.2, -1));
+  root.updateMatrixWorld(true);
+  expect(hand.getWorldPosition(new THREE.Vector3()).distanceTo(target)).toBeLessThan(0.01);
+});
+it('lookAt turns the head toward a target but never past its limits', () => { /* yaw clamp */ });
+```
+- [ ] **Step 4:** implement `rig.ts`, `createCharacter`/`attach`, `characterUrl('kartik' | 'kartik-arm')`; tests PASS; `pnpm run check`.
+- [ ] **Step 5: Chrome check:** a scratch scene via dynamic import (Kartik and Mom side by side, each new clip, then Kartik kneeling with `reach` putting his right hand on a box top): screenshots; no foot sliding in loops, no popping between clips (cross-fade 0.3 s).
+- [ ] **Step 6: commit** `feat: Kartik's body and arm, Mom's new mocap clips, head-look and hand IK` (+ LICENSES rows: kartik.glb, kartik-arm.glb, Mom's new clips, all CC0 Quaternius).
+
+### Task A11: The intro, fixed (the phone, the filming, Mom looks at you)
+
+**Files:** `intro.ts`, `intro-scene.ts` (phone prop), `intro.test.ts`.
+- [ ] Phone: `makePhone()`: a 0.075 × 0.15 × 0.009 m dark box (`0x15171b`, roughness 0.4) with a screen plane on its face (`MeshBasicMaterial` `0x6f86b0`, dim so bloom only haloes it); attached to `WristR` with `character.attach` (grip offset like `PACK_GRIP`, screen facing her), hidden until the goodbye.
+- [ ] Goodbye: after the step back she turns to the water, the phone appears in her right hand, `mom.play('Film')`, `FILM_HOLD` 1.5 s, then the page; the phone stays up while the page is open (she keeps animating: the intro's `tick` runs `sc.mom.update(dt)` while paused, like the ending).
+- [ ] Mom looks at you whenever a page of hers is open in the house and by the river (`lookAt(head, camera, 0.8, { yaw: 1.1, pitch: 0.5 })` after `mom.update`); she glances at the TV during the news.
+- [ ] Test (`intro.test.ts`): the goodbye's film beat shows the phone (a structural test on `INTRO_PAGES` order + a pure `filmBeat` timing helper if extracted).
+- [ ] Chrome check: screenshots at "Here, Dras" (the old underarm throw, pack in hand then gone), the take (Dras surfaces, black and white), and "What have we done…" (phone in her hand, screen glowing faintly, held up toward the water).
+- [ ] Commit `fix: Mom films with a phone in her hand, and looks at you when she talks`.
+
+### Task A12: Real sounds (Dras' calls, paddle strokes, birds), no more drone
+
+**Files:**
+- Create: `tools/assets/cut_sound.py` (stdlib: read 16-bit WAV, trim `[start, end]`, one-pole high-pass `--hp` Hz, 30 ms fades, normalise to −3 dBFS, optional `--loop` crossfading the last 1 s into the first, resample to 48 kHz; mono or stereo), `tools/assets/spectrogram.py` (stdlib PNG of a WAV's spectrogram, to pick calls by eye), `public/assets/sounds/dras/call-answer.m4a`, `call-cry.m4a`, `public/assets/sounds/canoe/paddle-1..4.m4a`, `public/assets/sounds/ambience/birds.m4a`.
+- Modify: `sounds.ts` (+test), `canoe-ride.ts`, `ending.ts` (`dawn()` uses birds and water, no pad), `ending-farewell.ts` (cry and answer use the calls), `LICENSES.md`, `tools/assets/README.md`.
+
+**Sources (verified this session):**
+- Killer whale vocalizations recorded by the U.S. National Park Service (Glacier Bay hydrophone), **public domain** (U.S. Government work): https://archive.org/details/KillerWhaleorcinusOrcaSoundsVocalizations (`killer_whale.ogg`, `killer_whale_2.ogg`).
+- "Paddling a Kayak.wav" by Danjocross, **CC0**: https://freesound.org/people/Danjocross/sounds/503208/ (the page's HQ preview `https://cdn.freesound.org/previews/503/503208_2977885-hq.mp3` needs no login; CC0 covers it).
+- "Ambient Bird Sounds" by isaiah658, **CC0**: https://opengameart.org/content/ambient-bird-sounds (`https://opengameart.org/sites/default/files/birds-isaiah658_0.ogg`).
+- macOS `afconvert -f WAVE -d LEI16 in.ogg out.wav` decodes ogg and mp3 here (checked this session); `afconvert -f m4af -d aac -b 96000` encodes.
+
+- [ ] **Step 1: pick the calls.** Spectrograms of both NPS files; choose two clean pulsed calls with clear harmonic stripes (1–5 kHz) and little hydrophone rumble: a short rising one for her answer (1.2–2 s) and a longer, falling, sadder one for the cry when she strands (2–3.5 s). High-pass 250 Hz. Write the chosen times into `tools/assets/README.md`.
+- [ ] **Step 2: paddle strokes.** Cut four single strokes (blade in, pull, drips; 0.7–1.0 s each) from the kayak recording, avoiding the hull knocks.
+- [ ] **Step 3: birds loop.** 25–30 s with `--loop`.
+- [ ] **Step 4: failing tests** (`sounds.test.ts`): the new files are in `FILES`; a missing call falls back to the generated cry; `dawnSamples` is gone (no caller).
+- [ ] **Step 5: wiring.** Farewell: the cry on beaching (`call-cry`, positional at her head, volume 0.7), the answer after Mom's song (`call-answer`, 0.5). Canoe: paddle strokes are played when a blade crosses the water surface going down (pure `crossedDown(prevY, y, level)`; positional at the blade; a random one of four, volume 0.5 ± 0.1, playback rate 0.95–1.05), so they stay in sync with her `Row` clip and stop by themselves when she stops; water loop 0.25; birds fade in over 6 s to 0.3. Lake dawn: birds fade in with the sunrise, water lapping 0.25.
+- [ ] **Step 6:** tests PASS; `pnpm run check`.
+- [ ] **Step 7: Chrome check:** the audio can't be heard by the agent: verify by logging which buffers play when (`kd.audio` wrapper spy) at the beaching, the answer, each paddle stroke (stroke times vs blade crossings), and that no `dawn` pad source exists. Kartik listens by hand (listed in the results).
+- [ ] **Step 8: commit** `feat: Dras' real calls, paddle strokes in sync with Mom's rowing, birds at sunrise; the motorboat drone is gone` (+ LICENSES rows).
