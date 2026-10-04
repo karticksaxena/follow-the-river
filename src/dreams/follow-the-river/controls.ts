@@ -192,10 +192,21 @@ function switchWeapons(c: Ctl, dt: number): void {
   }
 }
 
+/** In a cutscene only a scripted action (the farewell's E) works: the prompt shows and E uses it. */
+function scripted(c: Ctl): void {
+  const { x, z } = c.sys.ctx.stage.camera.position;
+  const act = c.run.interact;
+  c.target = act && Math.hypot(x - act.at.x, z - act.at.z) <= act.radius ? 'interact' : null;
+  if (c.target && c.sys.ctx.keys.consumePress('KeyE')) use(c);
+}
+
 function tick(c: Ctl, dt: number): void {
   const { keys } = c.sys.ctx;
   switchWeapons(c, dt);
-  if (c.run.cutscene) return; // no torch, reload, fire or E while a cinematic plays
+  if (c.run.cutscene) {
+    scripted(c); // no torch, reload, fire or pickups while a cinematic plays
+    return;
+  }
   if (keys.consumePress('KeyF')) toggleLight(c);
   if (keys.consumePress('KeyR')) newBattery(c);
   trigger(c);
@@ -207,6 +218,7 @@ function tick(c: Ctl, dt: number): void {
 }
 
 function promptOf(c: Ctl): string | null {
+  if (c.run.cutscene) return c.target === 'interact' ? (c.run.interact?.prompt ?? null) : null;
   const gun = gunInHand(c);
   const dry = gun !== null && c.run.live.supplies[AMMO_OF[gun.kind]] <= 0 && canFire(c.sw);
   if (dry && c.sys.ctx.keys.isDown('Mouse0')) return 'No ammo';

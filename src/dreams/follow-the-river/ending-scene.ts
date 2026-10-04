@@ -1,9 +1,11 @@
 import * as THREE from 'three/webgpu';
 import { loadSkinned } from '../../engine/models';
+import { loadArm } from './farewell-arm';
 import { TORCH_EXPOSURE, WATCH } from './flashlight';
 import { createCharacter, type Character } from './intro-scene';
 import { characterUrl } from './kits';
 import { createMomActor, type MomActor, type Pt } from './mom-actor';
+import { lookAt, reach } from './rig';
 import { EDGE_X, shoreY } from './river';
 import type { Systems } from './run';
 
@@ -67,9 +69,55 @@ export function stopShort(from: Pt, to: Pt, gap: number): Pt {
   return { x: from.x + dx * k, z: from.z + dz * k };
 }
 
+/** What the farewell has people reach for and look at (live references, read each frame; null: nothing). */
+export interface Aim {
+  momHand: THREE.Vector3 | null;
+  kartikHand: THREE.Vector3 | null;
+  momGaze: THREE.Vector3 | null;
+  kartikGaze: THREE.Vector3 | null;
+}
+
+/** How far a head turns (rad). */
+const GAZE_LIMITS = { yaw: 1.2, pitch: 0.7 } as const;
+const GAZE_EASE = 4;
+/** Elbow pole in the character's own frame (+x is his left, +z ahead): out to the side, up, and behind. */
+const POLE = { left: [0.5, 0.5, -0.5], right: [-0.5, 0.5, -0.5] } as const;
+const pole = new THREE.Vector3();
+
+interface Gaze {
+  share: number;
+  last: THREE.Vector3 | null;
+}
+
+/** Eases a head toward its target (and back to the animation when there is none). */
+function gaze(head: THREE.Object3D, now: THREE.Vector3 | null, g: Gaze, dt: number): void {
+  if (now) g.last = now;
+  g.share += ((now ? 1 : 0) - g.share) * (1 - Math.exp(-GAZE_EASE * dt));
+  if (g.last && g.share > 0.01) lookAt(head, g.last, g.share, GAZE_LIMITS);
+}
+
+/** An arm to a point: shoulder, elbow, hand bones on `who` (`L` or `R`). */
+function armTo(who: Character, side: 'L' | 'R', target: THREE.Vector3): void {
+  const p = side === 'L' ? POLE.left : POLE.right;
+  who.group.localToWorld(pole.set(p[0], p[1], p[2]));
+  reach(
+    who.bone(`UpperArm${side}`),
+    who.bone(`LowerArm${side}`),
+    who.bone(`Wrist${side}`),
+    target,
+    pole,
+  );
+}
+
 export interface EndingScene {
   mom: Character;
   actor: MomActor;
+  /** Kartik's own body (hidden until the orbit shows it) and his first-person arm (a child of the camera, hidden). */
+  kartik: Character;
+  arm: THREE.Object3D;
+  aim: Aim;
+  /** Sets Mom's lantern down at `at` (world): the mesh leaves her hand and the light stays with it. */
+  setDown(at: { x: number; y: number; z: number }): void;
   /** Per frame: Mom's walk/idle, her animation, and the lantern in her hand. */
   update(dt: number): void;
   /** Puts Mom on the shore facing `(toX, toZ)` and lights the lantern in her hand. */
@@ -91,18 +139,46 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
   const spot = sys.area.meetAt;
   if (!spot) throw new Error('the ending needs a meeting spot (meetAt)');
   const lakeZ = sys.area.lake?.z ?? null;
-  const mom = createCharacter(await loadSkinned(characterUrl('mom')), makeLantern());
+  const [momAsset, kartikAsset, arm] = await Promise.all([
+    loadSkinned(characterUrl('mom')),
+    loadSkinned(characterUrl('kartik')),
+    loadArm(),
+  ]);
+  const mom = createCharacter(momAsset, makeLantern());
+  const kartik = createCharacter(kartikAsset);
   mom.group.visible = false;
-  sys.world.scene.add(mom.group);
+  kartik.group.visible = false;
+  kartik.rest = 'Kneel';
+  sys.world.scene.add(mom.group, kartik.group);
+  sys.ctx.stage.camera.add(arm);
+  const aim: Aim = { momHand: null, kartikHand: null, momGaze: null, kartikGaze: null };
+  const eyes = { mom: { share: 0, last: null } as Gaze, kartik: { share: 0, last: null } as Gaze };
+  const heads = { mom: mom.bone('Head'), kartik: kartik.bone('Head') };
   const home = new THREE.Vector3();
   const actor = createMomActor(mom);
   let held: THREE.PointLight | null = null;
   return {
     mom,
     actor,
+    kartik,
+    arm,
+    aim,
+    setDown(at) {
+      const can = mom.pack;
+      can.removeFromParent(); // out of her hand, onto the pebbles
+      can.scale.setScalar(1);
+      can.position.set(at.x, at.y, at.z);
+      can.visible = true;
+      sys.world.scene.add(can);
+    },
     update(dt) {
       actor.update(dt);
       mom.update(dt);
+      kartik.update(dt);
+      gaze(heads.mom, aim.momGaze, eyes.mom, dt);
+      gaze(heads.kartik, aim.kartikGaze, eyes.kartik, dt);
+      if (aim.momHand) armTo(mom, 'L', aim.momHand);
+      if (aim.kartikHand && kartik.group.visible) armTo(kartik, 'R', aim.kartikHand);
       // Her feet follow the pebble shore where it slopes toward the water.
       if (lakeZ !== null) mom.group.position.y = shoreY(mom.group.position.z - lakeZ);
       if (held) {
@@ -135,13 +211,20 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
     remove(lantern) {
       actor.stop();
       held = null;
+      kartik.group.visible = false;
+      arm.visible = false;
+      mom.attach(mom.pack, 'WristR'); // back in her hand if she had set it down
+      mom.pack.visible = false;
+      aim.momHand = aim.kartikHand = aim.momGaze = aim.kartikGaze = null;
       sys.flashlight.clearWatch(WATCH.mom);
       mom.group.visible = false;
       lantern.position.copy(home);
     },
     dispose() {
       sys.flashlight.clearWatch(WATCH.mom);
+      arm.removeFromParent();
       mom.dispose();
+      kartik.dispose();
     },
   };
 }

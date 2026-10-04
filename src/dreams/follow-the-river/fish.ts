@@ -3,6 +3,7 @@ import type { AudioBus } from '../../engine/audio';
 import { loadModel, loadSkinned } from '../../engine/models';
 import type { Vec3 } from '../../engine/ray';
 import { waterlineX } from './banks';
+import { afterLift, resetFarewell, startExhale, stepFarewell } from './fish-farewell';
 import {
   cruiseHeading,
   cruiseTargetX,
@@ -20,6 +21,7 @@ import {
   surfaceTime,
   turnToward,
   WAKE_SIZE,
+  wakeScroll,
 } from './fish-parts';
 import { callOut, playSplash } from './fish-sound';
 import { createState, type Finale, type FishState, type Rise } from './fish-state';
@@ -55,8 +57,17 @@ export interface Fish {
    * `ground(z)` is the shore height. Any grab in progress lets go (the zombie drowns).
    */
   strand(noseX: number, noseZ: number, ground: (z: number) => number, horde: Horde): void;
-  /** One last breath (a blow), then it is still. */
+  /** One last breath (a pale blow, the Exhale clip, her eye dims), then she is still. */
   breatheOut(): void;
+  /**
+   * On the shore her head lifts a little and turns toward `target` (a live reference; the share
+   * eases in and out over about a second). `null` lets it settle.
+   */
+  lookAtTarget(target: THREE.Vector3 | null, weight: number): void;
+  /** Her jaw parts to `k` (0 shut .. 1 open) and eases there. */
+  setJaw(k: number): void;
+  /** Her weak tail lifts come every 6-9 s; once `rare`, much less often. */
+  setLiftsRare(rare: boolean): void;
   /** How sick it is (0 well .. 1 dying): duller, blotched, slower, a redder blow. */
   setSickness(k: number): void;
   /** Called when a zombie she took drowns (the run counts it and sickens her). */
@@ -245,6 +256,7 @@ function placeWake(f: FishState): void {
   const { x, z } = f.root.position;
   f.wake.position.set(x + Math.sin(f.yaw) * behind, WATER_Y + 0.02, z + Math.cos(f.yaw) * behind);
   f.wake.rotation.set(-Math.PI / 2, f.yaw, 0, 'YXZ');
+  if (f.wake.material.map) f.wake.material.map.offset.y = wakeScroll(f.time);
   // The wake shows while she swims in across the lake, never once she is leaping or lying.
   f.wake.visible = f.strand
     ? swimming(f.strand)
@@ -290,6 +302,7 @@ function startStrand(
   f.strikes = 0;
   f.takePending = false;
   f.finale = 'stranded';
+  mistColor(0, f.mist.material.color); // her breath on the shore is pale
   const { x, y, z } = f.root.position;
   f.strand = newStrand(
     { x, y, z, yaw: f.yaw, pitch: 0 },
@@ -321,6 +334,7 @@ function updateFish(
   stepMist(f, dt);
   if (f.strand) {
     stepStrand(f, f.strand, dt);
+    stepFarewell(f, dt);
     placeWake(f);
     return;
   }
@@ -362,8 +376,6 @@ function resetFish(f: FishState): void {
     f.settled.stop();
     f.swim.reset().play();
   }
-  f.swim.timeScale = 1;
-  f.settled.timeScale = 1;
   f.lastStrike = null;
   f.rise = null;
   f.grab = null; // horde.reset parks a zombie still in the jaws
@@ -371,6 +383,7 @@ function resetFish(f: FishState): void {
   f.finale = 'no';
   f.mistT = -1;
   f.mist.visible = false;
+  resetFarewell(f);
   f.surfaceIn = nextSurfacing(Math.random(), f.sickness);
   f.guards = [];
   f.style = { ...NIGHT_STRIKE };
@@ -419,6 +432,9 @@ export async function createFish(
   const f = createState(scene, audio, sounds, asset, packModel, bank);
   f.hooks = grabHooks(f);
   f.onThrown = (x, z) => playSplash(f, x, z, true);
+  f.mixer.addEventListener('finished', (e) => {
+    if (e.action === f.lift) afterLift(f);
+  });
   return {
     get finale() {
       return f.finale;
@@ -428,10 +444,18 @@ export async function createFish(
     },
     strand: (noseX, noseZ, ground, horde) => startStrand(f, noseX, noseZ, ground, horde),
     breatheOut() {
-      blowOut(f);
-      if (f.strand) f.strand.still = true;
-      f.swim.timeScale = 0; // the tail stops
-      f.settled.timeScale = 0;
+      if (f.strand) f.strand.still = true; // the bob stops; the Exhale clip is her last breath
+      startExhale(f);
+    },
+    lookAtTarget(target, weight) {
+      if (target) f.end.target = target;
+      f.end.lookGoal = target ? weight : 0;
+    },
+    setJaw(k) {
+      f.end.jawGoal = k;
+    },
+    setLiftsRare(rare) {
+      f.end.rare = rare;
     },
     setSickness(k) {
       f.sickness = Math.min(1, Math.max(0, k));

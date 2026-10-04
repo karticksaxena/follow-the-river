@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DREAMS } from '../registry';
 import { BEATS, CLOSING_PAGES, OPENING_PAGES } from './canoe-ride';
 import { ENDING_PAGES } from './ending';
-import { FAREWELL_PAGES } from './ending-farewell';
+import { FAREWELL_PAGES, FAREWELL_PROMPTS } from './ending-farewell';
 import { waitQuestion } from './flow';
 import { HINTS } from './hints';
 import { INTRO_PAGES } from './intro';
@@ -14,6 +14,7 @@ const PROMPTS = [
   'E: feed Dras',
   'E: throw a fish pack',
   'E: wait for dark',
+  ...Object.values(FAREWELL_PROMPTS),
   ...Object.values(PICKUP_PROMPT).flatMap((p) => [p.take, p.full]),
 ];
 

@@ -178,8 +178,11 @@ h1.title {
   color: var(--dim);
   font-size: 1.3rem;
 }
-.hud[hidden],
-.hud.hidden {
+.hud[hidden] {
+  display: none;
+}
+/* A cutscene hides everything but the prompt (the farewell's E actions). */
+.hud.hidden > :not(.hud-prompt) {
   display: none;
 }
 .hud-hurt {

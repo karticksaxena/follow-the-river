@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import type { AudioBus } from '../../engine/audio';
 import type { SkinnedAsset } from '../../engine/models';
 import { HORDE_CAPACITY } from './difficulty';
+import { newFarewell, type Farewell } from './fish-farewell';
 import {
   cruiseYFor,
   findClip,
@@ -59,6 +60,14 @@ export interface FishState {
   readonly lunge: THREE.AnimationAction;
   /** The Beached clip she lies in, and the bones that sag on top of it (see orca-strand.ts). */
   readonly settled: THREE.AnimationAction;
+  /** Her weak tail lift and her last breath (see fish-farewell.ts). */
+  readonly lift: THREE.AnimationAction;
+  readonly exhale: THREE.AnimationAction;
+  readonly end: Farewell;
+  /** Her head bone and its child the trunk (what her head turns on), and her eye's material. */
+  readonly head: THREE.Object3D | null;
+  readonly trunk: THREE.Object3D | null;
+  readonly eye: THREE.MeshStandardNodeMaterial | null;
   readonly sagBones: readonly THREE.Object3D[];
   /** Where the zombie she struck last was (read-only for the ending), or null. */
   lastStrike: { x: number; z: number } | null;
@@ -112,15 +121,32 @@ export interface FishState {
 function makeClips(
   body: THREE.Object3D,
   asset: SkinnedAsset,
-): Pick<FishState, 'mixer' | 'swim' | 'lunge' | 'settled'> {
+): Pick<FishState, 'mixer' | 'swim' | 'lunge' | 'settled' | 'lift' | 'exhale'> {
   const mixer = new THREE.AnimationMixer(body);
   const swim = mixer.clipAction(findClip(asset.clips, 'Swim'));
   const lunge = mixer.clipAction(findClip(asset.clips, 'Lunge'));
   lunge.setLoop(THREE.LoopOnce, 1);
   lunge.clampWhenFinished = true;
   const settled = mixer.clipAction(findClip(asset.clips, 'Beached'));
+  const lift = mixer.clipAction(findClip(asset.clips, 'TailLift'));
+  const exhale = mixer.clipAction(findClip(asset.clips, 'Exhale'));
+  for (const once of [lift, exhale]) {
+    once.setLoop(THREE.LoopOnce, 1);
+    once.clampWhenFinished = true; // she holds the last frame
+  }
   swim.play();
-  return { mixer, swim, lunge, settled };
+  return { mixer, swim, lunge, settled, lift, exhale };
+}
+
+/** Her eye's material (it keeps its own after `makeSick`), or null. */
+function eyeOf(body: THREE.Object3D): THREE.MeshStandardNodeMaterial | null {
+  let eye: THREE.MeshStandardNodeMaterial | null = null;
+  body.traverse((n) => {
+    if (!(n instanceof THREE.Mesh) || !(n.material instanceof THREE.MeshStandardNodeMaterial))
+      return;
+    if (n.material.name === 'orca-eye') eye = n.material;
+  });
+  return eye;
 }
 
 function collectZombie(f: FishState, id: number, x: number, z: number): void {
@@ -165,7 +191,7 @@ export function createState(
   const blow = audio.positional(splashAt, 4);
   const thump = audio.positional(splashAt, 4);
   const voice = audio.positional(root, 6);
-  const { mixer, swim, lunge, settled } = makeClips(body, asset);
+  const { mixer, swim, lunge, settled, lift, exhale } = makeClips(body, asset);
   const buffer = new Float32Array(CAPACITY * 3);
   const f: FishState = {
     scene,
@@ -191,6 +217,12 @@ export function createState(
     swim,
     lunge,
     settled,
+    lift,
+    exhale,
+    end: newFarewell(),
+    head: body.getObjectByName('Head') ?? null,
+    trunk: body.getObjectByName('Spine1') ?? null,
+    eye: eyeOf(body),
     sagBones: STRAND.bend.bones.flatMap((n) => body.getObjectByName(n) ?? []),
     lastStrike: null,
     buffer,

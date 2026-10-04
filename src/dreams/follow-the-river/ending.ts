@@ -1,48 +1,57 @@
 import type * as THREE from 'three/webgpu';
-import { precompileSky } from '../../engine/sky';
 import type { AreaDef } from './areas/types';
 import { playCanoeRide } from './canoe-ride';
-import { createDawn, DAWN } from './dawn';
 import { DIFFICULTY, nightTuning } from './difficulty';
+import { BED_FADE, bedFade, comeToPlayer, dawn, type Dawning } from './ending-dawn';
 import {
   FAREWELL_PAGES,
   goToIt,
-  hand,
+  kneel,
   lastPack,
   loadPackOnWater,
+  look,
+  orbit,
   shoreFor,
   song,
-  strand,
+  standUp,
+  swim,
   type Bed,
   type Script,
   type Shore,
 } from './ending-farewell';
-import {
-  buildEndingScene,
-  facing,
-  retreatPoint,
-  SHORE,
-  stopShort,
-  type EndingScene,
-} from './ending-scene';
+import { buildEndingScene, facing, retreatPoint, type EndingScene } from './ending-scene';
 import { FLINCH, struckNear, WAVE, waveCount, waveDue, waveSpot } from './ending-wave';
+import { createCast, type Cast } from './farewell-cast';
+import { shotsFor, type Shots } from './farewell-shots';
 import { atSafeSpot } from './flow';
-import { LIGHTING, type LightPreset } from './lighting';
 import { sicknessAt } from './orca-sick';
 import type { Run, Systems } from './run';
 import { addSupply, AMMO_OF, SUPPLY_LIMITS, type SupplyKind } from './state';
 import { stopVoice, voiceFor, voiceHooks } from './voice';
 
 export type EndingStep =
-  'mom' | 'fight' | 'strand' | 'song' | 'hand' | 'pack' | 'dawn' | 'ride' | 'credits' | 'done';
+  | 'mom'
+  | 'fight'
+  | 'swim'
+  | 'song'
+  | 'kneel'
+  | 'look'
+  | 'orbit'
+  | 'pack'
+  | 'dawn'
+  | 'ride'
+  | 'credits'
+  | 'done';
 type PagedStep = 'mom' | 'home' | 'credits';
 
 const ORDER: readonly EndingStep[] = [
   'mom',
   'fight',
-  'strand',
+  'swim',
   'song',
-  'hand',
+  'kneel',
+  'look',
+  'orbit',
   'pack',
   'dawn',
   'ride',
@@ -71,6 +80,7 @@ export const ENDING_PAGES: Readonly<Record<PagedStep, readonly string[]>> = {
   ],
 };
 
+export { bedFade } from './ending-dawn';
 export { FLINCH, struckNear, WAVE, waveCount, waveDue, waveSpot } from './ending-wave';
 
 /** How the night ends at depth `z`: the safe spot, the lake shore (Night 3), or not yet. */
@@ -125,6 +135,11 @@ interface State {
   pack: THREE.Object3D | null;
   /** The dawn's looping beds (birds, water), stopped at the end. */
   beds: Bed[];
+  /** What runs behind the farewell every frame, and where everything stands (see farewell-cast.ts, farewell-shots.ts). */
+  cast: Cast | null;
+  shots: Shots | null;
+  /** A page is open (the orca keeps breathing behind it). */
+  reading: boolean;
 }
 
 const until = (st: State, pred: Wait['pred']): Promise<void> =>
@@ -145,6 +160,8 @@ async function setUp(h: EndingHost, st: State): Promise<void> {
   if (st.cancelled) return scene.dispose();
   st.scene = scene;
   st.pack ??= await loadPackOnWater(h.sys.world.scene);
+  st.cast ??= createCast(scene, ctx.stage.camera, h.sys.fish);
+  ctx.warmFocus(); // the depth-of-field graph compiles here, behind the black
   st.pack.visible = false;
   const cam = ctx.stage.camera.position;
   scene.place(cam.x, cam.z, h.lantern);
@@ -157,12 +174,16 @@ async function setUp(h: EndingHost, st: State): Promise<void> {
   h.run.frozen = false;
 }
 
-const read = (h: EndingHost, pages: readonly string[]): Promise<void> =>
+const read = (h: EndingHost, st: State, pages: readonly string[]): Promise<void> =>
   new Promise((resolve) => {
     const { ctx } = h.sys;
+    st.reading = true;
     ctx.read(
       pages,
-      resolve,
+      () => {
+        st.reading = false;
+        resolve();
+      },
       voiceHooks(ctx.audio, (page) => voiceFor(page, 'scene')),
     );
   });
@@ -246,62 +267,18 @@ async function fight(h: EndingHost, st: State): Promise<void> {
   fish.setGuards([]);
 }
 
-/** Night 3's own night: the area's tighter fog, as `setFogFar` left it. Built once per dawn. */
-function nightPreset(area: AreaDef): LightPreset {
-  const { night } = LIGHTING;
-  return { ...night, fog: { ...night.fog, far: area.nightFog ?? night.fog.far } };
-}
-
-/** Night to sunrise over `DAWN.seconds` (the moon sets, the sun rises, every frame), the birds swelling in with it over the water's lapping. */
-async function dawn(h: EndingHost, st: State): Promise<void> {
-  const { world, ctx, sounds } = h.sys;
-  const birds = sounds.birds ? ctx.audio.loop(sounds.birds, 0) : null;
-  const water = ctx.audio.loop(sounds.water, DAWN.water);
-  st.beds.push(water);
-  if (birds) st.beds.push(birds);
-  const { lights } = world;
-  const sky = createDawn(lights, nightPreset(h.sys.area), h.lantern);
-  await precompileSky(ctx.stage.renderer, world.scene, ctx.stage.camera, lights.physical);
-  let t = 0;
-  let turned = false;
-  const lake = h.sys.area.lake;
-  const mom = st.scene?.mom.group.position;
-  if (lake && mom) st.scene?.actor.faceTo(mom.x, lake.z - 10); // looks out over the water
-  await until(st, (dt) => {
-    t += dt;
-    if (!turned && t >= DAWN.seconds / 2) {
-      turned = true;
-      const cam = ctx.stage.camera.position;
-      st.scene?.actor.faceTo(cam.x, cam.z); // then back to you
-    }
-    const k = Math.min(1, t / DAWN.seconds);
-    birds?.setVolume(DAWN.volume * k);
-    sky.step(k, t);
-    return k >= 1;
-  });
-}
-
-/** Mom walks to the player, stops `SHORE.meet` m short and faces them. */
-async function comeToPlayer(h: EndingHost, st: State): Promise<void> {
-  const actor = st.scene?.actor;
-  if (!actor || !st.scene) return;
-  const cam = h.sys.ctx.stage.camera.position;
-  const at = stopShort(st.scene.mom.group.position, cam, SHORE.meet);
-  st.scene.mom.rest = 'Idle_Neutral'; // up off her knees, and she stands with you
-  await actor.walkTo([at]);
-  if (!st.cancelled) actor.faceTo(cam.x, cam.z);
-}
-
 /** What the farewell steps need, while Mom is on the shore. */
 function scriptOf(h: EndingHost, st: State): Script | null {
-  if (!st.scene) return null;
+  if (!st.scene || !st.cast || !st.shots) return null;
   return {
     sys: h.sys,
     run: h.run,
     scene: st.scene,
+    cast: st.cast,
+    shots: st.shots,
     until: (pred) => until(st, pred),
     track: (bed) => st.beds.push(bed),
-    read: (pages) => read(h, pages),
+    read: (pages) => read(h, st, pages),
     get cancelled() {
       return st.cancelled;
     },
@@ -313,25 +290,41 @@ export function sickenToEnd(fish: { setSickness(k: number): void }): void {
   fish.setSickness(sicknessAt('end', 0));
 }
 
-/** The last leap: the horde is gone, the run is won, and Mom goes to it. */
+/** The last leap, seen: the horde is gone, the run is won, and Mom goes to her. */
 async function stranded(h: EndingHost, st: State, s: Script, at: Shore): Promise<void> {
   sickenToEnd(h.sys.fish);
-  await strand(s, at);
+  await swim(s, at);
   if (st.cancelled) return;
   h.run.ending = 'calm';
   h.persist(); // the wave is won: from here the run is saved as finished
   h.sys.horde.reset();
-  await goToIt(s, at);
-  if (!st.cancelled) await read(h, FAREWELL_PAGES.stranded);
+  await goToIt(s);
+  if (!st.cancelled) await read(h, st, FAREWELL_PAGES.stranded);
 }
 
-/** Dawn comes up, Mom comes to you: time to go home. */
-async function dawnAndHome(h: EndingHost, st: State): Promise<void> {
+const dawning = (h: EndingHost, st: State): Dawning => ({
+  sys: h.sys,
+  lantern: h.lantern,
+  scene: st.scene,
+  beds: st.beds,
+  until: (pred) => until(st, pred),
+});
+
+/** Dawn comes up while you stand, Mom stands and comes to you: time to go home. */
+async function dawnAndHome(h: EndingHost, st: State, s: Script): Promise<void> {
   h.sys.flashlight.on = false;
-  await dawn(h, st);
+  const stand = standUp(s);
+  let standing = false;
+  const d = dawning(h, st);
+  await dawn(d, (dt) => {
+    if (!standing) standing = stand(dt);
+  });
   if (st.cancelled) return;
-  await comeToPlayer(h, st);
-  if (!st.cancelled) await read(h, ENDING_PAGES.home);
+  await comeToPlayer(d, () => st.cancelled);
+  if (!st.cancelled) {
+    st.scene?.mom.play('Talk'); // she talks while you read
+    await read(h, st, ENDING_PAGES.home);
+  }
   if (!st.cancelled) await until(st, bedFade(st.beds, BED_FADE)); // the ride brings its own water and birds
 }
 
@@ -340,18 +333,20 @@ async function runStep(h: EndingHost, st: State, step: EndingStep, at: Shore): P
   const s = scriptOf(h, st);
   if (!s) return;
   if (step === 'mom') {
-    await read(h, ENDING_PAGES.mom);
+    await read(h, st, ENDING_PAGES.mom);
     armForLastStand(h.run, DIFFICULTY[h.sys.ctx.difficulty()].bag);
   } else if (step === 'fight') await fight(h, st);
-  else if (step === 'strand') await stranded(h, st, s, at);
+  else if (step === 'swim') await stranded(h, st, s, at);
   else if (step === 'song') await song(s, at);
-  else if (step === 'hand') await hand(s, at);
-  else if (step === 'pack' && st.pack) await lastPack(s, at, st.pack);
-  else if (step === 'dawn') await dawnAndHome(h, st);
+  else if (step === 'kneel') await kneel(s);
+  else if (step === 'look') await look(s);
+  else if (step === 'orbit') await orbit(s);
+  else if (step === 'pack' && st.pack) await lastPack(s, st.pack);
+  else if (step === 'dawn') await dawnAndHome(h, st, s);
   else if (step === 'ride') {
     h.run.frozen = true; // the chapter stops: the ride is its own scene
     await playCanoeRide(h.sys.ctx, h.sys.sounds);
-  } else if (step === 'credits') await read(h, ENDING_PAGES.credits);
+  } else if (step === 'credits') await read(h, st, ENDING_PAGES.credits);
 }
 
 /** The whole ending, step by step; every await is followed by a cancelled check. */
@@ -359,6 +354,7 @@ async function play(h: EndingHost, st: State): Promise<void> {
   const { meetAt, lake } = h.sys.area;
   if (!meetAt || !lake) return;
   const at = shoreFor(meetAt, lake.z);
+  st.shots = shotsFor(at);
   let step: EndingStep = 'mom';
   await setUp(h, st);
   while (step !== 'done' && !st.cancelled) {
@@ -366,30 +362,6 @@ async function play(h: EndingHost, st: State): Promise<void> {
     step = nextEndingStep(step);
   }
   if (!st.cancelled) h.sys.ctx.finish();
-}
-
-/** Seconds the dawn's beds take to fade out before the ride starts its own. */
-const BED_FADE = 0.5;
-
-/**
- * Pure-ish: a per-frame predicate that fades `beds` out over `seconds`, then stops and frees them
- * (and empties the list). True once done.
- */
-export function bedFade(beds: Bed[], seconds: number): (dt: number) => boolean {
-  const from = beds.map((b) => b.getVolume());
-  let t = 0;
-  return (dt) => {
-    t += dt;
-    const k = Math.min(1, t / seconds);
-    beds.forEach((b, i) => b.setVolume((from[i] ?? 0) * (1 - k)));
-    if (k < 1) return false;
-    for (const b of beds) {
-      b.stop();
-      b.disconnect();
-    }
-    beds.length = 0;
-    return true;
-  };
 }
 
 function stopBeds(st: State): void {
@@ -400,22 +372,48 @@ function stopBeds(st: State): void {
   st.beds.length = 0;
 }
 
-const freshState = (scene: EndingScene | null, pack: THREE.Object3D | null): State => ({
+const freshState = (
+  scene: EndingScene | null,
+  pack: THREE.Object3D | null,
+  cast: Cast | null,
+): State => ({
   started: false,
   cancelled: false,
   wait: null,
   scene,
   pack,
   beds: [],
+  cast,
+  shots: null,
+  reading: false,
 });
 
+/** The cutscene over for good (a quit or a restart): input, HUD, bow, depth of field and everything the cast held, back to normal. */
+function endCinema(h: EndingHost, st: State): void {
+  if (!st.started) return;
+  const { ctx, fish } = h.sys;
+  h.run.cutscene = false;
+  h.run.interact = null;
+  ctx.cinematic(false);
+  ctx.focus(false);
+  fish.lookAtTarget(null, 0);
+  fish.setJaw(0);
+  const cast = st.cast;
+  if (cast) {
+    cast.follow(false);
+    cast.hold = cast.arm = cast.slide = cast.float = null;
+  }
+  if (st.pack) st.pack.visible = false;
+}
+
 export function createEnding(h: EndingHost): Ending {
-  let st = freshState(null, null);
+  let st = freshState(null, null, null);
   const stand = (): void => {
     st.cancelled = true; // the running `play` sees this after its next await and stops
     st.wait = null;
     stopBeds(st);
     stopVoice();
+    endCinema(h, st);
   };
   return {
     start() {
@@ -426,12 +424,16 @@ export function createEnding(h: EndingHost): Ending {
     update(dt) {
       if (!st.started || st.cancelled) return;
       st.scene?.update(dt); // Mom keeps moving behind the pages: she kneels as Mom speaks
-      if (h.sys.ctx.isPaused()) return;
-      if (st.wait?.pred(dt)) {
+      const paused = h.sys.ctx.isPaused();
+      if (!paused && st.wait?.pred(dt)) {
         const { resolve } = st.wait;
         st.wait = null;
         resolve();
       }
+      st.cast?.update(dt);
+      // The world is frozen behind a page, but she keeps breathing, and the camera and your arm stay put.
+      if (paused && st.reading && h.sys.fish.beached)
+        h.sys.fish.update(dt, h.sys.ctx.stage.camera.position, null, false);
     },
     cancel() {
       if (!st.started) return;
@@ -440,7 +442,7 @@ export function createEnding(h: EndingHost): Ending {
       st.scene?.remove(h.lantern);
       h.run.interact = null;
       h.sys.fish.reset(); // a death mid-farewell can't leave it on the shore
-      st = freshState(st.scene, st.pack); // Mom stays built; reaching the shore again starts over
+      st = freshState(st.scene, st.pack, st.cast); // Mom stays built; reaching the shore again starts over
     },
     dispose() {
       stand();

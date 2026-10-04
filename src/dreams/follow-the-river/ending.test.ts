@@ -18,7 +18,7 @@ import {
   waveSpot,
   type EndingStep,
 } from './ending';
-import { FAREWELL, FAREWELL_PAGES, shoreFor, type Bed } from './ending-farewell';
+import { FAREWELL, FAREWELL_PAGES, FAREWELL_PROMPTS, shoreFor, type Bed } from './ending-farewell';
 import {
   facing,
   LANTERN_OUT,
@@ -27,19 +27,22 @@ import {
   retreatPoint,
   stopShort,
 } from './ending-scene';
+import { shotsFor } from './farewell-shots';
 import { EDGE_X } from './river';
 import { freshRun, restartPhase, SUPPLY_LIMITS, type GunKind } from './state';
 
 describe('ending steps', () => {
-  it('runs Mom, the last stand, the stranding, the farewell, dawn, the ride home, the credits', () => {
+  it('runs Mom, the last stand, the swim in, the song, the kneel, her look, the orbit, the last pack, dawn, the ride home, the credits', () => {
     const steps: EndingStep[] = ['mom'];
     while (steps[steps.length - 1] !== 'done') steps.push(nextEndingStep(steps[steps.length - 1]));
     expect(steps).toEqual([
       'mom',
       'fight',
-      'strand',
+      'swim',
       'song',
-      'hand',
+      'kneel',
+      'look',
+      'orbit',
       'pack',
       'dawn',
       'ride',
@@ -141,17 +144,22 @@ describe('the last stand', () => {
 });
 
 describe('the farewell', () => {
-  it('puts both E spots on the pebbles you can walk to (short of the shore wall)', () => {
+  it('lets you walk to the kneeling spot (short of the shore wall) and lands the pack camera in its E range', () => {
     const meet = FOREST.meetAt;
     const lake = FOREST.lake;
     if (!meet || !lake) throw new Error('the forest has Mom and a lake');
     const at = shoreFor(meet, lake.z);
     const reach = FOREST.endZ + 0.3; // the wall's land face plus your body
-    const side = { x: at.noseX + FAREWELL.side.x, z: at.noseZ + FAREWELL.side.z };
-    const edge = { x: at.noseX + FAREWELL.edge.x, z: at.lakeZ + FAREWELL.edge.z };
-    expect(side.z - FAREWELL.side.radius).toBeLessThan(reach + 2);
-    expect(side.z).toBeGreaterThan(reach);
-    expect(edge.z + FAREWELL.edge.radius).toBeGreaterThan(reach);
+    const kneel = shotsFor(at).kneel.at;
+    expect(kneel[2] - FAREWELL.kneelRadius).toBeLessThan(reach + 1);
+    expect(kneel[2] + FAREWELL.kneelRadius).toBeGreaterThan(reach);
+    expect(Math.abs(kneel[0] - at.noseX)).toBeGreaterThan(0.9); // beside her, not on her
+  });
+
+  it('says her, not it, and calls her skin smooth like wet rubber', () => {
+    expect(FAREWELL_PROMPTS.kneel).toBe('E: put your hand on her');
+    expect(FAREWELL_PAGES.hand[0]).toBe('Her skin is cold and smooth, like wet rubber.');
+    expect(FAREWELL_PAGES.look[0]).toBe('She lifts her head a little and looks at you.');
   });
 
   it("lands clear of Mom's canoe on the shore (its body runs 7 m back into the lake)", () => {
