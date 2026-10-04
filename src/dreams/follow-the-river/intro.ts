@@ -63,9 +63,28 @@ export const INTRO_PAGES: Readonly<Record<ActiveStep, readonly string[]>> = {
 };
 
 /** What Mom's head follows: you while a page of hers is open, the TV during the news. */
-export function momGaze(step: IntroStep, reading: boolean): 'you' | 'tv' | null {
+export function momGaze(step: IntroStep, reading: boolean): Gaze {
   if (reading) return 'you';
   return step === 'news' ? 'tv' : null;
+}
+
+export type Gaze = 'you' | 'tv' | null;
+/** The eased head-turn: which target it is on and how far (0 = animation untouched). */
+export interface GazeState {
+  kind: Gaze;
+  weight: number;
+}
+const GAZE_RATE = 6; // 1/s: the head turns in and out over about half a second
+const GAZE_OFF = 0.02; // below this weight a target switch is allowed
+
+/** Pure (mutates `g`): eases the weight toward the wanted target; a new target eases out, then in. */
+export function gazeStep(g: GazeState, want: Gaze, dt: number, max: number): void {
+  if (g.kind !== want && g.weight <= GAZE_OFF) {
+    g.kind = want;
+    g.weight = 0;
+  }
+  const goal = g.kind === want && want ? max : 0;
+  g.weight += (goal - g.weight) * (1 - Math.exp(-GAZE_RATE * dt));
 }
 
 export interface Intro {
@@ -99,6 +118,7 @@ interface State {
   busy: boolean;
   /** A page of Mom's is open (the game is paused, but she keeps animating and looks at you). */
   reading: boolean;
+  gaze: GazeState;
   disposed: boolean;
   time: number;
   /** Seconds left of easing the camera toward the river. */
@@ -315,10 +335,10 @@ function makePerform(actions: Actions, st: State, hud: Hud, onDone: () => void) 
 /** Mom's animation and head, also run while a page is open so she never freezes mid-pose. */
 function animateMom(sc: IntroScene, st: State, camera: THREE.Camera, dt: number): void {
   sc.mom.update(dt);
-  const gaze = momGaze(st.step, st.reading);
-  if (!gaze || !sc.mom.group.visible) return;
-  const target = gaze === 'you' ? camera.getWorldPosition(GAZE_TARGET) : TV_EYE;
-  lookAt(sc.mom.bone('Head'), target, GAZE.weight, GAZE);
+  gazeStep(st.gaze, momGaze(st.step, st.reading), dt, GAZE.weight);
+  if (!st.gaze.kind || st.gaze.weight <= 0.001 || !sc.mom.group.visible) return;
+  const target = st.gaze.kind === 'you' ? camera.getWorldPosition(GAZE_TARGET) : TV_EYE;
+  lookAt(sc.mom.bone('Head'), target, st.gaze.weight, GAZE);
 }
 
 /** Per-frame motion: Mom, the TV picture and flicker, the orca, and the timed waits. */
@@ -378,6 +398,7 @@ export async function runIntro(
     inside: true,
     busy: false,
     reading: false,
+    gaze: { kind: null, weight: 0 },
     disposed: false,
     time: 0,
     look: 0,
@@ -397,7 +418,8 @@ export async function runIntro(
     sc.lights.sky.position.set(cam.x, 0, cam.z);
     if (st.disposed) return;
     if (ctx.isPaused()) {
-      animateMom(sc, st, ctx.stage.camera, dt); // frozen, except Mom keeps her pose alive
+      // frozen, except Mom keeps her pose alive under a page of hers and the phone page
+      if (st.reading || st.step === 'goodbye') animateMom(sc, st, ctx.stage.camera, dt);
       return;
     }
     tick(dt);

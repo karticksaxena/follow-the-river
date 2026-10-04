@@ -2,7 +2,14 @@ import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
 import { resolveCircle, type Box } from '../../engine/collide';
 import { PLAYER_RADIUS } from '../../engine/player';
-import { INTRO_PAGES, momGaze, nextIntroStep, type IntroStep } from './intro';
+import {
+  gazeStep,
+  INTRO_PAGES,
+  momGaze,
+  nextIntroStep,
+  type GazeState,
+  type IntroStep,
+} from './intro';
 import {
   AT,
   createCharacter,
@@ -166,5 +173,25 @@ describe("Mom's gaze", () => {
     expect(momGaze('news', true)).toBe('you');
     expect(momGaze('news', false)).toBe('tv');
     expect(momGaze('throw', false)).toBeNull();
+  });
+});
+
+describe('gazeStep', () => {
+  it('eases in and out, and goes down to nothing before it changes target', () => {
+    const g: GazeState = { kind: null, weight: 0 };
+    gazeStep(g, 'you', 1 / 60, 0.8);
+    expect(g.kind).toBe('you');
+    expect(g.weight).toBeGreaterThan(0);
+    expect(g.weight).toBeLessThan(0.2); // no pop on the first frame
+    for (let i = 0; i < 120; i++) gazeStep(g, 'you', 1 / 60, 0.8);
+    expect(g.weight).toBeCloseTo(0.8, 2);
+    gazeStep(g, 'tv', 1 / 60, 0.8);
+    expect(g.kind).toBe('you'); // still looking at you, easing out
+    expect(g.weight).toBeLessThan(0.8);
+    for (let i = 0; i < 200; i++) gazeStep(g, 'tv', 1 / 60, 0.8);
+    expect(g.kind).toBe('tv');
+    expect(g.weight).toBeCloseTo(0.8, 2);
+    for (let i = 0; i < 200; i++) gazeStep(g, null, 1 / 60, 0.8);
+    expect(g.weight).toBeLessThan(0.01);
   });
 });
