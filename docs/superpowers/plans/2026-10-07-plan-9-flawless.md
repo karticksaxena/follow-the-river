@@ -504,3 +504,258 @@ return [
 - [ ] **Step 4:** tests PASS; `pnpm run check`.
 - [ ] **Step 5: Chrome check:** Night 2 at z −150: walk +x: you stop at 2.7 with water 0.7 m away below the grass edge (screenshot down at the water: no dark mud strip). Watch Dras cruise for 60 s from the bank (screenshots every 10 s): fin always over water, never over mud; log `min(root.x) - waterline` over a whole wave, ≥ 0.9 when not grabbing. Night 1 (city) unchanged.
 - [ ] **Step 6: commit** `fix: natural banks drop straight to the water, and Dras cruises in the water only`.
+
+### Task A5: Difficulty (Story / Normal / Hard), short stuns, scarce supplies, two body hits
+
+**Files:**
+- Modify: `src/engine/settings.ts` (+test), `src/engine/menus.ts` (pause menu row), `src/dreams/types.ts` + `src/session.ts` (`difficulty()`, `setDifficulty()`), `src/dreams/follow-the-river/difficulty.ts` (+test), `zombies/brain.ts` (stun and damage from tuning, `hitKills`), `zombies/horde.ts` (`hurt`, wounds, damage), `zombies/look.ts` (`bodyHit` says head or body), `zombies/body.ts` (`wounds`), `bow.ts` (break arrows that kill), `gun.ts` (`horde.hurt`), `pickups.ts` (amounts × supplies, ammo box), `state.ts` (`topUp` × supplies), `ending.ts` (`armForLastStand` share), `hud.ts` (`hearts(health, damage)`), `play.ts` (HURT_HEALTH from damage), `index.ts` (ask on a new run).
+
+**Interfaces:**
+- Produces: `type Difficulty = 'story' | 'normal' | 'hard'` (engine/settings.ts); `Settings.difficulty: Difficulty`; `DreamContext.difficulty(): Difficulty`, `DreamContext.setDifficulty(d: Difficulty): void`; `DIFFICULTY: Record<Difficulty, DifficultyTuning>` and `nightTuning(chapter, difficulty)` (difficulty.ts); `Tuning` gains `stun: { exposure: number; seconds: number }`, `damage: number`, `bodyHits: number`; `Horde.hurt(id: number, head: boolean): boolean` (true = it died); `rayHit` returns `{ id, distance, head }`; `hitKills(wounds: number, head: boolean, bodyHits: number): boolean`.
+- Consumed by: Task A6 (quota, interval, speed), Task A9 (bag share).
+
+- [ ] **Step 1: failing tests.**
+`src/engine/settings.test.ts`:
+```ts
+it('old settings without a difficulty load as Normal; bad values fall back', () => {
+  expect(isSettings({ sensitivity: 1, volume: 0.5 })).toBe(true);
+  expect(clampSettings({ sensitivity: 1, volume: 0.5 } as Settings).difficulty).toBe('normal');
+  expect(clampSettings({ sensitivity: 1, volume: 0.5, difficulty: 'easy' as never }).difficulty).toBe('normal');
+  expect(clampSettings({ sensitivity: 1, volume: 0.5, difficulty: 'hard' }).difficulty).toBe('hard');
+});
+```
+`difficulty.test.ts`:
+```ts
+it('each step up is harder on every knob', () => {
+  const [s, n, h] = (['story', 'normal', 'hard'] as const).map((d) => DIFFICULTY[d]);
+  for (const [a, b] of [[s, n], [n, h]] as const) {
+    expect(b.quota).toBeGreaterThan(a.quota);
+    expect(b.speed).toBeGreaterThan(a.speed);
+    expect(b.interval).toBeLessThan(a.interval);
+    expect(b.stun.seconds).toBeLessThan(a.stun.seconds);
+    expect(b.stun.exposure).toBeGreaterThan(a.stun.exposure);
+    expect(b.damage).toBeGreaterThanOrEqual(a.damage);
+    expect(b.supplies).toBeLessThan(a.supplies);
+  }
+  expect(DIFFICULTY.normal.stun.seconds).toBeLessThanOrEqual(1);
+});
+it('night chase speed stays under the sprint on Hard', () => {
+  for (const c of [1, 2, 3]) expect(nightTuning(c, 'hard').speed).toBeLessThan(SPRINT_SPEED - 0.3);
+});
+```
+`zombies/brain.test.ts`:
+```ts
+it('a head hit always kills; body hits count up to bodyHits', () => {
+  expect(hitKills(0, true, 2)).toBe(true);
+  expect(hitKills(0, false, 2)).toBe(false);
+  expect(hitKills(1, false, 2)).toBe(true);
+  expect(hitKills(0, false, 1)).toBe(true);
+});
+it('the stun lasts the tuning's seconds', () => {
+  const m = newMind(); m.state = 'chase';
+  const t = { ...NIGHT_TUNING, stun: { exposure: 0.6, seconds: 0.9 }, damage: 34, bodyHits: 2 };
+  const out = { intent: 'stand' as const, hit: false };
+  for (let i = 0; i < 40; i++) think(m, { distance: 10, lit: true, heard: false }, t, 1 / 60, out);
+  expect(m.state).toBe('stunned');
+  expect(m.timer).toBeCloseTo(0.9, 1);
+});
+```
+`hud.test.ts`: `expect(hearts(100, 50)).toBe('♥♥'); expect(hearts(50, 50)).toBe('♥♡'); expect(hearts(100, 25)).toBe('♥♥♥♥');`.
+`pickups.test.ts`: crate on Normal gives a new pistol plus 6 bullets and 2 arrows and no battery; on Story 1.6×; on Hard 0.6× (rounded, at least 1 of each non-zero item).
+Run → FAIL.
+
+- [ ] **Step 2: the table** (`difficulty.ts`):
+```ts
+export interface DifficultyTuning {
+  /** Zombies a wave needs killed, times the wave's quota. */
+  quota: number;
+  /** Added to every night's chase speed (m/s). */
+  speed: number;
+  /** Seconds between a wave's spawns, times the wave's own. */
+  interval: number;
+  /** Seconds of steady light to stun, and how long it holds. */
+  stun: { exposure: number; seconds: number };
+  /** One blow (health 100): 34 = three hits, 50 = two, 25 = four. */
+  damage: number;
+  /** Body hits that drop a zombie (a head hit always kills). */
+  bodyHits: number;
+  /** An arrow that killed can be picked up again (otherwise it breaks). */
+  keepKillArrows: boolean;
+  /** Crates, pickups and what a death gives back, times the base. */
+  supplies: number;
+  /** Share of Mom's bag in the last stand. */
+  bag: number;
+}
+
+/** Tuning knobs. Normal is the game as meant: scarce, fast, short stuns. */
+export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyTuning>> = {
+  story: { quota: 0.6, speed: -0.5, interval: 1.4, stun: { exposure: 0.4, seconds: 1.6 }, damage: 25, bodyHits: 1, keepKillArrows: true, supplies: 1.6, bag: 1 },
+  normal: { quota: 1, speed: 0, interval: 1, stun: { exposure: 0.6, seconds: 0.9 }, damage: 34, bodyHits: 2, keepKillArrows: false, supplies: 1, bag: 0.5 },
+  hard: { quota: 1.4, speed: 0.3, interval: 0.75, stun: { exposure: 0.8, seconds: 0.6 }, damage: 50, bodyHits: 2, keepKillArrows: false, supplies: 0.6, bag: 0.34 },
+};
+```
+`nightTuning(chapter, d)` caches by `${chapter}|${d}` and builds `{ ...NIGHT_TUNING, speed: NIGHT_DIFFICULTY[c].speed + DIFFICULTY[d].speed, stun, damage, bodyHits }`; `dayTuning(d)` = `DAY_TUNING` + the same stun/damage/bodyHits. Base supplies (Normal):
+```ts
+export const CRATE = { ammo: { pistol: 6, shotgun: 4, rifle: 15 }, arrows: 2, cells: 0, fishPacks: 1 };
+export const AMMO_BOX = { pistol: 3, shotgun: 2, rifle: 8 }; // the 'ammo' pickup: for every gun you own (pistol bullets if none)
+export const AFTER_DEATH = { battery: 60, cells: 1, arrows: 4, ammo: 6, shells: 3, rounds: 15, fishPacks: 1 };
+PICKUP_GAIN: battery → cells 1, arrows 2, fishPack 1, gun → ammo 6
+```
+Scaling: `scaled(n, k) = n === 0 ? 0 : Math.max(1, Math.round(n * k))`.
+- [ ] **Step 3: wiring.**
+  - `brain.ts`: `lightUp` uses `tuning.stun`; `ATTACK.damage` removed, `t.hit` → `onHit(b.tuning.damage)`; `hitKills` exported.
+  - `look.ts bodyHit` returns `{ distance, head } | null` (head sphere nearer wins); `horde.rayHit` passes `head`.
+  - `horde.hurt(id, head)`: `b.wounds++`; if `hitKills(b.wounds - 1, head, b.tuning.bodyHits)` → `killMind`, return true; else a flinch: `mind.state = 'recover'; mind.timer = 0.35` (intent `stand`, plays the `Hit`-free `Idle` stagger), `b.heard = true`, return false. `spawnZombie` resets `wounds = 0`.
+  - `bow.ts resolveHit`: `const died = horde.hurt(zombie.id, zombie.head)`; if `died && !keepKillArrows` the arrow breaks (`a.state = 'idle'`, mesh hidden) instead of sticking; `createBow(..., keepKillArrows: () => boolean)`.
+  - `gun.ts shoot`: `horde.hurt(zombie.id, zombie.head)` per pellet hit.
+  - `session.ts`: `difficulty: () => app.settings.difficulty`, `setDifficulty: (d) => app.saveSettings({ ...app.settings, difficulty: d })`.
+  - `menus.ts showPauseMenu`: a row "Difficulty" with three buttons (`Story`, `Normal`, `Hard`), the current one `aria-pressed="true"` and class `on`; clicking calls `change({ difficulty })`. It takes effect from the next wave or phase start (say so under the row: `el('p', 'small', 'Takes effect from the next wave.')`).
+  - `index.ts begin()`: for a new run (`coldDue` was true at start, or `startOver`) before anything plays: `const pick = await ctx.choose('How hard should the nights be?\nStory: more supplies, slower zombies, longer stuns.\nNormal: the game as meant.\nHard: little ammo, faster, bigger waves.', ['Story', 'Normal', 'Hard'], 1); ctx.setDifficulty(['story','normal','hard'][pick])`. (The cold open waits for it: it starts its clock on `begin`, check `coldopen.ts` and hold it until the choice closes.)
+  - The chapter reads `ctx.difficulty()` at every `beginPhase` and wave start (so a pause-menu change applies next wave).
+  - `ending.ts armForLastStand(run, share)`: `supplies[AMMO_OF[gun]] = Math.max(current, Math.round(SUPPLY_LIMITS[...] * share))`, arrows likewise, `cells + 1`.
+- [ ] **Step 4:** tests PASS; `pnpm run check`.
+- [ ] **Step 5: Chrome check (as a player, Normal):** Night 1 wave 1: light a zombie, count frames until it moves again (≈ 0.9 s); one body arrow staggers, the second drops it; a head arrow drops it; the arrow that killed is gone, a miss stuck in the ground can be picked up; crate gives pistol + 6. Pause menu shows the Difficulty row; switch to Hard: next wave zombies faster. New run (Start over): the difficulty question appears before the cold open.
+- [ ] **Step 6: commit** `feat: Story, Normal and Hard; short stuns, scarce supplies, two body hits, arrows that kill break`.
+
+### Task A6: Waves that keep coming, long zones, escalation, river-edge supplies, an objective line
+
+**Files:**
+- Modify: `src/dreams/follow-the-river/areas/types.ts` (WaveDef), `areas/city.ts`, `areas/suburbs.ts`, `areas/forest.ts` (zones, props past −400, safe props), `waves.ts` (+test), `play.ts` (`tickWaves`, spawning), `hud.ts` (objective line), `src/style.css`, `hints.ts` (`clear`), `phases.ts` (`run.pickups` adds the edge pickups), `areas/*.test.ts`, `world.test.ts`.
+
+**Interfaces:**
+- Produces:
+```ts
+export interface WaveDef {
+  z: number;
+  gateZ: number;
+  /** Zombies to kill before the barricade falls (Normal; ambushes count toward it). */
+  quota: number;
+  /** Seconds between spawns, random in [min, max] (Normal). */
+  every: readonly [number, number];
+  /** Most of this wave alive at once. */
+  cap: number;
+  /** Added to the night's chase speed (m/s): each wave a little faster. */
+  faster: number;
+  ambushes: readonly AmbushDef[];
+  crate: { x: number; gun?: GunKind };
+}
+export type WaveEvent = { kind: 'start'; wave: number } | { kind: 'spawn'; ambush: AmbushDef } | { kind: 'one' } | { kind: 'clear'; wave: number } | null;
+export function stepWaves(w: WaveState, waves: readonly WaveDef[], z: number, alive: number, dt: number, d: Pick<DifficultyTuning, 'quota' | 'interval'>, rand: () => number): WaveEvent;
+export function spawnSpot(player: { x: number; z: number }, zone: { startZ: number; gateZ: number; minX: number; maxX: number }, rand: () => number): { x: number; z: number };
+export function edgePickups(area: AreaDef): PickupDef[];
+export function objective(o: { night: boolean; fighting: boolean; wave: number; waves: number; ending: boolean; lake: boolean }): string;
+```
+`WaveState` gains `toSpawn` (all left to spawn, ambushes included) and `nextIn` (seconds to the next spawn).
+
+- [ ] **Step 1: failing tests** (`waves.test.ts`, replacing the trigger-only tests):
+```ts
+const def: WaveDef = { z: -134, gateZ: -239, quota: 9, every: [4, 6], cap: 6, faster: 0,
+  ambushes: [{ z: -134, count: 2, kind: 'street' }, { z: -200, count: 1, kind: 'behind' }], crate: { x: -1 } };
+const N = { quota: 1, interval: 1 };
+
+it('keeps spawning over time while you stand still, up to the cap, until the quota is out', () => {
+  const w = newWaveState();
+  const r = rng(3);
+  expect(stepWaves(w, [def], -136, 0, 0.1, N, r)?.kind).toBe('start');
+  let spawned = 0;
+  let alive = 0;
+  for (let t = 0; t < 300; t += 0.1) {
+    const e = stepWaves(w, [def], -136, alive, 0.1, N, r); // the player never moves
+    if (e?.kind === 'one') { spawned++; alive++; }
+    if (e?.kind === 'spawn') { spawned += e.ambush.count; alive += e.ambush.count; }
+    expect(alive).toBeLessThanOrEqual(def.cap + 2); // an ambush may burst over the cap
+    if (alive > 0 && t % 7 < 0.1) alive--; // the player kills one now and then
+  }
+  // the ambush at z −200 stays reserved until you walk there
+  expect(spawned).toBe(def.quota - 1);
+});
+it('clears only when everything is spawned and dead', () => { /* walk to −201, kill all → 'clear' */ });
+it('scales the quota and the spawn gap by difficulty', () => { /* Hard: 13 zombies, gaps × 0.75 */ });
+it('every zone is long: the barricade is at least 90 m past the crate, every ambush trigger before the gate', () => {
+  for (const area of [CITY, SUBURBS, FOREST])
+    for (const w of area.waves) {
+      expect(w.z - 2 - w.gateZ).toBeGreaterThanOrEqual(90);
+      for (const a of w.ambushes) expect(a.z).toBeGreaterThan(w.gateZ + 5);
+      expect(w.quota).toBeGreaterThanOrEqual(w.ambushes.reduce((n, a) => n + a.count, 0));
+    }
+});
+it('each wave of a night is stronger than the one before', () => {
+  for (const area of [CITY, SUBURBS, FOREST])
+    area.waves.forEach((w, i, all) => {
+      const prev = all[i - 1];
+      if (!prev) return;
+      expect(w.quota).toBeGreaterThan(prev.quota);
+      expect(w.faster).toBeGreaterThanOrEqual(prev.faster);
+      expect(w.every[1]).toBeLessThanOrEqual(prev.every[1]);
+    });
+});
+it('spawns out of your face: never within 12 m, always on the bank, never past the gate', () => {
+  const r = rng(9);
+  const zone = { startZ: -134, gateZ: -239, minX: -17, maxX: 2.5 };
+  for (let i = 0; i < 2000; i++) {
+    const p = { x: -2, z: -180 };
+    const s = spawnSpot(p, zone, r);
+    expect(Math.hypot(s.x - p.x, s.z - p.z)).toBeGreaterThanOrEqual(12);
+    expect(s.x).toBeGreaterThanOrEqual(zone.minX);
+    expect(s.x).toBeLessThanOrEqual(zone.maxX);
+    expect(s.z).toBeGreaterThanOrEqual(zone.gateZ + 2);
+  }
+});
+it('puts three small supplies at the water edge of every zone', () => {
+  const list = edgePickups(CITY);
+  expect(list).toHaveLength(CITY.waves.length * 3);
+  for (const p of list) expect(p.x).toBeGreaterThan(EDGE_X - 1);
+});
+it('always says what to do', () => {
+  expect(objective({ night: true, fighting: false, wave: 0, waves: 3, ending: false, lake: false })).toMatch(/Follow the river/);
+  expect(objective({ night: true, fighting: true, wave: 2, waves: 3, ending: false, lake: false })).not.toMatch(/left/);
+});
+```
+Run → FAIL.
+- [ ] **Step 2: implement `stepWaves`:**
+```ts
+export const quotaOf = (def: WaveDef, k: number): number =>
+  Math.max(waveTotal(def), Math.round(def.quota * k));
+const reservedFrom = (def: WaveDef, fired: number): number =>
+  def.ambushes.slice(fired).reduce((n, a) => n + a.count, 0);
+
+export function stepWaves(w, waves, z, alive, dt, d, rand): WaveEvent {
+  const def = waves[w.cleared];
+  if (!def) return null;
+  if (!w.fighting) {
+    if (z > def.z) return null;
+    w.fighting = true;
+    w.fired = 0;
+    w.toSpawn = quotaOf(def, d.quota);
+    w.nextIn = 0;
+    return { kind: 'start', wave: w.cleared };
+  }
+  const next = def.ambushes[w.fired];
+  if (next && z <= next.z) {
+    w.fired++;
+    w.toSpawn -= next.count;
+    return { kind: 'spawn', ambush: next };
+  }
+  w.nextIn -= dt;
+  if (w.toSpawn > reservedFrom(def, w.fired) && alive < def.cap && w.nextIn <= 0) {
+    w.toSpawn--;
+    const [lo, hi] = def.every;
+    w.nextIn = (lo + rand() * (hi - lo)) * d.interval;
+    return { kind: 'one' };
+  }
+  if (w.toSpawn > 0 || alive > 0) return null;
+  w.fighting = false;
+  w.cleared++;
+  return { kind: 'clear', wave: w.cleared - 1 };
+}
+```
+`spawnSpot` (SPAWN = { near: 18, far: 32, flank: 4, keepAway: 12 }): 45 % ahead (downstream, `player.z − d`), 25 % behind (`player.z + d`, at most `startZ + 10`), 30 % from the land side (`x = minX + rand()*flank`, `z = player.z ± 14`); clamp z into `[gateZ + 2, startZ + 10]`; if the result is within `keepAway`, push it along z away from the player to exactly `keepAway` (staying inside the clamp; if the clamp forbids it, flip to the other side). `play.ts` spawns `'one'` at `spawnSpot` (6 tries against `p.blocked`), with `tuning = nightTuning(chapter, d)` plus `def.faster`, facing the player, and `horde.alert(x, z, 2)` so it hunts at once.
+- [ ] **Step 3: the zones** (Normal numbers; triggers, cover and lying spots moved into each zone; existing kinds kept):
+  - City: `nightStart` −124. Waves `{ z: -134, gateZ: -239, quota: 9, every: [4, 6], cap: 6, faster: 0, ambushes: [street 2 @−134, lying 2 @−160 (x −4, at −185), behind 1 @−205], crate pistol }`, `{ z: -249, gateZ: -354, quota: 12, every: [3.5, 5], cap: 8, faster: 0.15, ambushes: [street 2 @−249, lying 2 @−275 (x −6, at −300), behind 2 @−320], crate shotgun }`, `{ z: -364, gateZ: -469, quota: 15, every: [3, 4.5], cap: 10, faster: 0.3, ambushes: [street 3 @−364, cover 2 @−385 (x −13, at −405), lying 3 @−420 (x −5, at −445), behind 2 @−440], crate none }`. `safeZ` −490, boathouse at z −492, `END_Z` −505; extend the road row to −500, lights to −495, `outskirts()` rows to −500.
+  - Suburbs: same z's; quotas 11 / 14 / 17, caps 7 / 9 / 11, faster 0 / 0.15 / 0.3, every [4, 5.5] / [3.5, 5] / [3, 4.5]; its cover spots (x −10, −1.5, −11) and lying (x −4, −5) re-placed inside each zone; crate rifle on wave 2. Corn rows `(−135…−340)` and `(−360…−470)`, farm fence to −480, poles to −490, the camp and cabin moved to z −486…−499 (cabin safe prop z −492), `safeZ` −490, `END_Z` −505.
+  - Forest: `{ z: -134, gateZ: -239, quota: 13, every: [3, 4.5], cap: 8, faster: 0.2 }`, `{ z: -249, gateZ: -354, quota: 16, every: [2.5, 4], cap: 10, faster: 0.35 }`; the lake, Mom and `endingAt` unchanged (the ending wave is Task A9).
+  - `edgePickups(area)`: for wave i, three pickups at `x = EDGE_X - 0.45`, z = `w.z − 25`, `w.z − 55`, `w.z − 85`, kinds `ammo`, `arrows`, `ammo`, ids `${area.id}-edge-${i + 1}-${k}`. `phases.ts`: `run.pickups = night ? [...waveCrates(area), ...edgePickups(area)] : area.pickups`.
+  - HUD: `waveEl` shows `waveText(wave, waves)` ("Wave 2 of 3"); a new `goalEl` (class `hud-goal`, top-left under the hearts, small, 70 % opacity) shows `objective(...)`: day `'Search for supplies. Rest by the campfire when you are ready.'`; night between waves `'Follow the river. Keep moving downstream.'`; fighting `'Kill them all. The barricade falls when the wave is dead.'`; Night 3 past the last wave `'Follow the river to the lake. Mom is waiting.'`; empty during the ending. `HINTS.clear`: `['The barricade is down. Keep going downstream.']`; `HINTS.wave`: `['They are coming, and they will keep coming. Find the crate.']`.
+- [ ] **Step 4:** tests PASS (update `areas/*.test.ts` that pinned old z's, `world.test.ts` strip length); `pnpm run check`.
+- [ ] **Step 5: Chrome check (Normal, as a player):** Night 1: stand still at the crate 60 s (no input): zombies keep arriving from ahead, behind and the land side, never popping in within 12 m (log spawn distances); screenshot from the crate down the bank: no barricade in sight (fog). Walk to the gate: the gate opens only after the quota (log). Wave 2 faster (log tuning speed). Edge supplies glow at the water's edge. The HUD shows "Wave 1 of 3" and the goal line, no count. Night 2 and Night 3 the same. Frame time with 10 alive: `__gpuFrames(300)` p95 under 8 ms at 540 rows (re-checked at full resolution in A13).
+- [ ] **Step 6: commit** `feat: waves keep coming until they are dead, longer zones, each wave harder, supplies by the water, an objective line`.
