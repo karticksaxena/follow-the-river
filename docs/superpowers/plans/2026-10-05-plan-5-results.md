@@ -59,6 +59,12 @@
   - It bites, thrashes with the zombie kicking in its jaws, then crawls back over the ground and drags it under.
   - Feeding still means more grabs a night: 4, plus 4 per fish pack.
   - In the ending's last stand it grabs faster, and its body knocks the zombies beside its jaws into the river. Measured against the old snaps, a player who just stands there still comes through the wave untouched.
+- **Checked in Chrome after the grab:**
+  - The grab on the city embankment and on a suburb mud bank.
+  - A pure sprint down each night:
+    - Night 1: through, with 2 of 3 hits.
+    - Night 2: through, untouched.
+    - Night 3: died once in two runs. The orca's 4 grabs were used up by z −221 in both runs, and the death came at z −264, from zombies ahead.
 
 ## Later
 
