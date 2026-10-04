@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { initEnvironment } from './environment';
 import type { GradePreset } from './grade';
 import { createPost, POST } from './post';
 import {
@@ -51,6 +52,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   const forceWebGL = new URLSearchParams(location.search).has('webgl');
   const renderer = new THREE.WebGPURenderer({ antialias: false, forceWebGL });
   await renderer.init();
+  initEnvironment(renderer);
   renderer.toneMapping = THREE.AgXToneMapping;
   renderer.toneMappingExposure = POST.exposure;
   renderer.shadowMap.enabled = true;

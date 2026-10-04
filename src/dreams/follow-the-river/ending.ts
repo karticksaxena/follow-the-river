@@ -1,6 +1,8 @@
 import type * as THREE from 'three/webgpu';
+import { precompileSky } from '../../engine/sky';
 import type { AreaDef } from './areas/types';
 import { playCanoeRide } from './canoe-ride';
+import { createDawn, DAWN } from './dawn';
 import { DIFFICULTY, nightTuning } from './difficulty';
 import {
   FAREWELL_PAGES,
@@ -23,7 +25,7 @@ import {
   type EndingScene,
 } from './ending-scene';
 import { atSafeSpot } from './flow';
-import { applyLighting, LIGHTING, mixPreset, type LightPreset } from './lighting';
+import { LIGHTING, type LightPreset } from './lighting';
 import { SICKNESS } from './orca-sick';
 import { EDGE_X } from './river';
 import type { Run, Systems } from './run';
@@ -98,7 +100,7 @@ export const WAVE = {
   /** The whole wave keeps hearing the player (m), so nobody gives up the hunt mid-fight. */
   hearing: 60,
 } as const;
-export const DAWN = { seconds: 8, step: 0.25, volume: 0.35 } as const;
+export { DAWN };
 const FLINCH = { lookUp: 12 } as const; // m up the bank Mom watches during the fight
 
 /** How many zombies of the wave should exist `elapsed` seconds in (all of them once the last group is due). */
@@ -277,14 +279,15 @@ function nightPreset(area: AreaDef): LightPreset {
   return { ...night, fog: { ...night.fog, far: area.nightFog ?? night.fog.far } };
 }
 
-/** Night to dawn over `DAWN.seconds`, the pad swelling in with it. */
+/** Night to sunrise over `DAWN.seconds` (the moon sets, the sun rises, every frame), the pad swelling in with it. */
 async function dawn(h: EndingHost, st: State): Promise<void> {
   const { world, ctx, sounds } = h.sys;
   const pad = ctx.audio.loop(sounds.dawn, 0);
   st.pad = pad;
-  const from = nightPreset(h.sys.area);
+  const { lights } = world;
+  const sky = createDawn(lights, nightPreset(h.sys.area), h.lantern);
+  await precompileSky(ctx.stage.renderer, world.scene, ctx.stage.camera, lights.physical);
   let t = 0;
-  let nextPaint = 0;
   let turned = false;
   const lake = h.sys.area.lake;
   const mom = st.scene?.mom.group.position;
@@ -298,10 +301,7 @@ async function dawn(h: EndingHost, st: State): Promise<void> {
     }
     const k = Math.min(1, t / DAWN.seconds);
     pad.setVolume(DAWN.volume * k);
-    if (t >= nextPaint || k >= 1) {
-      nextPaint = t + DAWN.step;
-      applyLighting(world.lights, mixPreset(from, LIGHTING.dawn, k));
-    }
+    sky.step(k, t);
     return k >= 1;
   });
 }

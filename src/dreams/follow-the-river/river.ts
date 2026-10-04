@@ -23,6 +23,7 @@ export function plane(width: number, depth: number, color: number): THREE.Mesh {
     new THREE.MeshLambertMaterial({ color }),
   );
   mesh.rotation.x = -Math.PI / 2;
+  mesh.receiveShadow = true;
   return mesh;
 }
 

@@ -2,13 +2,18 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as THREE from 'three/webgpu';
 
+const LIT_ROUGHNESS = 0.85;
+
 /**
  * Kenney's GLBs use KHR_materials_unlit, which GLTFLoader turns into MeshBasicMaterial —
- * those ignore lights, so the room would never go dark. Swap them for Lambert (cheap, PS1-like).
+ * those ignore lights, so the room would never go dark. Swap them for a matte standard material
+ * (rough, non-metal) so the lights, the sky's image-based light and the shadows all reach them.
  */
 export function litFrom(material: THREE.Material): THREE.Material {
   if (!(material instanceof THREE.MeshBasicMaterial)) return material;
-  const lit = new THREE.MeshLambertMaterial({
+  const lit = new THREE.MeshStandardMaterial({
+    roughness: LIT_ROUGHNESS,
+    metalness: 0,
     color: material.color,
     map: material.map,
     vertexColors: material.vertexColors,
@@ -93,7 +98,7 @@ export function loadSkinned(url: string): Promise<SkinnedAsset> {
   let pending = skinnedCache.get(url);
   if (!pending) {
     pending = loader.loadAsync(url).then((gltf) => {
-      enableShadows(gltf.scene, false);
+      enableShadows(gltf.scene); // Mom, Dras and Kartik cast; the horde picks its own nearest casters
       markCached(gltf.scene);
       return { scene: gltf.scene, clips: gltf.animations };
     });

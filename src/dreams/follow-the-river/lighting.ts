@@ -1,101 +1,26 @@
+import type { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 import * as THREE from 'three/webgpu';
-import { createSkyDome, paintSkyDome } from '../../engine/sky';
+import { refreshEnvironment } from '../../engine/environment';
+import { setShadowStrength } from '../../engine/shadows';
+import {
+  createPhysicalSky,
+  createSkyDome,
+  createStars,
+  paintSkyDome,
+  setPhysicalSky,
+} from '../../engine/sky';
+import type { LightPreset } from './light-presets';
 
-export type LightingName = 'dusk' | 'day' | 'night' | 'dawn';
-export interface LightPreset {
-  skyTop: number;
-  skyHorizon: number;
-  fog: { color: number; near: number; far: number };
-  hemi: { sky: number; ground: number; intensity: number };
-  key: { color: number; intensity: number; elevation: number; azimuth: number };
-  /** `soft` 0..1: how much of the disc's radius is a hazy fade (1 = pure glow, 0 = crisp). */
-  disc: { color: number; size: number; soft: number };
-}
-
-/** Tuning knobs. Never bright: even "day" is overcast. */
-export const LIGHTING: Readonly<Record<LightingName, LightPreset>> = {
-  // Intro: the evening Mom sends you off. Low, rusty sun behind smoke.
-  dusk: {
-    skyTop: 0x0b0d14,
-    skyHorizon: 0x3a2a2a,
-    fog: { color: 0x2a2224, near: 8, far: 80 },
-    hemi: { sky: 0x6a5a60, ground: 0x15120f, intensity: 0.55 },
-    key: { color: 0xc08060, intensity: 0.35, elevation: 0.14, azimuth: -2.4 },
-    disc: { color: 0x8a5a40, size: 6, soft: 0.7 },
-  },
-  // Overcast day: flat grey, a pale sun disc barely through the haze.
-  day: {
-    skyTop: 0x2c3136,
-    skyHorizon: 0x50565b,
-    fog: { color: 0x4a5055, near: 10, far: 90 },
-    hemi: { sky: 0x8a9098, ground: 0x24261f, intensity: 0.75 },
-    key: { color: 0xd0d4d8, intensity: 0.45, elevation: 0.6, azimuth: -2.0 },
-    disc: { color: 0x7d8286, size: 7, soft: 0.95 },
-  },
-  // Night: blue-black, a small cold moon that blooms.
-  night: {
-    skyTop: 0x05070b,
-    skyHorizon: 0x1b2026,
-    fog: { color: 0x141a20, near: 5, far: 55 },
-    hemi: { sky: 0x3a4450, ground: 0x0c0e0a, intensity: 0.35 },
-    key: { color: 0x9fb4ff, intensity: 0.35, elevation: 0.5, azimuth: -2.6 },
-    disc: { color: 0xdfe8ff, size: 4, soft: 0.25 },
-  },
-  // Ending: still grey and dim, a pale sun low over the dam.
-  dawn: {
-    skyTop: 0x2a3036,
-    skyHorizon: 0x625d5a,
-    fog: { color: 0x4e4a4a, near: 8, far: 85 },
-    hemi: { sky: 0x8a8a90, ground: 0x1c1c18, intensity: 0.6 },
-    key: { color: 0xe0d4c0, intensity: 0.45, elevation: 0.42, azimuth: 3.0 },
-    disc: { color: 0x8a837c, size: 7, soft: 0.9 },
-  },
-};
-
-const channel = (a: number, b: number, t: number, shift: number): number =>
-  Math.round(((a >> shift) & 255) * (1 - t) + ((b >> shift) & 255) * t);
-
-/** Per-channel blend of two 0xRRGGBB colours. */
-export function mixHex(a: number, b: number, t: number): number {
-  return (channel(a, b, t, 16) << 16) | (channel(a, b, t, 8) << 8) | channel(a, b, t, 0);
-}
-
-const mix = (a: number, b: number, t: number): number => a * (1 - t) + b * t;
-
-/** A preset `t` (0..1) of the way from `a` to `b`. Allocates: call it a few times a second, not per frame. */
-export function mixPreset(a: LightPreset, b: LightPreset, t: number): LightPreset {
-  return {
-    skyTop: mixHex(a.skyTop, b.skyTop, t),
-    skyHorizon: mixHex(a.skyHorizon, b.skyHorizon, t),
-    fog: {
-      color: mixHex(a.fog.color, b.fog.color, t),
-      near: mix(a.fog.near, b.fog.near, t),
-      far: mix(a.fog.far, b.fog.far, t),
-    },
-    hemi: {
-      sky: mixHex(a.hemi.sky, b.hemi.sky, t),
-      ground: mixHex(a.hemi.ground, b.hemi.ground, t),
-      intensity: mix(a.hemi.intensity, b.hemi.intensity, t),
-    },
-    key: {
-      color: mixHex(a.key.color, b.key.color, t),
-      intensity: mix(a.key.intensity, b.key.intensity, t),
-      elevation: mix(a.key.elevation, b.key.elevation, t),
-      azimuth: mix(a.key.azimuth, b.key.azimuth, t),
-    },
-    disc: {
-      color: mixHex(a.disc.color, b.disc.color, t),
-      size: mix(a.disc.size, b.disc.size, t),
-      soft: t < 0.5 ? a.disc.soft : b.disc.soft,
-    },
-  };
-}
+export * from './light-presets';
 
 export interface WorldLights {
   hemi: THREE.HemisphereLight;
   key: THREE.DirectionalLight;
   disc: THREE.Mesh;
+  /** The painted dome; the star field and the physical sky are its children, so they follow the camera. */
   sky: THREE.Mesh;
+  physical: SkyMesh;
+  stars: THREE.Points;
   scene: THREE.Scene;
 }
 
@@ -109,6 +34,7 @@ const DIM_STRENGTH = 0.7;
 
 const FORWARD = new THREE.Vector3(0, 0, 1);
 const towardCentre = new THREE.Vector3();
+const sunScratch = { x: 0, y: 0, z: 0 };
 
 const GLOW_SIZE = 64;
 const glows = new Map<number, THREE.CanvasTexture | null>();
@@ -169,10 +95,12 @@ export function createWorldLights(scene: THREE.Scene): WorldLights {
       map: glowTexture(0.5),
     }),
   );
-  sky.add(disc);
+  const physical = createPhysicalSky();
+  const stars = createStars();
+  sky.add(disc, stars, physical);
   scene.fog = new THREE.Fog(0, 1, 2);
   scene.add(sky, hemi, key);
-  return { hemi, key, disc, sky, scene };
+  return { hemi, key, disc, sky, physical, stars, scene };
 }
 
 /** Pulls the fog in (an area's tighter night). Rare: called when a phase starts. */
@@ -188,31 +116,54 @@ export function applyDim(lights: WorldLights, preset: LightPreset, dim: number):
 }
 
 /**
- * Switches to a preset: colours, intensities, positions, fog and the sky repaint. Rare (allocates,
- * repaints); never changes `visible` or the light count (that would recompile shaders). The key
- * light stays put; only the sky dome follows the camera. Per-frame dimming is `applyDim`.
+ * Switches to a preset: colours, intensities, positions, fog, the sky (painted dome or physical),
+ * the star field, the image-based light and the key light's shadow strength. Never changes the
+ * light count (that would recompile shaders). Allocation-free except the first disc texture and
+ * `refreshEnvironment` (six 128 px faces): per-frame callers pass `refreshEnv` false and refresh
+ * on their own slow clock. `sun` overrides the physical sky's sun direction (default: the key's).
+ * Per-frame dimming is `applyDim`.
  */
-export function applyLighting(lights: WorldLights, preset: LightPreset): void {
-  const { scene, hemi, key, disc, sky } = lights;
+export function applyLighting(
+  lights: WorldLights,
+  preset: LightPreset,
+  refreshEnv = true,
+  sun?: { x: number; y: number; z: number },
+): void {
+  const { scene, hemi, key, disc } = lights;
   if (scene.fog instanceof THREE.Fog) {
     scene.fog.color.set(preset.fog.color);
     scene.fog.near = preset.fog.near;
     scene.fog.far = preset.fog.far;
   }
-  paintSkyDome(sky, preset.skyTop, preset.skyHorizon);
   hemi.color.set(preset.hemi.sky);
   hemi.groundColor.set(preset.hemi.ground);
-  const d = skyDirection(preset.key.elevation, preset.key.azimuth);
+  const d = skyDirection(preset.key.elevation, preset.key.azimuth, sunScratch);
   key.color.set(preset.key.color);
   applyDim(lights, preset, 0);
   key.position.set(d.x * KEY_DISTANCE, d.y * KEY_DISTANCE, d.z * KEY_DISTANCE);
+  setShadowStrength(key, preset.shadow);
+  applySky(lights, preset, sun ?? d);
   if (disc.material instanceof THREE.MeshBasicMaterial) {
     disc.material.color.set(preset.disc.color);
+    disc.material.opacity = 1;
     const map = glowTexture(preset.disc.soft);
     if (map && map !== disc.material.map) disc.material.map = map;
   }
+  disc.visible = !preset.sky; // the physical sky draws its own sun
   disc.position.set(d.x * DISC_DISTANCE, d.y * DISC_DISTANCE, d.z * DISC_DISTANCE);
   // Face the dome's centre (the disc is a child of the dome, so work in dome space).
   disc.quaternion.setFromUnitVectors(FORWARD, towardCentre.set(-d.x, -d.y, -d.z));
   disc.scale.setScalar(preset.disc.size);
+  if (refreshEnv) refreshEnvironment(scene, preset, sun ?? d);
+  else scene.environmentIntensity = preset.environment;
+}
+
+/** The painted dome (with or without stars) or the physical sky, whichever the preset asks for. */
+function applySky(lights: WorldLights, preset: LightPreset, sun: THREE.Vector3Like): void {
+  const { sky, physical, stars } = lights;
+  if (preset.sky) setPhysicalSky(physical, preset.sky, sun);
+  else paintSkyDome(sky, preset.skyTop, preset.skyHorizon);
+  physical.visible = !!preset.sky;
+  stars.visible = !!preset.stars && !preset.sky;
+  if (sky.material instanceof THREE.Material) sky.material.visible = !preset.sky;
 }

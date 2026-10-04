@@ -99,7 +99,7 @@ describe('the last stand', () => {
   });
 
   it('fades to dawn in 8 s', () => {
-    expect(DAWN.seconds).toBe(8);
+    expect(DAWN.seconds).toBe(14);
   });
 });
 

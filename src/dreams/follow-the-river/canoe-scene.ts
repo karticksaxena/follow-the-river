@@ -3,9 +3,11 @@ import * as THREE from 'three/webgpu';
 import { addBatched } from '../../engine/batch';
 import { disposeScene } from '../../engine/dispose';
 import { loadModel, loadSkinned } from '../../engine/models';
+import type { Tier } from '../../engine/quality';
+import { attachKeyShadows } from '../../engine/shadows';
 import { createMom, type Mom } from './intro-scene';
 import { characterUrl, KIT_SCALE, kitUrl } from './kits';
-import { applyLighting, createWorldLights, SKY_NAME, type LightPreset } from './lighting';
+import { applyLighting, createWorldLights, LIGHTING, SKY_NAME } from './lighting';
 import { createWaterMesh, type WaterLook } from './water';
 
 /** The river's meander in x as a function of z (the ride flows toward -z). Tuning knobs (metres). */
@@ -60,16 +62,6 @@ export function rng(seed: number): () => number {
   };
 }
 
-/** Sunrise: pale gold horizon, soft blue above, warm mist for fog. The game's first real colour. */
-export const SUNRISE: LightPreset = {
-  skyTop: 0x7aa6cf,
-  skyHorizon: 0xf3d6a4,
-  fog: { color: 0xdcd5bc, near: 6, far: 95 },
-  hemi: { sky: 0xd6e4ee, ground: 0x5a7436, intensity: 2.3 },
-  key: { color: 0xffd08a, intensity: 2.6, elevation: 0.2, azimuth: 2.5 },
-  disc: { color: 0xffe9b8, size: 10, soft: 0.6 },
-};
-
 const WATER_LOOK: WaterLook = { speed: 1.6, deep: 0x2b5750, streak: 0x9cc2b0, glow: 0x1d4a3c };
 
 /** Foliage and ground colours (sRGB hex). Tuning knobs. */
@@ -100,8 +92,8 @@ function tinter(): (root: THREE.Object3D, pick: (name: string) => number | null)
   return (root, pick) => {
     root.traverse((node) => {
       if (!(node instanceof THREE.Mesh)) return;
-      const source: unknown = node.material; // lit Lambert after loadModel
-      if (!(source instanceof THREE.MeshLambertMaterial)) return;
+      const source: unknown = node.material; // lit standard material after loadModel
+      if (!(source instanceof THREE.MeshStandardMaterial)) return;
       const hex = pick(source.name);
       if (hex === null) return;
       const key = `${source.uuid}|${hex}`;
@@ -178,7 +170,9 @@ function makeTerrain(zNear: number, zFar: number): THREE.Mesh {
   geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geometry.setIndex(new THREE.BufferAttribute(index, 1));
   geometry.computeVertexNormals();
-  return new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const terrain = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  terrain.receiveShadow = true;
+  return terrain;
 }
 
 interface Scatter {
@@ -385,13 +379,19 @@ function makeCalf(asset: { scene: THREE.Object3D; clips: readonly THREE.Animatio
 /** Native canoe is 1.15 m long; this scales it to about 4 m. */
 export const CANOE_SCALE = KIT_SCALE.nature * 0.7;
 
+/** What the scene needs of the stage: its camera's shadow cascades and the graphics tier. */
+export interface CanoeStage {
+  tier: Tier;
+}
+
 /** Builds the whole sunrise forest river; `length` is how far down the river (metres) the ride goes. */
-export async function buildCanoeScene(length: number): Promise<CanoeScene> {
+export async function buildCanoeScene(length: number, stage: CanoeStage): Promise<CanoeScene> {
   const zNear = TERRAIN.behind;
   const zFar = -length - TERRAIN.ahead;
   const scene = new THREE.Scene();
   const lights = createWorldLights(scene);
-  applyLighting(lights, SUNRISE);
+  attachKeyShadows(lights.key, stage.tier); // the sun's shadows: the forest, the canoe, Mom
+  applyLighting(lights, LIGHTING.sunrise);
   const terrain = makeTerrain(zNear, zFar);
   const water = createWaterMesh(TERRAIN.halfWidth * 2.4, zNear - zFar, WATER_LOOK);
   water.rotation.x = -Math.PI / 2;

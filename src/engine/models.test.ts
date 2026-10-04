@@ -7,9 +7,10 @@ describe('litFrom', () => {
     const unlit = new THREE.MeshBasicMaterial({ color: 0xff0000 });
     unlit.name = 'carpet';
     const lit = litFrom(unlit);
-    if (!(lit instanceof THREE.MeshLambertMaterial)) throw new Error('expected Lambert');
+    if (!(lit instanceof THREE.MeshStandardMaterial)) throw new Error('expected Standard');
     expect(lit.color.getHex()).toBe(0xff0000);
     expect(lit.name).toBe('carpet');
+    expect([lit.roughness, lit.metalness]).toEqual([0.85, 0]);
   });
 
   it('leaves lit materials alone', () => {
@@ -23,7 +24,7 @@ describe('litFrom', () => {
     makeLit(root);
     const mesh = root.children[0];
     if (!(mesh instanceof THREE.Mesh)) throw new Error('expected a mesh');
-    expect(mesh.material).toBeInstanceOf(THREE.MeshLambertMaterial);
+    expect(mesh.material).toBeInstanceOf(THREE.MeshStandardMaterial);
   });
 });
 

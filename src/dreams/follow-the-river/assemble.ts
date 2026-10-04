@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { disposeScene } from '../../engine/dispose';
 import { createBoxGrid } from '../../engine/grid';
 import { loadModel } from '../../engine/models';
+import { attachKeyShadows, setShadowStrength } from '../../engine/shadows';
 import type { DreamContext } from '../types';
 import { createAmbience } from './ambience';
 import type { AreaDef } from './areas/types';
@@ -146,7 +147,9 @@ export async function assemble(
   // Two bodies on show, so both outfits compile (parked bodies are invisible, so skipped).
   horde.spawn(0, 0, 0, DAY_TUNING);
   horde.spawn(0, 0, 0, DAY_TUNING);
+  attachKeyShadows(world.lights.key, ctx.stage.tier); // cascaded moon/sun shadows (none on Low)
   await ctx.stage.renderer.compileAsync(scene, camera);
+  setShadowStrength(world.lights.key, world.lights.key.shadow.intensity); // the cascade lights exist now
   if (isCancelled()) {
     free(scene, camera, { ...bodies, flashlight, scares });
     return null;

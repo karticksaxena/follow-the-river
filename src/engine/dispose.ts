@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { releaseEnvironment } from './environment';
 
 function isCached(thing: { userData: Record<string, unknown> }): boolean {
   return thing.userData.cached === true;
@@ -22,6 +23,7 @@ function isDrawable(node: THREE.Object3D): node is Drawable {
  * Data loaded through `loadModel` is marked cached and shared by every clone, so it stays.
  */
 export function disposeScene(root: THREE.Object3D): void {
+  releaseEnvironment(root);
   const done = new Set<object>();
   const free = (thing: { dispose(): void; userData: Record<string, unknown> }): void => {
     if (done.has(thing) || isCached(thing)) return;

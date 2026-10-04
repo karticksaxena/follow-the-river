@@ -222,7 +222,7 @@ async function run(ctx: DreamContext, sounds: Sounds, done: () => void): Promise
   const previous = stage.scene;
   const length = RIDE.speed * (RIDE.seconds + RIDE.tail);
   const [cs] = await Promise.all([
-    buildCanoeScene(length).catch(() => null),
+    buildCanoeScene(length, stage).catch(() => null),
     overlay.fade(true, RIDE.fadeMs),
   ]);
   if (stage.scene !== previous || !cs) {
