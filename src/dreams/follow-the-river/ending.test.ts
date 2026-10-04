@@ -10,6 +10,7 @@ import {
   nextEndingStep,
   nightEnd,
   REPLAY_PAGES,
+  sickenToEnd,
   WAVE,
   waveDue,
   waveSpot,
@@ -62,6 +63,14 @@ describe('ending steps', () => {
   it('never uses an em dash on screen', () => {
     const all = [...Object.values(ENDING_PAGES).flat(), ...Object.values(FAREWELL_PAGES).flat()];
     for (const page of all) expect(page).not.toContain('\u2014');
+  });
+});
+
+describe('the stranding', () => {
+  it('leaves her dying (sickness 1, past the fight cap), so her breath turns red', () => {
+    let k = -1;
+    sickenToEnd({ setSickness: (v) => (k = v) });
+    expect(k).toBe(1);
   });
 });
 

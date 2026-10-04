@@ -26,6 +26,7 @@ import {
 } from './ending-scene';
 import { atSafeSpot } from './flow';
 import { LIGHTING, type LightPreset } from './lighting';
+import { sicknessAt } from './orca-sick';
 import { EDGE_X } from './river';
 import type { Run, Systems } from './run';
 import { addSupply, AMMO_OF, SUPPLY_LIMITS, type SupplyKind } from './state';
@@ -329,8 +330,14 @@ function scriptOf(h: EndingHost, st: State): Script | null {
   };
 }
 
+/** On the shore she is dying: full sickness (the fight only gets her to the cap), so her breath is red. */
+export function sickenToEnd(fish: { setSickness(k: number): void }): void {
+  fish.setSickness(sicknessAt('end', 0));
+}
+
 /** The last leap: the horde is gone, the run is won, and Mom goes to it. */
 async function stranded(h: EndingHost, st: State, s: Script, at: Shore): Promise<void> {
+  sickenToEnd(h.sys.fish);
   await strand(s, at);
   if (st.cancelled) return;
   h.run.ending = 'calm';

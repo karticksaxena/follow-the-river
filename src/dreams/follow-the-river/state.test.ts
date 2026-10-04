@@ -74,6 +74,7 @@ describe('saves', () => {
     expect(fixed.version).toBe(2);
     expect(fixed.guns).toEqual(['pistol']);
     expect(fixed.wave).toBe(0);
+    expect(fixed.eaten).toBe(0);
     expect(fixed.supplies).toEqual({
       ...START_SUPPLIES,
       battery: 80,
