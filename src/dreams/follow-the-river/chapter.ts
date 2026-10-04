@@ -19,7 +19,7 @@ import {
 import { createPlay } from './play';
 import type { Events, Run, Systems } from './run';
 import { completePhase, restartPhase, type RunSave } from './state';
-import { stopTape } from './tapes';
+import { stopVoice } from './voice';
 
 export interface Chapter {
   /** The title card, then the phase's first-time hints (all player-paced). */
@@ -61,7 +61,7 @@ function teardown(sys: Systems, stop: () => void): void {
   sys.ambience.dispose();
   sys.horde.dispose();
   sys.scares.dispose();
-  stopTape();
+  stopVoice(); // a tape line may still be playing
   sys.bow.dispose();
   sys.gun.dispose();
   sys.fish.dispose();

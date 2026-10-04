@@ -263,6 +263,6 @@ export function voiceHooks(
       const voice = pick(page);
       if (voice) speak(audio, page, voice);
     },
-    onClose: stopVoice,
+    onClose: () => stopVoice(),
   };
 }

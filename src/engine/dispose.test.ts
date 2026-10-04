@@ -42,6 +42,20 @@ describe('disposeScene', () => {
     expect(spy).toHaveBeenCalledOnce();
   });
 
+  it("frees each skinned clone's skeleton (its bone texture) once", () => {
+    const scene = new THREE.Scene();
+    const bone = new THREE.Bone();
+    const skeleton = new THREE.Skeleton([bone]);
+    const a = new THREE.SkinnedMesh(new THREE.BoxGeometry(), new THREE.MeshLambertMaterial());
+    const b = new THREE.SkinnedMesh(new THREE.BoxGeometry(), new THREE.MeshLambertMaterial());
+    a.bind(skeleton);
+    b.bind(skeleton);
+    scene.add(bone, a, b);
+    const spy = vi.spyOn(skeleton, 'dispose');
+    disposeScene(scene);
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
   it('frees a material shared by two meshes only once', () => {
     const scene = new THREE.Scene();
     const a = mesh();

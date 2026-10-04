@@ -129,6 +129,8 @@ interface State {
   shot: CameraShot | null;
   elapsed: number;
   grace: number;
+  /** The game was paused last frame (a menu was open). */
+  paused: boolean;
   wait: Wait | null;
   wind: THREE.Audio | null;
   sting: THREE.Audio | null;
@@ -139,23 +141,22 @@ const until = (st: State, pred: () => boolean): Promise<void> =>
     st.wait = { pred, resolve };
   });
 
-/** The pager's own Skip button (every caption is one page, so Skip and Continue close alike). */
-function skipButton(root: HTMLElement): HTMLButtonElement | null {
-  for (const b of root.querySelectorAll('button')) if (b.textContent === 'Skip') return b;
-  return null;
-}
-
-/** Reads pages; resolves after the click. Sets `st.skipped` when the player pressed Skip. */
+/** Reads pages; resolves when they close. Sets `st.skipped` when the player pressed Skip. */
 function read(ctx: DreamContext, st: State, pages: readonly string[]): Promise<void> {
   return new Promise((resolve) => {
-    ctx.read(pages, () => {
-      st.grace = SKIP_GRACE;
-      resolve();
-    });
-    // The pager runs its own click handler first; the promise continues after this listener.
-    skipButton(ctx.overlay.root)?.addEventListener('click', () => void (st.skipped = true), {
-      once: true,
-    });
+    const hooks = {
+      onClose(skipped: boolean) {
+        if (skipped) st.skipped = true;
+      },
+    };
+    ctx.read(
+      pages,
+      () => {
+        st.grace = SKIP_GRACE;
+        resolve();
+      },
+      hooks,
+    );
   });
 }
 
@@ -298,6 +299,7 @@ export async function runColdOpen(
     shot: null,
     elapsed: 0,
     grace: SKIP_GRACE, // the key that closed the dream's own intro pages is not a skip
+    paused: false,
     wait: null,
     wind: null,
     sting: null,
@@ -307,7 +309,18 @@ export async function runColdOpen(
   shotAt(SHOTS.aerial, 0, camera.position, rig.look); // the first frame is the first shot's
   camera.lookAt(rig.look);
   const stop = ctx.stage.addUpdater((dt) => {
-    if (ctx.isPaused() || st.cancelled) return;
+    if (st.cancelled) return;
+    // Keys pressed in a menu (Enter/Space on Resume) must not skip the cold open when play resumes:
+    // the press that resumes lands on the same frame, so drain and ignore skips for a moment.
+    if (ctx.isPaused()) {
+      st.paused = true;
+      return;
+    }
+    if (st.paused) {
+      st.paused = false;
+      for (const key of SKIP_KEYS) ctx.keys.consumePress(key);
+      st.grace = SKIP_GRACE;
+    }
     st.wind ??= ctx.audio.loop(sc.sounds.wind, CUES.wind); // first unpaused frame: audio is unlocked
     tick(ctx, sc, st, dt, rig);
   });

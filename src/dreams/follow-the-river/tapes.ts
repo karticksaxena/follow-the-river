@@ -1,6 +1,6 @@
 import type { DreamContext } from '../types';
 import { playFlashback } from './flashback';
-import { stopVoice, voiceFor, voiceHooks } from './voice';
+import { voiceFor, voiceHooks } from './voice';
 
 export const TAPES: Readonly<Record<number, readonly string[]>> = {
   1: [
@@ -29,9 +29,6 @@ export const TAPES: Readonly<Record<number, readonly string[]>> = {
     "\"I'll wait for you at the lake below the dam. That's where it started. I'm going to fix what I can.\"",
   ],
 };
-
-/** Stops the tape voice (also called when the chapter is torn down mid-read). */
-export const stopTape = stopVoice;
 
 /**
  * Plays a tape: its transcript pages over an animated flashback of what Mom describes (the lab,

@@ -18,7 +18,7 @@ function isDrawable(node: THREE.Object3D): node is Drawable {
 }
 
 /**
- * Frees the GPU memory a scene owns: geometry, materials, their textures and shadow maps.
+ * Frees the GPU memory a scene owns: geometry, materials, their textures, skeletons and shadow maps.
  * Data loaded through `loadModel` is marked cached and shared by every clone, so it stays.
  */
 export function disposeScene(root: THREE.Object3D): void {
@@ -35,6 +35,11 @@ export function disposeScene(root: THREE.Object3D): void {
       node.shadow instanceof THREE.LightShadow
     ) {
       node.shadow.dispose();
+    }
+    // Each SkeletonUtils clone has its own skeleton, whose bone texture lives on the GPU.
+    if (node instanceof THREE.SkinnedMesh && !done.has(node.skeleton)) {
+      done.add(node.skeleton);
+      node.skeleton.dispose();
     }
     if (!isDrawable(node)) return;
     free(node.geometry);

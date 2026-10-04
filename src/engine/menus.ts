@@ -7,8 +7,8 @@ import { button, el, type Overlay } from './ui';
 export interface PageHooks {
   /** A page appeared (first open, Next or Back). */
   onPage?: (page: string, index: number) => void;
-  /** The pager closed (last Next or Skip), just before `onDone`. */
-  onClose?: () => void;
+  /** The pager closed, just before `onDone`; `skipped` when the player pressed Skip. */
+  onClose?: (skipped: boolean) => void;
 }
 
 export function showUnsupported(overlay: Overlay): void {
@@ -67,7 +67,7 @@ export function showPages(
     if (!state.done) return render();
     removeEventListener('keydown', onKey);
     overlay.closePanel();
-    hooks.onClose?.();
+    hooks.onClose?.(action === 'skip');
     onDone();
   };
   const panel = overlay.panel((body) => {

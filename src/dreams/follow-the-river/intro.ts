@@ -14,7 +14,7 @@ import {
 } from './intro-scene';
 import { applyDim, LIGHTING } from './lighting';
 import { createMomActor, TURN_RATE, wrapAngle, type MomActor } from './mom-actor';
-import { introVoice, voiceHooks } from './voice';
+import { introVoice, stopVoice, voiceHooks } from './voice';
 
 export type IntroStep =
   'news' | 'mom-leaves' | 'mom-back' | 'outside' | 'throw' | 'goodbye' | 'done';
@@ -319,6 +319,7 @@ function makeTick(
 }
 
 function freeIntroScene(sc: IntroScene): void {
+  stopVoice(); // a voiced page may still be playing when the intro is torn down
   sc.fish.dispose();
   sc.mom.dispose();
   sc.news.dispose();
