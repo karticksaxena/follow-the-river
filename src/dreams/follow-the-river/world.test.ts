@@ -3,8 +3,8 @@ import { CITY } from './areas/city';
 import { FOREST } from './areas/forest';
 import { SUBURBS } from './areas/suburbs';
 import { KIT_SCALE, kitUrl } from './kits';
-import { EDGE_X, lakeRects, OVERRUN, riverSpan } from './river';
-import { groundSpan } from './world';
+import { EDGE_X, FAR_EDGE_X, LAKE, lakeRects, OVERRUN, riverSpan, shoreY, WATER_Y } from './river';
+import { groundSpan, stripBlockers } from './world';
 
 describe('kits', () => {
   it('keeps each kit in its own folder (their colormap.png files differ)', () => {
@@ -28,7 +28,7 @@ describe('the lake', () => {
 
   it('stops the land and the river at the shore and lays the water from there on', () => {
     const z = FOREST.lake?.z ?? 0;
-    expect(groundSpan(FOREST).z1).toBe(z);
+    expect(groundSpan(FOREST).z1).toBe(z + LAKE.pebbleDepth); // the sloped shore takes over
     expect(riverSpan(FOREST.startZ, z, 0).z1).toBe(z);
     const r = lakeRects(z);
     expect(r.water.z0).toBe(z);
@@ -45,7 +45,8 @@ describe('the lake', () => {
       expect(p.z0).toBeGreaterThan(z);
     }
     expect(r.pebblesWest.x1).toBeLessThanOrEqual(EDGE_X);
-    expect(r.pebblesEast.x0).toBeGreaterThanOrEqual(EDGE_X + 14);
+    expect(r.pebblesEast.x0).toBeGreaterThanOrEqual(FAR_EDGE_X);
+    expect(r.water.x1).toBeGreaterThanOrEqual(FAR_EDGE_X + 60);
   });
 
   it('has no overlapping flat planes past the shore (no z-fighting)', () => {
@@ -55,6 +56,39 @@ describe('the lake', () => {
       for (const b of flat) {
         if (a === b) continue;
         expect(a.x1 <= b.x0 || b.x1 <= a.x0).toBe(true);
+      }
+    }
+  });
+});
+
+describe('the lake shore', () => {
+  it('is level on land, reaches below the water at the water line and slopes down past it', () => {
+    expect(shoreY(LAKE.pebbleDepth)).toBe(0);
+    expect(shoreY(LAKE.slopeStart)).toBe(0);
+    expect(shoreY(0)).toBe(WATER_Y);
+    expect(shoreY(-LAKE.slopeRun)).toBeLessThan(WATER_Y);
+  });
+
+  it('keeps Mom (and the ending line) on level land', () => {
+    const meet = FOREST.meetAt;
+    expect(shoreY((meet?.z ?? 0) - (FOREST.lake?.z ?? 0))).toBe(0);
+  });
+});
+
+describe('the river collider', () => {
+  it('spans the whole river, EDGE_X to FAR_EDGE_X', () => {
+    const [river] = stripBlockers(CITY);
+    expect(river.minX).toBeCloseTo(EDGE_X);
+    expect(river.maxX).toBeCloseTo(FAR_EDGE_X);
+  });
+});
+
+describe('the far bank', () => {
+  it('has every prop, skyline item and pine at least 1 m past the far edge', () => {
+    for (const a of [CITY, SUBURBS, FOREST]) {
+      for (const p of a.props.filter((q) => q.x > EDGE_X)) {
+        const onLakeFlank = a.lake !== undefined && p.z < a.lake.z;
+        expect(p.x >= FAR_EDGE_X + 1 || onLakeFlank, `${a.id} ${p.model} x=${p.x}`).toBe(true);
       }
     }
   });

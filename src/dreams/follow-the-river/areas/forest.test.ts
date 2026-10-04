@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveCircle } from '../../../engine/collide';
-import { EDGE_X, LAKE } from '../river';
+import { EDGE_X, LAKE, RIVER_X } from '../river';
 import { shackBounds, shackColliders } from '../shack';
 import { FOREST } from './forest';
 
@@ -17,7 +17,7 @@ describe('FOREST', () => {
   it('is chapter 3 with the dam across the lake as its safe prop and a nearer night fog', () => {
     expect(FOREST.chapter).toBe(3);
     expect(FOREST.arrival.length).toBe(2);
-    expect(FOREST.safeProp).toEqual({ prop: 'dam', x: 10, z: -440, yaw: 0 });
+    expect(FOREST.safeProp).toEqual({ prop: 'dam', x: RIVER_X, z: -440, yaw: 0 });
     expect(FOREST.nightFog).toBe(45);
   });
 

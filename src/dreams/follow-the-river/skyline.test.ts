@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FAR_EDGE_X } from './river';
 import { buildingFor, skylineLayout } from './skyline';
 
 describe('skylineLayout', () => {
@@ -16,6 +17,15 @@ describe('skylineLayout', () => {
     for (const s of skylineLayout(7, 60, 22, 60)) {
       expect(s.x).toBeGreaterThanOrEqual(22);
       expect(s.x).toBeLessThanOrEqual(60);
+    }
+  });
+});
+
+describe('far-bank skyline', () => {
+  it('can be placed relative to the far edge, never nearer than 1 m past it', () => {
+    // addSkyline's far row uses minX FAR_EDGE_X + 5 and shifts trees 4 m toward the river.
+    for (const s of skylineLayout(7, 60, FAR_EDGE_X + 5, FAR_EDGE_X + 43)) {
+      expect(s.x - 4).toBeGreaterThanOrEqual(FAR_EDGE_X + 1);
     }
   });
 });

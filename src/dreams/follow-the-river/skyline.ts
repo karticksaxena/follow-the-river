@@ -3,6 +3,7 @@ import { assetUrl } from '../../engine/assets';
 import { addBatched } from '../../engine/batch';
 import { loadModel } from '../../engine/models';
 import { KIT_SCALE, kitUrl } from './kits';
+import { FAR_EDGE_X } from './river';
 
 export interface Silhouette {
   x: number;
@@ -95,7 +96,7 @@ function treeItem(s: Silhouette, i: number): Item {
 
 /** The far bank: Blender city blocks, suburb houses or more trees, depending on the area. */
 function farBankItem(style: SkylineStyle, s: Silhouette, i: number): Item {
-  if (style === 'trees') return treeItem({ ...s, x: s.x - 10 }, i);
+  if (style === 'trees') return treeItem({ ...s, x: s.x - 4 }, i);
   if (style === 'houses') {
     const house = HOUSES[Math.floor(s.width * 10) % HOUSES.length];
     return {
@@ -130,7 +131,9 @@ export async function addSkyline(
   const from = startZ + MARGIN;
   const span = startZ - endZ + MARGIN + endMargin;
   const count = Math.round(span / SPACING);
-  const far = skylineLayout(7, count, 22, 60, from, span).map((s, i) => farBankItem(style, s, i));
+  const far = skylineLayout(7, count, FAR_EDGE_X + 5, FAR_EDGE_X + 43, from, span).map((s, i) =>
+    farBankItem(style, s, i),
+  );
   const near = skylineLayout(11, count, -40, -16, from, span).map(treeItem);
   const items = [...far, ...near];
   const models = await Promise.all(items.map((item) => item.load));

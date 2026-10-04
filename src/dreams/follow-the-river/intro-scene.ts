@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import type { Box } from '../../engine/collide';
 import { loadModel, loadSkinned } from '../../engine/models';
 import type { DreamContext } from '../types';
+import { addBanks, groundEndX } from './banks';
 import { createFish, type Fish } from './fish';
 import { characterUrl, KIT_SCALE, kitUrl, propUrl } from './kits';
 import { applyDim, applyLighting, createWorldLights, LIGHTING, type WorldLights } from './lighting';
@@ -141,8 +142,9 @@ function lineOfFence(
 
 function buildOutside(scene: THREE.Scene, house: THREE.Object3D, fence: THREE.Object3D): void {
   const ground = plane(400, 400, 0x1c1a16);
-  ground.position.set(EDGE_X - 200, -0.03, 0);
+  ground.position.set(groundEndX('natural') - 200, -0.03, 0);
   addRiver(scene, 60, -60);
+  addBanks(scene, 'natural', [60, -60], [0x1c1a16, 0x24271f]);
   house.scale.setScalar(KIT_SCALE.suburb);
   house.position.set(HOUSE_X, 0, 0);
   house.rotation.y = Math.PI / 2;

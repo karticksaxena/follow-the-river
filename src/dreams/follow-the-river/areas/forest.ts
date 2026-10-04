@@ -1,4 +1,4 @@
-import { EDGE_X } from '../river';
+import { EDGE_X, FAR_EDGE_X, LAKE, RIVER_X, shoreY } from '../river';
 import { shackBounds } from '../shack';
 import { seeded } from '../skyline';
 import type { AreaDef, LurkerDef, PickupDef, PropPlacement, ScareDef, ShackDef } from './types';
@@ -12,7 +12,7 @@ const BARRICADE_Z = -120;
 const LAND_X = -18;
 const SAFE_Z = -372;
 /** The dam across the lake, ~48 m past the shore: lost in Night 3's fog, a grey shape at dawn. */
-const DAM = { prop: 'dam', x: 10, z: -440, yaw: 0 };
+const DAM = { prop: 'dam', x: RIVER_X, z: -440, yaw: 0 };
 /** Mom on the pebbles, her canoe beside her. */
 const MOM = { x: -3, z: -387.5 };
 const PINE_SEED = 61;
@@ -59,7 +59,7 @@ function dayForest(): PropPlacement[] {
   return [
     ...pines(PINE_SEED, 12, -118, 2.2, -26, -14),
     ...pines(PINE_SEED + 1, 12, -118, 2.4, -60, -26),
-    ...pines(PINE_SEED + 2, 10, -118, 14, 20, 40),
+    ...pines(PINE_SEED + 2, 10, -118, 14, FAR_EDGE_X + 3, FAR_EDGE_X + 23),
   ];
 }
 
@@ -68,21 +68,17 @@ function lakeShore(): PropPlacement[] {
   const random = seeded(PINE_SEED + 6);
   const out = [
     ...pines(PINE_SEED + 7, LAKE_Z - 2, LAKE_Z - 110, 5, -78, -64),
-    ...pines(PINE_SEED + 8, LAKE_Z - 2, LAKE_Z - 110, 7, 94, 110),
-    at('canoe', MOM.x + 2.5, MOM.z - 1.2, 0.35, 0.6),
+    ...pines(PINE_SEED + 8, LAKE_Z - 2, LAKE_Z - 110, 7, LAKE.east + 4, LAKE.east + 20),
+    { ...at('canoe', MOM.x + 2.5, MOM.z - 1.2, 0.35, 0.6), y: shoreY(MOM.z - 1.2 - LAKE_Z) },
   ];
-  for (let x = -34; x < 62; x += 9) {
-    if (x > EDGE_X - 4 && x < EDGE_X + 18) continue; // the river mouth stays open
+  for (let x = -34; x < FAR_EDGE_X + 29; x += 9) {
+    if (x > EDGE_X - 4 && x < FAR_EDGE_X + 1) continue; // the river mouth stays open
     const model = random() < 0.5 ? 'rock_largeA' : 'rock_largeC';
-    out.push(
-      at(
-        model,
-        x + random() * 4,
-        LAKE_Z + 0.5 + random() * 2,
-        random() * TAU,
-        0.3 + random() * 0.3,
-      ),
-    );
+    const z = LAKE_Z + 0.5 + random() * 2;
+    out.push({
+      ...at(model, x + random() * 4, z, random() * TAU, 0.3 + random() * 0.3),
+      y: shoreY(z - LAKE_Z) - 0.1, // sunk a little into the slope
+    });
   }
   return out;
 }
@@ -93,15 +89,16 @@ const TALL_ROCKS = ['rock_tallA', 'rock_tallB', 'rock_tallC', 'rock_tallD', 'roc
 function nightRoute(): PropPlacement[] {
   const out = [
     ...pines(PINE_SEED + 3, -124, -390, 9, -34, -16),
-    ...pines(PINE_SEED + 4, -124, -390, 30, 20, 30),
+    ...pines(PINE_SEED + 4, -124, -390, 30, FAR_EDGE_X + 3, FAR_EDGE_X + 13),
   ];
   const random = seeded(PINE_SEED + 5);
   // Real rock shapes only: the cliff blocks read as plain brown boxes in the fog.
   const tall = (): string => TALL_ROCKS[Math.floor(random() * TALL_ROCKS.length)] ?? 'rock_tallA';
   for (let z = -130; z > -388; z -= 14) {
     out.push(at(tall(), -17 - random() * 4, z, random() * TAU, 1 + random() * 0.6));
-    out.push(at(tall(), 18 + random() * 6, z - 6, random() * TAU, 1.6 + random()));
-    if (Math.round(z / 14) % 3 === 0) out.push(at('rock_largeC', 19 + random() * 4, z, 0, 1.4));
+    out.push(at(tall(), FAR_EDGE_X + 1 + random() * 6, z - 6, random() * TAU, 1.6 + random()));
+    if (Math.round(z / 14) % 3 === 0)
+      out.push(at('rock_largeC', FAR_EDGE_X + 2 + random() * 4, z, 0, 1.4));
   }
   return out;
 }
@@ -112,7 +109,15 @@ function barricade(): PropPlacement[] {
   for (let i = 0; i < 6; i++) {
     const x = LAND_X + 1.5 + i * 3.9;
     out.push(at('log_large', x, BARRICADE_Z, (i % 2) * 0.12));
-    out.push(at(i % 2 ? 'rock_largeB' : 'rock_largeE', x + 1.9, BARRICADE_Z + 0.8, i, 0.8));
+    out.push(
+      at(
+        i % 2 ? 'rock_largeB' : 'rock_largeE',
+        Math.min(x + 1.9, EDGE_X - 0.8),
+        BARRICADE_Z + 0.8,
+        i,
+        0.8,
+      ),
+    );
   }
   out.push(
     at('log_large', -8, BARRICADE_Z + 1.2, 0.2),

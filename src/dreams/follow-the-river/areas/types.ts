@@ -10,6 +10,8 @@ export interface PropPlacement {
   model: string;
   x: number;
   z: number;
+  /** Height of the base (default 0, the ground). */
+  y?: number;
   yaw?: number;
   scale?: number;
   collide?: boolean;
