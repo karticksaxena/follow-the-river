@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import type { AmbushDef } from './areas/types';
-import { createControls, type Controls } from './controls';
+import { createControls, cutsceneChange, type Controls } from './controls';
 import { nightTuning } from './difficulty';
 import { nightEnd } from './ending';
 import { BEAM, chargeBattery } from './flashlight';
@@ -209,10 +209,11 @@ function tickDim(p: State, dt: number): void {
 /** On entering or leaving a cutscene: hide or show the HUD, torch off then back as it was. */
 function syncCutscene(p: State): void {
   const { sys, run } = p;
-  if (run.cutscene === p.cutscene) return;
+  const change = cutsceneChange(p.cutscene, run.cutscene);
+  if (!change) return;
   p.cutscene = run.cutscene;
   sys.hud.setHidden(run.cutscene);
-  if (run.cutscene) {
+  if (change === 'enter') {
     p.torchBefore = sys.flashlight.on;
     sys.flashlight.on = false;
   } else sys.flashlight.on = p.torchBefore;
@@ -298,6 +299,10 @@ export function createPlay(sys: Systems, run: Run, events: Events): Play {
   return {
     reset() {
       p.offFor = 0;
+      // beginPhase already cleared run.cutscene and set the torch: just forget the cutscene (no restore).
+      p.cutscene = false;
+      p.torchBefore = false;
+      p.sys.hud.setHidden(false);
       p.toldAboutWait = false;
       p.wasInShack = false;
       p.hitPause = false;

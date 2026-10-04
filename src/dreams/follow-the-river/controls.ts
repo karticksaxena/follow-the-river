@@ -171,6 +171,10 @@ export const viewVisible = (
   cutscene: boolean,
 ): boolean => !cutscene && w === current && owns(guns, w);
 
+/** What a cutscene flag change means for the HUD and torch: entering, leaving, or nothing. */
+export const cutsceneChange = (prev: boolean, now: boolean): 'enter' | 'leave' | null =>
+  prev === now ? null : now ? 'enter' : 'leave';
+
 /** Weapon keys start a switch; the tween lowers the old model, swaps, raises the new one. */
 function switchWeapons(c: Ctl, dt: number): void {
   const { keys } = c.sys.ctx;
