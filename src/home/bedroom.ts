@@ -10,6 +10,16 @@ const FLOOR_Y = 0.1;
 /** Kenney walls are 1.29 tall; scaled, the ceiling sits here. */
 const CEILING_Y = 1.29 * FURNITURE_SCALE;
 const NIGHT = 0x04060b;
+/** The fan hangs from the middle of the ceiling; its canopy is flush with the ceiling. Built in metres: never scaled. */
+const FAN_X = 3;
+const FAN_Z = -2;
+/** The lamp's shadow map: 1024 keeps the blade shadows on the ceiling from looking blocky. */
+const LAMP_SHADOW_SIZE = 1024;
+/** Warm plaster, darkened so the ceiling stays dim; the lamp lifts it. */
+const CEILING_COLOR = 0x6a6258;
+const CEILING_ROUGHNESS = 0.95;
+/** A very dim warm glow aimed up from the lampshade so the ceiling reads; it never touches the room below. */
+const GLOW = { color: 0xffc58a, intensity: 0.9, distance: 4.5, angle: 0.9, penumbra: 1 } as const;
 
 /** [file, x, y, z, rotationY]. Kenney origins sit at a model corner (x ≥ 0, z ≤ 0). */
 type Placement = readonly [string, number, number, number, number];
@@ -42,6 +52,8 @@ export interface Bedroom {
   scene: THREE.Scene;
   /** Where the sleeper's head rests; the Zzz rise from here. */
   head: THREE.Vector3;
+  /** The fan's spinning node. */
+  blades: THREE.Object3D;
   view: { position: THREE.Vector3; target: THREE.Vector3 };
 }
 
@@ -68,10 +80,11 @@ function sleeper(head: THREE.Vector3): THREE.Group {
 function ceiling(): THREE.Mesh {
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(6, 4),
-    new THREE.MeshLambertMaterial({ color: 0x2b2722 }),
+    new THREE.MeshStandardMaterial({ color: CEILING_COLOR, roughness: CEILING_ROUGHNESS }),
   );
   mesh.rotation.x = Math.PI / 2;
   mesh.position.set(3, CEILING_Y, -2);
+  mesh.receiveShadow = true;
   return mesh;
 }
 
@@ -83,9 +96,24 @@ function lights(scene: THREE.Scene, head: THREE.Vector3): void {
   const lamp = new THREE.PointLight(0xffc58a, 2, 5, 2);
   lamp.position.set(1.67, FLOOR_Y + 0.95, -3.74);
   lamp.castShadow = true;
-  lamp.shadow.mapSize.set(512, 512);
+  lamp.shadow.mapSize.set(LAMP_SHADOW_SIZE, LAMP_SHADOW_SIZE);
   lamp.shadow.bias = -0.002;
-  scene.add(moon, moon.target, lamp);
+  const glow = new THREE.SpotLight(
+    GLOW.color,
+    GLOW.intensity,
+    GLOW.distance,
+    GLOW.angle,
+    GLOW.penumbra,
+  );
+  glow.position.copy(lamp.position);
+  glow.target.position.set(lamp.position.x, CEILING_Y, lamp.position.z);
+  scene.add(moon, moon.target, lamp, glow, glow.target);
+}
+
+async function hangFan(): Promise<THREE.Object3D> {
+  const fan = await loadModel(assetUrl('home/ceilingFan.glb'));
+  fan.position.set(FAN_X, CEILING_Y, FAN_Z);
+  return fan;
 }
 
 export async function buildBedroom(): Promise<Bedroom> {
@@ -102,6 +130,10 @@ export async function buildBedroom(): Promise<Bedroom> {
     if (PIECES[i][0] === 'lampRoundTable') enableShadows(model, false);
     scene.add(model);
   });
+  const fan = await hangFan();
+  const blades = fan.getObjectByName('Blades');
+  if (!blades) throw new Error('ceilingFan.glb has no Blades node');
+  scene.add(fan);
   const head = new THREE.Vector3(0.75, FLOOR_Y + 0.72, -3.55);
   // Night sky outside, seen through the window.
   scene.add(sleeper(head), ceiling(), createSkyDome(0x02030a, 0x101a33, 40));
@@ -109,6 +141,7 @@ export async function buildBedroom(): Promise<Bedroom> {
   return {
     scene,
     head,
+    blades,
     view: {
       position: new THREE.Vector3(5.1, 1.7, -0.9),
       target: new THREE.Vector3(0.9, 0.9, -3.0),

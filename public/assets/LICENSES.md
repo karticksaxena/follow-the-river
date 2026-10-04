@@ -10,6 +10,7 @@ Every file in `public/assets/` must be listed here. CC0 only.
 | `props/{pistol,barn,cabin,dam}.glb` | Made for this project by `tools/blender/plan3_props.py` | CC0 1.0 (original work) |
 | `props/{shotgun,rifle}.glb` | Made for this project by `tools/blender/plan6_guns.py` | CC0 1.0 (original work) |
 | `sounds/weapons/{pistol,shotgun,rifle}.m4a` | Ben Jaszczak, Brian Nelson, Kevin Heras, Matthew Nanney — "The Free Firearm Sound Library" (1911, Winchester Model 12, AR-15 takes), https://opengameart.org/content/the-free-firearm-sound-library (trimmed, normalised, converted to AAC by `tools/assets/cut_shot.py`) | CC0 1.0 |
+| `home/ceilingFan.glb` | Made for this project by `tools/blender/ceiling_fan.py` | CC0 1.0 (original work) |
 | `characters/orca.glb` | Made for this project by `tools/blender/orca.py` | CC0 1.0 (original work) |
 | `characters/zombie-m.glb`, `characters/zombie-f.glb` | Built by `tools/blender/zombify.py` from Quaternius — Ultimate Modular Men / Ultimate Modular Women (https://quaternius.com, via https://poly.pizza/bundle/Ultimate-Modular-Men-Pack-ZiH8muWqwQ and https://poly.pizza/bundle/Ultimate-Modular-Women-Pack-aCBDXDdTNN) with clips retargeted from Quaternius — Universal Animation Library 1 and 2 (https://opengameart.org/content/universal-animation-library, https://opengameart.org/content/universal-animation-library-2); textures painted by the script | CC0 1.0 |
 | `characters/mom.glb` | Quaternius — Ultimate Modular Women, "Formal" (poly.pizza id nIItLV9nxS) | CC0 1.0 |

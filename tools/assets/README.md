@@ -16,6 +16,15 @@ steps that made them, so they can be rebuilt or changed.
   --python tools/blender/flashback_props.py -- public/assets/props   # lab, tank, cage (delete the preview PNGs after)
 ```
 
+## Bedroom ceiling fan (home screen)
+
+Metres, hangs down from the ceiling mount point (origin). Nodes `CeilingFan` > `Fixture` + `Blades` (blades and irons, origin on the
+spin axis). Plain GLB, not compressed:
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --background --python tools/blender/ceiling_fan.py
+```
+
 ## Zombies
 
 Sources (download, unzip):

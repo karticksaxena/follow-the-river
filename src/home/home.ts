@@ -8,6 +8,7 @@ import { button, el } from '../engine/ui';
 import { buildBedroom } from './bedroom';
 import { breathBuffer } from './breath';
 import { addDreamCloud, tweenCamera } from './cloud';
+import { spunAngle } from './fan';
 import { nextHomeState, type HomeEvent, type HomeState } from './flow';
 import { createZzz } from './zzzSprites';
 
@@ -26,7 +27,10 @@ export async function startHome(app: App, play: Play): Promise<HomeHandle> {
   stage.camera.position.copy(room.view.position);
   stage.camera.lookAt(room.view.target);
   const zzz = createZzz(room.scene, room.head);
-  const stopZzz = stage.addUpdater((dt) => zzz.update(dt));
+  const stopZzz = stage.addUpdater((dt) => {
+    zzz.update(dt);
+    room.blades.rotation.y = spunAngle(room.blades.rotation.y, dt);
+  });
   let state: HomeState = 'sleeping';
   let tone: THREE.Audio | null = null;
   const send = (event: HomeEvent): boolean => {
