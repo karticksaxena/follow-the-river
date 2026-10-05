@@ -6,6 +6,7 @@ import { texturesReady } from '../../engine/surfaces';
 import type { DreamContext } from '../types';
 import { addBanks, groundEndX } from './banks';
 import { createFish, type Fish } from './fish';
+import { furnishRoom, furnitureColliders } from './intro-room';
 import { characterUrl, KIT_SCALE, kitUrl, propUrl } from './kits';
 import { applyDim, applyLighting, createWorldLights, LIGHTING, type WorldLights } from './lighting';
 import { createNewsScreen } from './news';
@@ -83,7 +84,7 @@ const box = (x0: number, x1: number, z0: number, z1: number, dx = 0): Box => ({
 /** Blocks the player just outside the doorway; Mom walks through it when she leaves. */
 export const DOOR_CAP: Box = box(-4.6, -4, 0.4, 2, ROOM_X);
 
-/** Walls (doorway open at z 0.65..1.75, capped just outside), couch back and the TV. */
+/** Walls (doorway open at z 0.65..1.75, capped just outside), the couch, the TV and the big furniture. */
 export const ROOM_COLLIDERS: readonly Box[] = [
   box(-4, 4, 2.5, 3, ROOM_X),
   box(-4, 4, -3, -2.5, ROOM_X),
@@ -91,8 +92,9 @@ export const ROOM_COLLIDERS: readonly Box[] = [
   box(-4, -3.5, -3, 0.65, ROOM_X),
   box(-4, -3.5, 1.75, 3, ROOM_X),
   DOOR_CAP,
-  box(-1, 1, 1.4, 1.65, ROOM_X),
+  box(-1, 1, 0.77, 1.65, ROOM_X),
   box(-0.5, 0.5, -2.5, -1.6, ROOM_X),
+  ...furnitureColliders(ROOM_X),
 ];
 
 /** A small fenced strip by the river; the river side is closed at the water's edge. */
@@ -302,6 +304,7 @@ export async function buildIntroScene(ctx: DreamContext): Promise<IntroScene> {
   mom.attach(phone, 'WristR', { grip: PHONE_GRIP });
   mom.group.position.set(AT.momInside.x, 0, AT.momInside.z); // world, not room-local
   scene.add(room, mom.group);
+  await furnishRoom(scene, ROOM_X);
   buildOutside(scene, house, fence);
   await texturesReady();
   return { scene, lights, fish, news, tvLight, mom, phone, sounds };

@@ -2,7 +2,7 @@ import { withTimeout } from '../engine/time';
 import type { DreamInfo, DreamModule } from './types';
 
 /** Longest wait for a dream's code or its models before giving up with a message. Tuning knob. */
-export const LOAD_TIMEOUT_MS = 20_000;
+export const LOAD_TIMEOUT_MS = 90_000;
 
 export type LoadResult = { ok: true; dream: DreamModule } | { ok: false; message: string };
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadDream } from './load';
+import { LOAD_TIMEOUT_MS, loadDream } from './load';
 import type { DreamInfo, DreamModule } from './types';
 
 const dream: DreamModule = { start: () => Promise.resolve(), dispose: () => undefined };
@@ -29,5 +29,9 @@ describe('loadDream', () => {
   it('shows a message, not a crash, when it keeps failing', async () => {
     const result = await loadDream(info(() => Promise.reject(new Error('offline'))));
     expect(result.ok).toBe(false);
+  });
+
+  it('waits at least a minute: a slow GPU compiles its first shaders inside the load', () => {
+    expect(LOAD_TIMEOUT_MS).toBeGreaterThanOrEqual(60_000);
   });
 });
