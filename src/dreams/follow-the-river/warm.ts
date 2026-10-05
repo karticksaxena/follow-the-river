@@ -39,7 +39,7 @@ const WARM_PITCH = -0.2;
 const POSE_FRAMES = 2;
 /** Then a few more in the player's own view (what faces downstream: lamp glows, sky discs, the AO pass). */
 const VIEW_FRAMES = 4;
-/** The warm-up stops posing this long (ms) after it began: a slow machine must still get in quickly, and the loader must not look frozen. */
+/** The warm-up stops posing this long (ms) after its real frames began (the compile before them takes what it takes; the first pose always draws): a slow machine must still get in quickly. */
 const BUDGET_MS = 4000;
 /** The pickups, the arrow and the splash show this far (m) ahead of the camera. */
 const SHOW_AHEAD = 3;
@@ -243,13 +243,13 @@ export interface WarmOptions {
 }
 
 /** Draws the poses (the first also casts every outfit's shadow); stops when the budget is spent. */
-async function drawPoses(sys: Systems, x: number, opts: WarmOptions, t0: number): Promise<void> {
+async function drawPoses(sys: Systems, x: number, opts: WarmOptions, f0: number): Promise<void> {
   const { stage } = sys.ctx;
   const headings = opts.full ? HEADINGS : HEADINGS.slice(0, 1);
   let first = true;
   for (const z of vantages(sys, opts.full, stage.camera.position.z)) {
     for (const yaw of headings) {
-      if (performance.now() - t0 > BUDGET_MS) return;
+      if (!first && performance.now() - f0 > BUDGET_MS) return;
       pose(stage.camera, x, z, yaw);
       if (first) await castShadows(sys, stage.camera.position);
       first = false;
@@ -298,7 +298,7 @@ export async function warmArea(
     undo.push(sys.world.showAllPlants(true)); // real frames: one cell per species, not the whole route
     stage.warmFocus(); // the depth-of-field graph builds here, not at the first cutscene
     await frames(stage, 3);
-    await drawPoses(sys, camera.position.x, opts, t0);
+    await drawPoses(sys, camera.position.x, opts, performance.now());
     mark(times, 'frames', t0);
   } catch {
     // keep going: the first frames will compile what is missing

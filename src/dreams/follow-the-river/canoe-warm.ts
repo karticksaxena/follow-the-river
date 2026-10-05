@@ -7,7 +7,7 @@ import { frames, logWarm, mark, unculled, type WarmTimes } from './warm';
 const SPOT_FRAMES = 2;
 const EYE_HEIGHT = 1.5;
 const SPLASH_AHEAD = 3;
-/** Stop moving down the river this long (ms) after the warm began: the loader must not look frozen. */
+/** Stop moving down the river this long (ms) after the real frames began (the compile before them takes what it takes; the first spot always draws). */
 const BUDGET_MS = 3000;
 
 type Undo = () => void;
@@ -71,8 +71,9 @@ export async function warmRide(
     mark(times, 'compile', t0);
     allPlants();
     undo.push(showPlants(cs.scene, true)); // real frames: one cell per species, not the whole route
+    const f0 = performance.now();
     for (const at of spots) {
-      if (performance.now() - t0 > BUDGET_MS) break;
+      if (at !== spots[0] && performance.now() - f0 > BUDGET_MS) break;
       camera.position.set(at.x, at.y + EYE_HEIGHT, at.z);
       camera.rotation.set(0, at.yaw + Math.PI, 0, 'YXZ');
       cs.sky.position.copy(camera.position);

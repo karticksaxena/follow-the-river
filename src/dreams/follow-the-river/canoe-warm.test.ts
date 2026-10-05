@@ -65,6 +65,19 @@ function fake(compile: () => Promise<void>, log: string[]): Fake {
 }
 
 describe('warmRide', () => {
+  it('draws every spot even when the compile outlasts the budget (it counts from the first frame)', async () => {
+    const log: string[] = [];
+    let now = 0;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const { r, previous } = fake(() => {
+      now += 10_000; // a cold shader cache
+      return Promise.resolve();
+    }, log);
+    await warmRide(r, previous, spots);
+    expect(log).toHaveLength(spots.length * 2);
+    clock.mockRestore();
+  });
+
   it('draws the ride scene with everything on and culling off, then hands the stage back', async () => {
     const log: string[] = [];
     const { r, stage, previous, kartik, mesh, camera } = fake(() => Promise.resolve(), log);
