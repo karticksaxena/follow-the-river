@@ -45,8 +45,16 @@ export function refreshEnvironment(
   scene.environmentIntensity = look.environment;
   if (!rig) return;
   paintSkyDome(rig.dome, top, horizon);
-  const target = rig.generator.fromScene(rig.scene, 0, 0.1, FAR, { size: SIZE });
-  targets.get(scene)?.dispose();
+  // Re-render into the scene's existing target: a new texture would change every lit material's
+  // environment node, so three recompiled the whole scene on each refresh (night falling, every
+  // step of the sunrise): the "freezes" at waves and dawn. Same texture, new pixels: no recompile.
+  const kept = targets.get(scene);
+  const target = rig.generator.fromScene(rig.scene, 0, 0.1, FAR, {
+    size: SIZE,
+    ...(kept ? { renderTarget: kept } : {}),
+  });
+  if (target === kept) return;
+  kept?.dispose();
   targets.set(scene, target);
   scene.environment = target.texture;
 }
