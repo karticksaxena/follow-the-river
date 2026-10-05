@@ -43,7 +43,7 @@ COLOURS = {
 FINGERS = re.compile(r"^(Index|Middle|Ring|Pinky|Thumb)\d\.R$")
 ARM_BONES = {"LowerArm.R", "Wrist.R"}
 HEM_REACH = 0.16  # metres of upper arm kept above the elbow: the short sleeve and its hem
-WRIST_BACK = math.radians(40)  # the wrist bends back (hand pressed flat, forearm angled in from the player's side)
+WRIST_BACK = math.radians(20)  # the wrist bends back (hand pressed flat, forearm angled in from the player's side)
 SPREAD = {"Index": 7, "Ring": 7, "Pinky": 13, "Thumb": 16}  # degrees each finger fans out from the middle finger
 
 

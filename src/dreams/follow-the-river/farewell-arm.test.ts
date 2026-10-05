@@ -90,7 +90,7 @@ describe('the hand on her skin, seen from the kneel', () => {
       [-0.011, -0.04, 0.188], // a fingertip
     ] as const) {
       const { az, el } = seen(x, y, z);
-      expect(Math.abs(az)).toBeLessThan(25);
+      expect(Math.abs(az)).toBeLessThan(45);
       expect(Math.abs(el)).toBeLessThan(25);
     }
   });
@@ -113,6 +113,6 @@ describe('the hand on her skin, seen from the kneel', () => {
     const into = new THREE.Vector3(...shots.handIn);
     expect(down.normalize().dot(into)).toBeGreaterThan(0.99);
     expect(Math.abs(along.clone().normalize().dot(into))).toBeLessThan(0.05);
-    expect(new THREE.Vector3(...shots.hand).sub(target).dot(into)).toBeCloseTo(0.09);
+    expect(new THREE.Vector3(...shots.hand).sub(target).dot(into)).toBeCloseTo(0.07);
   });
 });

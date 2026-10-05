@@ -39,8 +39,8 @@ export const FAREWELL = {
   /** Her jaw's share of its opening while she answers, her head's share while she looks at Mom. */
   answerJaw: 0.15,
   answerLook: 0.8,
-  /** How fast the camera turns to her at the start of the swim is `CAST.follow`; the fish pack hangs this far below the fingertips (m). */
-  packHold: { x: 0.18, y: -0.32, z: -0.55 },
+  /** How fast the camera turns to her at the start of the swim is `CAST.follow`; the fish pack lies on your palm, held this far out (camera space, m). */
+  packHold: { x: 0.22, y: -0.3, z: -0.55 },
   /** The swim in is given up on after this long (s): she is on the shore by then or something is wrong. */
   swimGiveUp: 40,
 } as const;
@@ -386,18 +386,18 @@ function holdPack(s: Script, pack: THREE.Object3D): { job: ArmJobHandle; lower: 
       camera.localToWorld(out.copy(hold));
       return out.lerp(float, lower.t * lower.t * (3 - 2 * lower.t));
     },
-    // Fingers forward and down, whichever way the camera looks.
+    // Fingers forward (a little down), whichever way the camera looks.
     refresh() {
       camera.getWorldQuaternion(turn);
-      this.along.set(0, -0.5, -1).applyQuaternion(turn).normalize();
+      this.along.set(-0.15, -0.1, -1).applyQuaternion(turn).normalize();
     },
     along: new THREE.Vector3(),
-    palm: new THREE.Vector3(0, -1, 0),
+    palm: new THREE.Vector3(0, 1, 0), // palm up: the pack rests on it
     rise: 0,
     goal: 1,
   };
   s.scene.arm.add(pack);
-  pack.position.set(0, -0.12, 0.04); // the arm's origin is the middle of the palm: just ahead of it, hanging from the fingers
+  pack.position.set(0, -0.1, 0.05); // local -Y is out of the palm: on top of it, since the palm is up
   pack.rotation.set(0, 0, 0);
   pack.scale.setScalar(1);
   pack.visible = true;

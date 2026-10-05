@@ -16,16 +16,16 @@ export const SHOTS = {
   flank: { ahead: 2.2, up: 0.15, tall: 0.66, press: 0.06 },
   /**
    * Mom's hand lies on her skin `gap` m ahead of yours (toward her head) and her wrist is held `off` m off the skin;
-   * Mom kneels `out` m from her skin and `behind` m behind her hand (so her right arm reaches about 0.5 m across the floor).
+   * Mom kneels `out` m from her skin and `behind` m behind her hand (so her right arm reaches about 0.65 m across the floor).
    */
-  momHand: { gap: 0.27, off: 0.05, out: 0.4, behind: 0.31 },
+  momHand: { gap: 0.27, off: 0.05, out: 0.4, behind: 0.5 },
   /** The kneel: eye height, out from her skin, how far ahead of her centre the camera kneels, and what it looks at (her flank by your hand, `side` m in from her centre line, `ahead` of her centre, `down` below the eye). */
   kneel: {
     eye: 1.2,
     out: 0.45,
     ahead: 2.0,
     seconds: 2.5,
-    look: { side: 0.1, ahead: 2.5, down: 0.45 },
+    look: { side: 0.1, ahead: 3.1, down: 0.45 },
   },
   /** Mom kneels in front of her face, facing her (never between you and her eye): `side` m out from her centre line, `beyond` her nose. */
   mom: { side: 0.25, beyond: 0.6 },

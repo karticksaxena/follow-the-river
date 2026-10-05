@@ -16,7 +16,7 @@ export const ARM = {
    * fingers point up her side (`fingersUp`) and a little toward her tail (`fingersBack`), so the forearm, bent
    * back at the wrist, comes in from the lower right of the frame.
    */
-  onHer: { palmOff: 0.09, fingersUp: 1, fingersBack: 0.35 },
+  onHer: { palmOff: 0.07, fingersUp: 1.3, fingersBack: 1 },
 } as const;
 
 interface V3Like {

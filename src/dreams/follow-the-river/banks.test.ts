@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { bankProfile, bankY, waterlineX } from './banks';
-import { EDGE_X, RIVER_X, WATER_Y } from './river';
+import { bankProfile, bankY, stripGeometry, waterlineX } from './banks';
+import { EDGE_X, LAKE, RIVER_X, shoreY, WATER_Y } from './river';
+import { noBend } from './shore-shape';
+
+describe('the banks at the lake mouth', () => {
+  const lakeZ = -392;
+  const cap = (z: number): number => shoreY(Math.max(z - lakeZ, -LAKE.slopeRun));
+
+  it('never stand above the lake shore beside them (no grass slab across the beach)', () => {
+    const zs = [lakeZ + 6, lakeZ + 4, lakeZ + 2, lakeZ];
+    const g = stripGeometry(bankProfile('natural'), zs, false, { bend: noBend, cap });
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      expect(p.getY(i)).toBeLessThanOrEqual(cap(p.getZ(i)) + 1e-9);
+    }
+    expect(cap(lakeZ + 2)).toBeLessThan(-0.4); // it really does bring the top down
+  });
+});
 
 describe('bank profiles', () => {
   it('starts both kinds level with the ground at the river edge', () => {

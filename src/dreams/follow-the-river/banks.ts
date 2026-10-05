@@ -2,7 +2,17 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as THREE from 'three/webgpu';
 import { surfaceMaterial, type SurfaceName } from '../../engine/surfaces';
 import { createRailing, type Railing } from './railing';
-import { bentPlane, EDGE_X, KERB_WIDTH, OVERRUN, RIVER_X, riverSpan, WATER_Y } from './river';
+import {
+  bentPlane,
+  EDGE_X,
+  KERB_WIDTH,
+  LAKE,
+  OVERRUN,
+  RIVER_X,
+  riverSpan,
+  shoreY,
+  WATER_Y,
+} from './river';
 import { type Bend, BEND, farBankInset, mouthFlare, noBend, rowZs, SHORE } from './shore-shape';
 
 export type BankKind = 'embankment' | 'natural';
@@ -79,6 +89,8 @@ interface Wander {
   bend: Bend;
   /** Metres the bank's water line has moved toward the river's middle at z (the far bank only). */
   inset?: (z: number) => number;
+  /** No point of the strip is higher than this at z (the mouth's banks follow the lake's sloping shore). */
+  cap?: (z: number) => number;
 }
 
 /** Rows of a strip are this tall (m) where it wanders; `BEND.step` where it only bends. */
@@ -93,7 +105,7 @@ export function stripGeometry(
   pts: readonly ProfilePoint[],
   zs: readonly number[],
   mirror: boolean,
-  { bend, inset }: Wander,
+  { bend, inset, cap }: Wander,
 ): THREE.BufferGeometry {
   const pos: number[] = [];
   const nor: number[] = [];
@@ -122,7 +134,7 @@ export function stripGeometry(
         [b, i],
       ] as const) {
         const x = p.x + (j >= slide ? push : 0);
-        pos.push((mirror ? mirrorX(x) : x) + shift, p.y, z);
+        pos.push((mirror ? mirrorX(x) : x) + shift, cap ? Math.min(p.y, cap(z)) : p.y, z);
         nor.push(nx, ny, 0);
         c.setHex(p.color);
         col.push(c.r, c.g, c.b);
@@ -195,6 +207,11 @@ export function addBanks(
   const flare = lakeZ === undefined ? 0 : SHORE.mouthRadius;
   const fine = lakeZ === undefined ? undefined : { near: lakeZ + flare, step: MOUTH_ROW_STEP };
   const flared = (z: number): number => (lakeZ === undefined ? 0 : mouthFlare(z, lakeZ));
+  // Where the banks flare out into the shore their tops would stand up to a metre over the sloping pebbles (a grass slab across the farewell).
+  const cap =
+    lakeZ === undefined
+      ? undefined
+      : (z: number): number => shoreY(Math.max(z - lakeZ, -LAKE.slopeRun));
   // The walkable bank stays straight (gameplay reads its edge); only the far bank wanders, and
   // never an embankment, which is built.
   const wandering = kind === 'natural';
@@ -202,13 +219,14 @@ export function addBanks(
   const farZs = rowZs(z0, z1, wandering ? WANDER_ROW_STEP : BEND.step, fine);
   scene.add(
     new THREE.Mesh(
-      stripGeometry(near, nearZs, false, { bend: (z) => bend(z) - flared(z) }),
+      stripGeometry(near, nearZs, false, { bend: (z) => bend(z) - flared(z), cap }),
       material,
     ),
     new THREE.Mesh(
       stripGeometry(far, farZs, true, {
         bend: (z) => bend(z) + flared(z),
         inset: wandering ? farBankInset : undefined,
+        cap,
       }),
       material,
     ),

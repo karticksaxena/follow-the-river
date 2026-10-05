@@ -268,7 +268,7 @@ describe('where she lies, the same in every beat', () => {
       shots.momSide.x - shots.momHand[0],
       shots.momSide.z - shots.momHand[2],
     );
-    expect(reach).toBeLessThan(0.55); // across the floor; her shoulder is about 0.5 m above
+    expect(reach).toBeLessThan(0.7); // across the floor; her shoulder is about 0.5 m above
     expect(toCentreLine(shots.momSide.x, shots.momSide.z)).toBeGreaterThan(
       ANATOMY.halfWidth + 0.25,
     );
