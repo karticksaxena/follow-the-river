@@ -172,9 +172,17 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
       );
     }
   };
-  // DEV: `window.__kdLong` lists every frame over LONG_FRAME as [time ms, frame ms] (hitches show up here).
+  // DEV: `window.__kdLong` lists every frame over LONG_FRAME as [time ms, frame ms, new pipelines] (hitches show up here).
   const longFrames: number[][] = [];
-  if (import.meta.env.DEV) Object.assign(window, { __kdLong: longFrames });
+  // DEV: three's pipeline cache size (`window.__kdPipelines()`; read it after a warm-up, then watch for growth in play).
+  const pipelineCount = (): number => {
+    const cache: unknown = Reflect.get(Reflect.get(renderer, '_pipelines') ?? {}, 'caches');
+    return cache instanceof Map ? cache.size : 0;
+  };
+  let pipelines = 0;
+  if (import.meta.env.DEV) {
+    Object.assign(window, { __kdLong: longFrames, __kdPipelines: pipelineCount });
+  }
   await renderer.setAnimationLoop((time) => {
     timer.update(time);
     if (!shouldRender(pacer, timer.getDelta(), cap)) return;
@@ -186,8 +194,11 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
     post.update(dt);
     post.render(stage.scene);
     if (dt > 0 && !stage.warming && !isHitch(pacer.dt)) adapt(dt, performance.now() - start);
-    if (import.meta.env.DEV && pacer.dt > LONG_FRAME) {
-      longFrames.push([Math.round(time), Math.round(pacer.dt * 1000)]);
+    if (import.meta.env.DEV) {
+      const made = pipelineCount() - pipelines; // pipelines this frame created
+      pipelines += made;
+      if (pacer.dt > LONG_FRAME)
+        longFrames.push([Math.round(time), Math.round(pacer.dt * 1000), made]);
     }
     perf?.end();
   });

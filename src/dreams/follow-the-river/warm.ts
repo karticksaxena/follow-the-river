@@ -177,9 +177,15 @@ function spawnOutfits(horde: Horde, at: THREE.Vector3): void {
   }
 }
 
-/** A frame per spot with the sense walking down the line: every outfit casts a key-light shadow in turn. */
+/**
+ * A frame per spot with the sense walking down the line: every outfit casts a key-light shadow in
+ * turn. The horde only re-picks its casters every 0.5 s, and a reset rearms that, so each round
+ * starts from a fresh line (the first update of a round always picks).
+ */
 async function castShadows(sys: Systems, at: THREE.Vector3): Promise<void> {
   for (const spot of CAST_SPOTS) {
+    sys.horde.reset();
+    spawnOutfits(sys.horde, at);
     sense.x = sense.eye.x = at.x + WARM_NEAR;
     sense.z = sense.eye.z = at.z - spot * WARM_GAP;
     sys.horde.update(0.016, sense, noHit);

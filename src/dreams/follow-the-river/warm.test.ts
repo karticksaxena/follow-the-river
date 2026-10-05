@@ -125,7 +125,8 @@ describe('warmArea', () => {
       return () => log.push('extra off');
     });
     await warmArea(sys, r, { battery: 100, full: true, extras: [extra] });
-    expect(log.filter((l) => l === 'spawn')).toHaveLength(13); // one per outfit
+    expect(log.filter((l) => l === 'spawn').length % 13).toBe(0); // 13 outfits, again every shadow round
+    expect(log.filter((l) => l === 'spawn').length).toBeGreaterThanOrEqual(13);
     expect(log.filter((l) => l === 'cast').length).toBeGreaterThanOrEqual(4); // every outfit casts in turn
     for (const on of ['orca on', 'plants on', 'extra on', 'arrow', 'splash', 'torch true']) {
       expect(log).toContain(on);
