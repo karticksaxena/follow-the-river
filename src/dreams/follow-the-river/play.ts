@@ -36,6 +36,8 @@ const DIM_EPSILON = 0.01;
 const WAIT_HINT_RANGE = 12;
 /** After the "you are hurt" page closes, zombie hits can't land for this long (s). */
 const HURT_GRACE = 1;
+/** Right after any hit, further hits cost nothing for this long (s): two zombies in one instant are one heart. */
+export const HIT_GRACE = 0.8;
 /** Wave zombies come out of the bank between the land wall and this far from the water (m). */
 const NIGHT_STRIP_MARGIN = 0.5;
 /** Most lying and cover zombies one wave puts down at its start. */
@@ -114,7 +116,7 @@ function newSense(): PlayerSense {
   };
 }
 
-function createState(sys: Systems, run: Run, events: Events): State {
+export function createState(sys: Systems, run: Run, events: Events): State {
   const { area, hud, grid } = sys;
   const sense = newSense();
   const chapter = chapterOf(run.phase);
@@ -171,6 +173,7 @@ function createState(sys: Systems, run: Run, events: Events): State {
       if (state.grace > 0) return;
       run.health = takeDamage(run.health, damage);
       hud.hurt();
+      state.grace = HIT_GRACE;
       if (run.health === 0) events.die();
       else {
         state.hitPause = true;

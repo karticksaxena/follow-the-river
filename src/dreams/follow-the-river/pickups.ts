@@ -1,5 +1,7 @@
+import { color, sin, smoothstep, time, uv, vec4 } from 'three/tsl';
 import * as THREE from 'three/webgpu';
 import { mergeParts } from '../../engine/batch';
+import { outdoors } from '../../engine/interiors';
 import { loadModel } from '../../engine/models';
 import type { PickupDef, PickupKind } from './areas/types';
 import { KIT_SCALE, kitUrl, propUrl } from './kits';
@@ -162,6 +164,22 @@ const HOVER = 0.5;
 const BOB = 0.04;
 const BOB_SPEED = 2;
 const SPIN_SPEED = 0.8;
+/** A faint warm halo behind every hovering pickup, so it reads at night from 10 to 20 m (never neon). Tuning knobs. */
+export const GLOW = { color: 0xffc27a, size: 1.3, strength: 0.32, pulse: 0.12, speed: 2.2 };
+
+/** One shared halo material: a soft round falloff that breathes slowly and is off inside dark interiors. */
+function glowMaterial(): THREE.SpriteNodeMaterial {
+  const soft = smoothstep(0, 0.5, uv().sub(0.5).length()).oneMinus();
+  const breathe = sin(time.mul(GLOW.speed)).mul(GLOW.pulse).add(1);
+  const alpha = soft.mul(soft).mul(GLOW.strength).mul(breathe).mul(outdoors());
+  const material = new THREE.SpriteNodeMaterial({ colorNode: vec4(color(GLOW.color), alpha) });
+  material.transparent = true;
+  material.depthWrite = false;
+  material.blending = THREE.AdditiveBlending;
+  material.fog = false; // the fog would hide it from exactly the distance it is for
+  return material;
+}
+
 /** Pickups further than this (m) are not drawn: the night fog hides them anyway, and each one is
  * several draws (Night 1's houses doubled their count). Tuning knob. */
 export const SHOW_RANGE = 40;
@@ -169,6 +187,7 @@ export const SHOW_RANGE = 40;
 interface PickupState {
   readonly templates: ReadonlyMap<string, THREE.Object3D>;
   readonly group: THREE.Group;
+  readonly halo: THREE.Sprite;
   readonly meshes: Map<string, THREE.Object3D>;
   // Mirrors of meshes' values, so update() walks arrays without allocating an iterator.
   active: THREE.Object3D[];
@@ -221,7 +240,10 @@ function placePickups(
       mesh.scale.setScalar(KIT_SCALE.survival * 0.35);
       mesh.position.set(p.x, 0, p.z);
       mesh.userData.grounded = true;
-    } else mesh.position.set(p.x, HOVER, p.z);
+    } else {
+      mesh.position.set(p.x, HOVER, p.z);
+      mesh.add(s.halo.clone()); // shares the one material and geometry
+    }
     s.group.add(mesh);
     s.meshes.set(p.id, mesh);
   }
@@ -248,10 +270,18 @@ function updatePickups(s: PickupState, dt: number, eye: { x: number; z: number }
   }
 }
 
+function haloSprite(): THREE.Sprite {
+  const sprite = new THREE.Sprite(glowMaterial());
+  sprite.scale.setScalar(GLOW.size);
+  sprite.castShadow = false;
+  return sprite;
+}
+
 export async function createPickupMeshes(scene: THREE.Scene): Promise<PickupMeshes> {
   const group = new THREE.Group();
   const s: PickupState = {
     templates: await loadTemplates(),
+    halo: haloSprite(),
     group,
     meshes: new Map(),
     active: [],
@@ -265,6 +295,7 @@ export async function createPickupMeshes(scene: THREE.Scene): Promise<PickupMesh
     update: (dt, eye) => updatePickups(s, dt, eye),
     dispose() {
       group.removeFromParent();
+      s.halo.material.dispose();
       s.meshes.clear();
       s.active = [];
       s.all = [];

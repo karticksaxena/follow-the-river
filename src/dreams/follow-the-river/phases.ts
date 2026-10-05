@@ -127,7 +127,10 @@ const DAY_CARD: Readonly<Record<string, string>> = {
 /** First-time hints for a phase: the generic one, then the night's own (Night 2, Night 3). */
 function phaseHints(f: Flow): string[] {
   const { phase } = f.save;
-  if (!isNight(phase)) return [...hintPages(f, 'pickup')];
+  if (!isNight(phase)) {
+    const own = (['pickup', 'day2', 'day3'] as const)[chapterOf(phase) - 1];
+    return [...hintPages(f, 'pickup'), ...(own && own !== 'pickup' ? hintPages(f, own) : [])];
+  }
   const own = (['night1', 'night2', 'night3'] as const)[chapterOf(phase) - 1];
   return [...hintPages(f, 'night'), ...(own ? hintPages(f, own) : [])];
 }

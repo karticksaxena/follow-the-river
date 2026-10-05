@@ -5,6 +5,7 @@ import { SUBURBS } from './areas/suburbs';
 import type { WaveDef } from './areas/types';
 import { NIGHT_DIFFICULTY } from './difficulty';
 import { spawnFor } from './flow';
+import { nearBox } from './houses';
 import { EDGE_X } from './river';
 import { shackBounds } from './shack';
 import {
@@ -346,10 +347,9 @@ describe('fallback and ambush placement', () => {
 });
 
 describe('edge supplies and the objective', () => {
-  it('puts three small supplies at the water edge of every zone', () => {
+  it('puts three small supplies in every zone', () => {
     const list = edgePickups(CITY);
     expect(list).toHaveLength(CITY.waves.length * 3);
-    for (const p of list) expect(p.x).toBeGreaterThan(EDGE_X - 1);
     expect(list.map((p) => p.kind).slice(0, 3)).toEqual(['ammo', 'arrows', 'ammo']);
     expect(new Set(list.map((p) => p.id)).size).toBe(list.length);
     expect(list.slice(0, 3).map((p) => p.z)).toEqual([
@@ -357,6 +357,24 @@ describe('edge supplies and the objective', () => {
       first().z - 55,
       first().z - 85,
     ]);
+  });
+
+  it('spreads them across the strip, clear of shacks, houses and solid props', () => {
+    for (const area of [CITY, SUBURBS, FOREST]) {
+      const list = edgePickups(area);
+      expect(new Set(list.map((p) => p.x)).size).toBeGreaterThanOrEqual(3);
+      expect(list.some((p) => p.x > EDGE_X - 1)).toBe(true);
+      const solids = area.props.filter((q) => q.collide);
+      const bounds = area.shacks.map(shackBounds);
+      const bad = list.filter(
+        (p) =>
+          p.x <= area.landX + 1 ||
+          p.x >= EDGE_X ||
+          nearBox(bounds, p.x, p.z, 1) ||
+          solids.some((q) => Math.hypot(p.x - q.x, p.z - q.z) <= 2.5),
+      );
+      expect(bad.map((p) => p.id)).toEqual([]);
+    }
   });
 
   it('always says what to do', () => {
@@ -368,7 +386,7 @@ describe('edge supplies and the objective', () => {
     expect(objective({ ...o, fighting: true, houses: true })).toBe(
       'Kill them all. Search the houses for ammo. The barricade falls when the wave is dead.',
     );
-    expect(objective({ ...o, night: false })).toMatch(/Search for supplies/);
+    expect(objective({ ...o, night: false })).toMatch(/Search the sheds.*Feed Dras/);
     expect(objective({ ...o, lake: true, wave: 3 })).toMatch(/Mom is waiting/);
     expect(objective({ ...o, ending: true })).toBe('');
     expect(objective({ ...o, fighting: true, waiting: true })).toBe(

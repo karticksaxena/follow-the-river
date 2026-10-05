@@ -1,5 +1,7 @@
 export type HintId =
   | 'pickup'
+  | 'day2'
+  | 'day3'
   | 'shack'
   | 'bow'
   | 'bowStory'
@@ -22,9 +24,10 @@ export type HintId =
 /** Player-paced pages, each shown once per run (ids are kept in `RunState.hints`). */
 export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   pickup: [
-    'Batteries, arrows and fish packs lie about. In the dark, your flashlight finds them.',
-    'Walk up to one and press E to pick it up.',
-    'Click to shoot your bow. F turns your flashlight on and off.',
+    'Batteries, arrows and fish packs lie about. Walk up to one and press E to pick it up.',
+    'Explore the sheds by the road. Supplies and a tape are inside: go in and search them with your flashlight (F).',
+    "Feed Dras: at the water's edge, press E to throw her a fish pack. The more you feed her, the hungrier she gets, and the more she helps you at night.",
+    'Keep moving downstream and follow the river. Click to shoot your bow.',
   ],
   shack: [
     'It is pitch black in here.',
@@ -65,9 +68,24 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   tape: ["A video tape. Mom's handwriting on the label."],
   night1: [
     "Ammo is scarce. Search the dark houses along the road with your flashlight: ammo, arrows and each wave's crate are inside. Mind the corners.",
+    "Keep following the river, and feed Dras at the water's edge: the more she eats, the more she helps you.",
   ],
-  night2: ['Corn hides them. Listen.'],
-  night3: ['The lake. Mom is waiting at the lake.'],
+  day2: [
+    'The suburbs. Search the sheds for supplies, and feed Dras at the water.',
+    'Keep following the river.',
+  ],
+  day3: [
+    'The forest. Search the cabin for supplies, and feed Dras at the water.',
+    'Keep following the river.',
+  ],
+  night2: [
+    'Corn hides them. Listen.',
+    "Keep following the river. Search the sheds for ammo, and feed Dras at the water's edge: she helps more the hungrier she is.",
+  ],
+  night3: [
+    'The lake. Mom is waiting at the lake.',
+    'Keep following the river. Search the cabin, and feed Dras: the more fish she eats, the harder she hunts for you.',
+  ],
   pistol: [
     'A police pistol. Press 2 for it, 1 for the bow.',
     'It stops anything - but every shot is loud, and they will come.',
