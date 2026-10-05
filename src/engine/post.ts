@@ -97,8 +97,9 @@ interface Built {
   graph: Graph;
   /** Everything that owns GPU targets: the graph's nodes plus bloom, SMAA and DOF. */
   owned: Disposable[];
-  gameplay: THREE.Node;
-  cinematic: THREE.Node | null;
+  /** One pipeline (one quad material) per output, built once and kept: switching never rebuilds a shader. */
+  gameplay: THREE.RenderPipeline;
+  cinematic: THREE.RenderPipeline | null;
 }
 
 const asByte = (p: ReturnType<typeof pass>, name: string): void => {
@@ -198,8 +199,6 @@ export function createPost(
   camera: THREE.PerspectiveCamera,
   start: Tier,
 ): Post {
-  const pipeline = new THREE.RenderPipeline(renderer);
-  pipeline.outputColorTransform = false;
   const grading = createGrading('night', POST.bloomStrength);
   const focusAt = uniform(3);
   const webgpu = 'isWebGPUBackend' in renderer.backend;
@@ -261,48 +260,53 @@ export function createPost(
   let tier = allowed(start);
   let cinematic = false;
   const built = new Map<Tier, Built>();
+  const pipe = (output: THREE.Node): THREE.RenderPipeline => {
+    const p = new THREE.RenderPipeline(renderer, output);
+    p.outputColorTransform = false;
+    return p;
+  };
   const current = (): Built => {
     let b = built.get(tier);
     if (!b) {
       const graph = BUILD[tier](camera);
       const owned = [...graph.owned];
       addLight(graph, noMist ? 0 : volumeSteps(tier, webgpu), owned);
-      b = { graph, owned, gameplay: finish(graph, false, owned), cinematic: null };
+      b = { graph, owned, gameplay: pipe(finish(graph, false, owned)), cinematic: null };
       built.set(tier, b);
     }
     return b;
   };
-  const apply = (): void => {
+  /** The pipeline to draw; the cinematic one is built on first use (behind a black fade). */
+  const active = (): THREE.RenderPipeline => {
     const b = current();
-    pipeline.outputNode = cinematic ? (b.cinematic ??= finish(b.graph, true, b.owned)) : b.gameplay;
-    pipeline.needsUpdate = true;
+    return cinematic ? (b.cinematic ??= pipe(finish(b.graph, true, b.owned))) : b.gameplay;
   };
   const release = (old: Built | undefined): void => {
-    if (old) disposeOwned(old.owned);
+    if (!old) return;
+    old.gameplay.dispose();
+    old.cinematic?.dispose();
+    disposeOwned(old.owned);
   };
   /** Builds every graph again (the mist or the rays came or went), then frees the old ones. */
   const rebuild = (): void => {
     const old = [...built.values()];
     built.clear();
-    apply();
+    active();
     for (const b of old) release(b);
   };
   let warming = 0;
-  apply();
+  active();
 
   return {
     render(scene) {
       for (const p of current().graph.passes) p.scene = scene;
-      pipeline.render();
-      if (warming > 0 && --warming === 0) {
-        cinematic = false;
-        apply();
-      }
+      active().render();
+      if (warming > 0 && --warming === 0) cinematic = false;
     },
     warm() {
       cinematic = true;
       warming = 2;
-      apply();
+      active();
     },
     update: (dt) => grading.update(dt),
     setTier(next) {
@@ -311,7 +315,7 @@ export function createPost(
       const old = built.get(tier);
       built.delete(tier);
       tier = wanted;
-      apply();
+      active();
       release(old);
       return tier;
     },
@@ -324,12 +328,11 @@ export function createPost(
       if (distance !== undefined) focusAt.value = distance;
       if (on === cinematic) return;
       cinematic = on;
-      apply();
+      active();
     },
     grade: (preset, seconds) => grading.set(preset, seconds),
     dispose() {
       for (const b of built.values()) release(b);
-      pipeline.dispose();
     },
   };
 }
