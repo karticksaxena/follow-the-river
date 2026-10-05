@@ -57,7 +57,7 @@ const PICKUP_KINDS: readonly PickupKind[] = [
 type Undo = () => void;
 
 /** Resolves after the stage's loop has drawn `n` frames. */
-function frames(stage: Stage, n: number): Promise<void> {
+export function frames(stage: Stage, n: number): Promise<void> {
   return new Promise((done) => {
     let left = n;
     const stop = stage.addUpdater(() => {

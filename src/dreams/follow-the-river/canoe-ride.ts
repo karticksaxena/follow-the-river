@@ -15,6 +15,7 @@ import {
   type CalfPose,
   type Script,
 } from './canoe-timing';
+import { warmRide } from './canoe-warm';
 import { CINEMATIC } from './flashback';
 import { dripAt, type Motion } from './motion';
 import { lookAt } from './rig';
@@ -376,34 +377,49 @@ async function run(
   const [cs] = await Promise.all([
     buildCanoeScene(length, stage).catch(() => null),
     replay ? undefined : overlay.fade(true, RIDE.fadeMs),
-  ]).finally(stopLoading);
+  ]);
   if (stage.scene !== previous || !cs) {
+    stopLoading();
     cs?.dispose();
     if (cs) return done();
     // A failed load still ends the dream with the pages as text.
     return ctx.read(CLOSING_PAGES, done);
   }
-  try {
-    stageRide(ctx, sounds, cs, previous, done);
-  } catch {
+  const fail = (): void => {
     // Anything thrown after the fade must not leave a black screen: same fallback as a failed build.
     cs.dispose();
     if (stage.scene === cs.scene) stage.scene = previous;
     void ctx.overlay.fade(false, RIDE.fadeMs);
     ctx.read(CLOSING_PAGES, done);
+  };
+  try {
+    const r = makeRide(ctx, sounds, cs);
+    // Still behind black and the loader: compile everything the ride shows (canoe-warm.ts).
+    await warmRide(
+      r,
+      previous,
+      [0, RIDE.seconds / 2, RIDE.seconds].map((t) => canoePose(t, newPose())),
+    );
+    stopLoading();
+    stageRide(ctx, sounds, cs, r, previous, done);
+  } catch {
+    stopLoading();
+    fail();
   }
 }
+
+const newPose = (): Pose => ({ x: 0, y: 0, z: 0, yaw: 0, roll: 0 });
 
 /** Builds the ride around the loaded scene, wires its teardown and starts it. May throw; `run` catches. */
 function stageRide(
   ctx: DreamContext,
   sounds: Sounds,
   cs: CanoeScene,
+  r: Ride,
   previous: THREE.Scene,
   done: () => void,
 ): void {
   const { stage } = ctx;
-  const r = makeRide(ctx, sounds, cs);
   const water = ctx.audio.loop(sounds.water, VOLUME.water);
   const birds = sounds.birds ? ctx.audio.loop(sounds.birds, 0) : null;
   const graded = ctx.grade('sunrise');
