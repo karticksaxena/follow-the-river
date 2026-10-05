@@ -1,3 +1,5 @@
+import { LOCKED_KEYS } from './fullscreen';
+
 function keyCode(event: Event): string {
   return 'code' in event && typeof event.code === 'string' ? event.code : '';
 }
@@ -6,14 +8,32 @@ function buttonCode(event: Event): string {
   return 'button' in event && typeof event.button === 'number' ? `Mouse${event.button}` : '';
 }
 
+const GAME_KEYS = new Set(LOCKED_KEYS);
+
+/** True when the browser's own action for this key (scroll, find, reload, save ...) must be cancelled. */
+export function blocksDefault(code: string, typing: boolean): boolean {
+  return !typing && GAME_KEYS.has(code);
+}
+
+function isTyping(target: EventTarget | null): boolean {
+  return (
+    typeof HTMLElement !== 'undefined' &&
+    target instanceof HTMLElement &&
+    (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
+  );
+}
+
 /** Tracks which keys are held, by physical key code (so WASD works on any layout). */
 export class KeyState {
   private readonly held = new Set<string>();
   private readonly pressed = new Set<string>();
   private target: EventTarget | null = null;
+  /** On while playing (not in menus, where Tab/Space/arrows must work). */
+  blockDefaults = false;
 
   private readonly onDown = (event: Event): void => {
     const code = keyCode(event);
+    if (this.blockDefaults && blocksDefault(code, isTyping(event.target))) event.preventDefault();
     const repeat = 'repeat' in event && event.repeat === true;
     if (!repeat) this.pressed.add(code);
     this.held.add(code);

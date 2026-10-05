@@ -18,6 +18,9 @@ export interface Player {
   /** Dev `?nolock`: turn the view with plain mouse movement while playing, locked or not. */
   freeLook(on: boolean): void;
   unlock(): void;
+  isLocked(): boolean;
+  /** On: mouse look off while pages show over a still-locked pointer. */
+  holdLook(on: boolean): void;
   teleport(x: number, z: number, yaw: number): void;
   setSensitivity(sensitivity: number): void;
   /** Off: no walking, mouse look or jumping (a cinematic); a jump in flight still lands. */
@@ -49,6 +52,7 @@ export function createPlayer(
   // (still held as play resumes) doesn't jump.
   let spaceHeld = true;
   let inputOn = true;
+  let lookHeld = false;
   const moveBy = (dx: number, dz: number): void => {
     const x = camera.position.x + dx;
     const z = camera.position.z + dz;
@@ -70,6 +74,11 @@ export function createPlayer(
       if (request instanceof Promise) request.catch(() => undefined);
     },
     unlock: () => controls.unlock(),
+    isLocked: () => controls.isLocked,
+    holdLook(on) {
+      lookHeld = on;
+      controls.enabled = inputOn && !on;
+    },
     freeLook(on) {
       spaceHeld = true;
       controls.isLocked = on;
@@ -94,7 +103,7 @@ export function createPlayer(
     },
     setInputEnabled(on) {
       inputOn = on;
-      controls.enabled = on; // gates PointerLockControls' mouse look
+      controls.enabled = on && !lookHeld; // gates PointerLockControls' mouse look
       spaceHeld = true;
     },
     update(dt) {

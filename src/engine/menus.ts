@@ -53,7 +53,7 @@ export function showPages(
   };
   const onKey = (event: KeyboardEvent): void => {
     // Another screen replaced these pages: stop listening instead of acting on stale state.
-    if (!panel.isConnected) return removeEventListener('keydown', onKey);
+    if (!panel.isConnected) return stopListening();
     const action = pagerActionForKeyEvent({
       code: event.code,
       repeat: event.repeat,
@@ -64,10 +64,20 @@ export function showPages(
     event.preventDefault();
     act(action);
   };
+  // The mouse stays locked over pages (re-locking after each one re-shows Chrome's full-screen
+  // bubble), so the buttons can't be clicked: a plain click turns the page. Esc frees the mouse.
+  const onClick = (): void => {
+    if (!panel.isConnected) return stopListening();
+    if (document.pointerLockElement) act('next');
+  };
+  const stopListening = (): void => {
+    removeEventListener('keydown', onKey);
+    removeEventListener('click', onClick);
+  };
   const act = (action: PagerAction): void => {
     state = stepPager(state, action);
     if (!state.done) return render();
-    removeEventListener('keydown', onKey);
+    stopListening();
     overlay.closePanel();
     hooks.onClose?.(action === 'skip');
     onDone();
@@ -79,11 +89,17 @@ export function showPages(
       next,
       button('Skip', () => act('skip'), 'btn quiet'),
     );
-    body.append(text, count, row, el('p', 'keys', 'Enter / → next · ← back'));
+    body.append(
+      text,
+      count,
+      row,
+      el('p', 'keys', 'Enter / click / → next · ← back · Esc shows the mouse'),
+    );
   });
   // Caption at the top: what the text is about (the TV, Mom, the horde) sits at or below eye level.
   panel.classList.add('caption');
   addEventListener('keydown', onKey);
+  addEventListener('click', onClick);
   render();
 }
 

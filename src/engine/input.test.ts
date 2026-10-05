@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KeyState } from './input';
+import { blocksDefault, KeyState } from './input';
 
 function key(type: 'keydown' | 'keyup', code: string, repeat = false): Event {
   return Object.assign(new Event(type), { code, repeat });
@@ -59,5 +59,29 @@ describe('KeyState mouse buttons', () => {
     keys.detach();
     target.dispatchEvent(mouse('mousedown', 2));
     expect(keys.isDown('Mouse2')).toBe(false);
+  });
+});
+
+describe('blockDefaults', () => {
+  it('cancels the browser action of game keys only while playing', () => {
+    const target = new EventTarget();
+    const keys = new KeyState();
+    keys.attach(target);
+    const press = (code: string): boolean => {
+      const event = Object.assign(new Event('keydown', { cancelable: true }), { code });
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(press('Space')).toBe(false);
+    keys.blockDefaults = true;
+    expect(press('Space')).toBe(true);
+    expect(press('KeyF')).toBe(true);
+    expect(press('Escape')).toBe(false);
+    expect(press('KeyZ')).toBe(false);
+  });
+
+  it('never blocks while a text field has focus', () => {
+    expect(blocksDefault('Space', false)).toBe(true);
+    expect(blocksDefault('Space', true)).toBe(false);
   });
 });

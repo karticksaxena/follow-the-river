@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { App } from './app';
 import type { DreamContext, DreamInfo, DreamModule } from './dreams/types';
 import { disposeScene } from './engine/dispose';
+import { lockKeyboard, unlockKeyboard } from './engine/fullscreen';
 import { screenAfter, type LockEvent, type Screen } from './engine/lock';
 import { showChoice, showPages, showPauseMenu, type PageHooks } from './engine/menus';
 import { createPlayer, type Player } from './engine/player';
@@ -25,8 +26,11 @@ interface Gate {
   player: Player;
   lock: () => void;
   isPaused: () => boolean;
-  /** Pause for a reader or choice screen. */
-  openReader: () => void;
+  /**
+   * Pause for pages or a choice. The pointer stays locked (no new Chrome full-screen bubble on
+   * every page) unless `cursor`: a choice's buttons need the mouse.
+   */
+  openReader: (cursor: boolean) => void;
   /** Leave the reader screen and resume play. */
   closeReader: () => void;
   dispose: () => void;
@@ -39,6 +43,9 @@ function createGate(app: App, showMenu: () => void): Gate {
   const setScreen = (next: Screen): void => {
     screen = next;
     app.audio.setWorldPaused(next !== 'game');
+    app.keys.blockDefaults = next === 'game';
+    if (next === 'game') lockKeyboard();
+    else if (next === 'pause-menu') unlockKeyboard();
     // Dev `?nolock` acts like a real lock: the mouse turns the view and hides only while playing.
     if (NO_LOCK) {
       player.freeLook(next === 'game');
@@ -74,16 +81,22 @@ function createGate(app: App, showMenu: () => void): Gate {
     player,
     lock,
     isPaused: () => screen !== 'game',
-    openReader: () => {
+    openReader: (cursor) => {
       reading = true;
       setScreen('reader');
-      player.unlock();
+      if (cursor) player.unlock();
+      else player.holdLook(true);
     },
     closeReader: () => {
       reading = false;
-      lock();
+      player.holdLook(false);
+      // Still locked (pages): resume without asking again. Otherwise ask, which may show the bubble.
+      if (player.isLocked()) onLock('locked');
+      else lock();
     },
     dispose: () => {
+      unlockKeyboard();
+      app.keys.blockDefaults = false;
       removeEventListener('keydown', onEscape);
       stopMove();
       player.dispose();
@@ -126,7 +139,7 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
     onQuit();
   }
   const read = (pages: readonly string[], onDone?: () => void, hooks?: PageHooks): void => {
-    gate.openReader();
+    gate.openReader(false);
     showPages(
       app.overlay,
       pages,
@@ -139,7 +152,7 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
   };
   const choose = (text: string, labels: readonly string[], focus = 0): Promise<number> =>
     new Promise((resolve) => {
-      gate.openReader();
+      gate.openReader(true);
       showChoice(
         app.overlay,
         text,
@@ -151,7 +164,7 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
         focus,
       );
     });
-  const hold = (): void => gate.openReader();
+  const hold = (): void => gate.openReader(false);
   const finish = (): void => {
     hold(); // freeze input so the pause menu can't open during the fade
     void app.overlay.fade(true).then(leave);
