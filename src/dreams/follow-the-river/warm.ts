@@ -139,6 +139,15 @@ function showPickups(
   };
 }
 
+/** The whole sky on (the dawn's physical sky, sun disc, halo, moon, stars) so none compiles mid-cinematic; returns the undo. */
+function showSky(sys: Systems): Undo {
+  const { disc, halo, moon, stars, physical } = sys.world.lights;
+  const parts = [disc, halo, moon, stars, physical];
+  const before = parts.map((p) => p.visible);
+  for (const p of parts) p.visible = true;
+  return () => parts.forEach((p, i) => (p.visible = before[i] ?? false));
+}
+
 const UP = { x: 0, y: 1, z: 0 };
 
 /** The arrow in flight and a big splash, so their materials and particles compile; returns the undo. */
@@ -252,7 +261,7 @@ export async function warmArea(
     pose(camera, water - WARM_STAND_OFF, camera.position.z, HEADINGS[0]);
     spawnOutfits(sys.horde, camera.position);
     undo.push(sys.fish.warmShow(water + WARM_ORCA_OUT, camera.position.z));
-    undo.push(torchOn(sys, opts.battery), sys.world.showAllPlants());
+    undo.push(torchOn(sys, opts.battery), sys.world.showAllPlants(), showSky(sys));
     undo.push(showPickups(sys, run, camera.position), showEffects(sys, camera.position));
     for (const show of opts.extras ?? []) undo.push(show());
     undo.push(unculled(stage.scene));

@@ -165,6 +165,12 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
       setSurfaceTier(tier);
     }
     if (change) onResize();
+    // DEV marker in `__kdLong`: [-1, resolution step] for a resize, [-2, 0|1|2 = tier now] for a tier change (a rebuilt post graph).
+    if (import.meta.env.DEV && change) {
+      longFrames.push(
+        change === 'res' ? [-1, quality.step] : [-2, ['low', 'medium', 'high'].indexOf(tier)],
+      );
+    }
   };
   // DEV: `window.__kdLong` lists every frame over LONG_FRAME as [time ms, frame ms] (hitches show up here).
   const longFrames: number[][] = [];

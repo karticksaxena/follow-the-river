@@ -447,7 +447,12 @@ export async function createFish(
       const ry = f.root.rotation.y;
       f.root.visible = true;
       f.root.position.set(x, 1, z);
+      // The breath's sprite and the pack she is given (shown only in the farewell) compile now too.
+      const extras = [f.mist, f.packModel];
+      const was = extras.map((o) => o.visible);
+      for (const o of extras) o.visible = true;
       return () => {
+        extras.forEach((o, i) => (o.visible = was[i] ?? false));
         f.root.visible = visible;
         f.root.position.set(px, py, pz);
         f.root.rotation.y = ry;

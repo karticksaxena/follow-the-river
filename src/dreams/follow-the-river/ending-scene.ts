@@ -235,7 +235,14 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
       const shown = [mom.group, kartik.group, mom.pack, arm];
       const before = shown.map((o) => o.visible);
       for (const o of shown) o.visible = true;
-      return () => shown.forEach((o, i) => (o.visible = before[i] ?? false));
+      setWaterReflectionSharp(true); // the farewell's mirror is a bigger target: it builds now, not at the farewell
+      moon.intensity = FAREWELL_LIGHT.moon.intensity;
+      fill.intensity = FAREWELL_LIGHT.fill.intensity;
+      return () => {
+        shown.forEach((o, i) => (o.visible = before[i] ?? false));
+        setWaterReflectionSharp(false);
+        moon.intensity = fill.intensity = 0;
+      };
     },
     update(dt) {
       actor.update(dt);

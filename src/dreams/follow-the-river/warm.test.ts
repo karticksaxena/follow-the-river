@@ -72,6 +72,9 @@ function fakeSys(compile: () => Promise<void>, log: string[]): Systems {
       }),
     },
     world: {
+      lights: Object.fromEntries(
+        ['disc', 'halo', 'moon', 'stars', 'physical'].map((k) => [k, { visible: false }]),
+      ),
       showAllPlants: vi.fn(() => {
         log.push('plants on');
         return () => log.push('plants off');
