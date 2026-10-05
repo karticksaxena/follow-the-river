@@ -13,8 +13,13 @@ import {
 import { lakeDepth, type LakeFrame, mouthFlare } from './shore-shape';
 import { createWaterMesh, LAKE_FLOW, setWaterAttribute } from './water';
 
-/** Shore terrain grid cell (m). A 4 m slope takes about one and a half cells. Tuning knob. */
+/** Water grid cell (m). Tuning knob. */
 const CELL = 3;
+/**
+ * Shore terrain grid cell (m). It divides the 6 m of pebbles and the 4 m slope, so a row falls on the water line
+ * and on where the slope levels off and the mesh is `shoreY` exactly there: the orca lies on it, not above it.
+ */
+export const SHORE_CELL = 2;
 /**
  * Pure: 0 pebbles .. 1 land at `depth` m inside the lake outline. It reaches 1 at the shore mesh's
  * own edge (`LAKE.pebbleDepth` on land), where the grass ground plane begins: a smaller value
@@ -40,8 +45,8 @@ function shoreMesh(r: Rect, frame: LakeFrame, landColor: number, land: SurfaceNa
   const geo = new THREE.PlaneGeometry(
     width,
     depth,
-    Math.ceil(width / CELL),
-    Math.ceil(depth / CELL),
+    Math.ceil(width / SHORE_CELL),
+    Math.ceil(depth / SHORE_CELL),
   );
   geo.rotateX(-Math.PI / 2);
   const cx = (r.x0 + r.x1) / 2;

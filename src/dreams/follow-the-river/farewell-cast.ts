@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { Rail } from './camera-rail';
 import { placeArm } from './farewell-arm';
 import type { Fish } from './fish';
+import { lightViewmodel, viewLightsFor } from './view-light';
 
 /** Tuning knobs (s, 1/s, m). */
 export const CAST = {
@@ -59,6 +60,7 @@ export function createCast(scene: Players, camera: THREE.Camera, fish: Pick<Fish
   let time = 0;
   let following = false;
   let floatY = 0;
+  lightViewmodel(scene.arm, viewLightsFor(camera).node); // lit by the world, never by a torch on the camera
   const cast: Cast = {
     hold: null,
     follow(on) {
@@ -73,6 +75,7 @@ export function createCast(scene: Players, camera: THREE.Camera, fish: Pick<Fish
     float: null,
     update(dt) {
       time += dt;
+      if (cast.arm) viewLightsFor(camera).update(dt);
       if (cast.hold) cast.hold.pose(cast.hold.seconds, camera);
       if (following) followHer(camera, fish, look, eye, dt);
       stepArm(cast, scene, camera, hand, dt);

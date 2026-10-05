@@ -7,14 +7,17 @@ Sit, SitTalk, Kneel (a seamless hold cut from Fixing_Kneeling), Crouch and Talk,
 Universal Animation Libraries with ual_retarget.py (hips never travel; the game moves the character).
 
 The arm is a static mesh of his right forearm and hand plus the short-sleeve hem, cut from the body by bone
-weights in the rest pose, then turned palm down with fingers forward: origin at the elbow, metres,
-+Z (glTF / three.js) toward the fingertips, +Y up, the thumb on the +X side. No skeleton.
+weights after posing the hand (wrist bent back, fingers and thumb fanned a little: a hand laid flat on a
+surface with the forearm coming in from the player's side), then turned palm down with fingers forward:
+origin at the middle of the palm, metres, +Z (glTF / three.js) toward the fingertips, +Y up (the back of the
+hand), the thumb on the +X side, the forearm trailing behind and above. No skeleton.
 
 Run headless from the repo root:
   /Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python tools/blender/kartik.py -- \\
     <UAL1 AL_Standard.fbx> <UAL2_Standard.glb> <Casual2 kZ3DmIoGip.glb> public/assets/characters/kartik.glb public/assets/characters/kartik-arm.glb
 """
 
+import math
 import re
 import sys
 from pathlib import Path
@@ -40,6 +43,8 @@ COLOURS = {
 FINGERS = re.compile(r"^(Index|Middle|Ring|Pinky|Thumb)\d\.R$")
 ARM_BONES = {"LowerArm.R", "Wrist.R"}
 HEM_REACH = 0.16  # metres of upper arm kept above the elbow: the short sleeve and its hem
+WRIST_BACK = math.radians(40)  # the wrist bends back (hand pressed flat, forearm angled in from the player's side)
+SPREAD = {"Index": 7, "Ring": 7, "Pinky": 13, "Thumb": 16}  # degrees each finger fans out from the middle finger
 
 
 def linear(hexstr):
@@ -71,8 +76,49 @@ def arm_basis(arm):
     return t, f.cross(t).normalized(), f
 
 
+def rotate_about(arm, bone, point, axis, angle):
+    """Turns a pose bone (and its children) by `angle` about `axis` through `point` (armature space)."""
+    pb = arm.pose.bones[bone]
+    move = Matrix.Translation(point)
+    pb.matrix = move @ Matrix.Rotation(angle, 4, axis) @ move.inverted() @ pb.matrix
+    bpy.context.view_layer.update()
+
+
+def turn_toward(arm, bone, point, axis, angle, probe, goal):
+    """rotate_about, in whichever direction brings the bone `probe`'s head nearer the world point `goal`."""
+    before = (world_head(arm, probe) - goal).length
+    rotate_about(arm, bone, point, axis, angle)
+    if (world_head(arm, probe) - goal).length > before:
+        rotate_about(arm, bone, point, axis, -2 * angle)
+
+
+def pose_hand(arm):
+    """Wrist bent back, fingers fanned. Returns the undo."""
+    saved = {pb.name: pb.matrix_basis.copy() for pb in arm.pose.bones}
+    to_arm = arm.matrix_world.inverted()
+    local = lambda v: to_arm.to_3x3() @ v
+    t, u, f = arm_basis(arm)
+    wrist = to_arm @ world_head(arm, "Wrist.R")
+    # the fingers move toward the back of the hand (+u): the wrist extends
+    goal = world_head(arm, "Wrist.R") + f * 0.1 + u * 0.1
+    turn_toward(arm, "Wrist.R", wrist, local(t), WRIST_BACK, "Middle2.R", goal)
+    for finger, degrees in SPREAD.items():
+        t, u, f = arm_basis(arm)  # the hand has moved
+        head = world_head(arm, f"{finger}1.R")
+        out = 1 if (world_head(arm, f"{finger}2.R") - world_head(arm, "Middle2.R")).dot(t) > 0 else -1
+        goal = world_head(arm, f"{finger}2.R") + t * out * 0.1
+        turn_toward(arm, f"{finger}1.R", to_arm @ head, local(u), math.radians(degrees), f"{finger}2.R", goal)
+
+    def undo():
+        for name, matrix in saved.items():
+            arm.pose.bones[name].matrix_basis = matrix
+        bpy.context.view_layer.update()
+
+    return undo
+
+
 def cut_arm(arm, body):
-    """New mesh object: the right forearm, hand and sleeve hem of `body` in the rest pose, turned palm down."""
+    """New mesh object: the right forearm, hand and sleeve hem of `body` (hand posed), turned palm down, origin mid-palm."""
     dg = bpy.context.evaluated_depsgraph_get()
     me = bpy.data.meshes.new_from_object(body.evaluated_get(dg), preserve_all_data_layers=True, depsgraph=dg)
     me.transform(body.matrix_world)  # world space, metres
@@ -106,7 +152,8 @@ def cut_arm(arm, body):
     # glTF (x, y, z) = Blender (x, z, -y): thumb side +X, up +Y, fingers +Z -> Blender (1,0,0), (0,0,1), (0,-1,0)
     want = Matrix(((1, 0, 0), (0, 0, 1), (0, -1, 0))).transposed()  # columns: thumb, up, fingers targets
     have = Matrix((t, u, f))  # rows
-    me.transform(Matrix.Translation(-elbow))
+    middle = world_head(arm, "Wrist.R").lerp(world_head(arm, "Middle2.R"), 0.5)  # the middle of the palm
+    me.transform(Matrix.Translation(-middle))
     me.transform((want @ have).to_4x4())
     obj = bpy.data.objects.new("KartikArm", me)
     bpy.context.scene.collection.objects.link(obj)
@@ -114,7 +161,9 @@ def cut_arm(arm, body):
 
 
 def export_arm(arm, body):
+    unpose = pose_hand(arm)
     obj = cut_arm(arm, body)
+    unpose()
     bpy.ops.object.select_all(action="DESELECT")
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj

@@ -245,6 +245,33 @@ def prep_eyes(body, hits):
     bm.free()
 
 
+BIND_FULL, BIND_FADE = 0.17, 0.32
+
+
+def bind_skin_to_eyes(body, hits):
+    """Skin round each eye moves with the eye (100 % Head, fading out to its old weights by BIND_FADE).
+
+    The eye is 100 % Head but the skin there was ~81 % Head, 9 % Spine1, 11 % Jaw: when the head turns about her nose
+    (the farewell) the skin lagged the eye by ~5 cm and swallowed it (the eye is only ~1.8 cm proud of the skin).
+    """
+    groups = body.vertex_groups
+    for v in body.data.vertices:
+        k = 0.0
+        for side, h in hits:
+            d = (v.co - h).length
+            if v.co.x * side > 0 and d < BIND_FADE:
+                k = max(k, 1.0 if d <= BIND_FULL else 1 - (d - BIND_FULL) / (BIND_FADE - BIND_FULL))
+        old = {groups[g.group].name: g.weight for g in v.groups}
+        if k <= 0 or old.get("Jaw", 0) > 0.5:
+            continue  # untouched, or the lower jaw shell (it must open)
+        for name in old:
+            groups[name].remove([v.index])
+        for name in set(old) | {"Head"}:
+            w = old.get(name, 0.0) * (1 - k) + (k if name == "Head" else 0.0)
+            if w > 1e-4:
+                groups[name].add([v.index], w, "REPLACE")
+
+
 def sphere(b, c, r, mat, seg=(16, 12)):
     sph = bmesh.new()
     bmesh.ops.create_uvsphere(sph, u_segments=seg[0], v_segments=seg[1], radius=r)
@@ -559,6 +586,7 @@ def build():
     budget = MAX_TRIS - 300 - parts_tris
     if sum(len(p.vertices) - 2 for p in body.data.polygons) > budget:
         decimate_body(body, budget, [h for _, h in hits])
+    bind_skin_to_eyes(body, hits)
     eye_c = eyes(pb_, hits)
     parts = make_obj("Parts", pb_.bm)
     paint_fins(parts)

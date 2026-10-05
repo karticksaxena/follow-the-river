@@ -71,6 +71,9 @@ pnpm dlx @gltf-transform/cli@latest optimize /tmp/orca-raw.glb public/assets/cha
   --join false --flatten false --palette false --instance false --simplify false --texture-compress auto
 ```
 
+The skin within 0.17 m of each eye is bound 100 % to `Head` (fading to its own weights by 0.32 m, `bind_skin_to_eyes`): the eye is, so
+when the head turns about her nose in the farewell the skin used to lag it by ~5 cm and swallow the eye (it is only ~1.8 cm proud).
+
 Materials `orca-black|white|grey|mouth|eye`, bones `Head Jaw Spine1-5 Tail1 Tail2`, clips `Swim` `Lunge` and the beached
 death `Beached` (4 s loop), `TailLift` (1.5 s, starts and ends in the Beached rest pose), `Exhale` (3 s, ends still): bones
 only, no root motion, they assume she lies on her belly. The `Jaw` rest quaternion is not identity: open it by composing
@@ -173,6 +176,10 @@ No CC0 bow, shotgun-pump or dry-fire clip was found (OpenGameArt bow sounds are 
 ```
 
 Compress both with the meshopt command above (with `--resample false`).
+
+`kartik-arm.glb` is cut from the body after `pose_hand` bends the wrist back 40 degrees and fans the fingers (`WRIST_BACK`, `SPREAD`), with its
+origin at the middle of the palm (not the elbow): `farewell-arm.ts` puts that point on the skin. `CasualN` needs `kZ3DmIoGip.glb` (the
+Quaternius pack) and the two UAL files; pass a scratch path for the body output if only the arm changed.
 
 ## Textures (`public/assets/textures/`)
 

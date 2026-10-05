@@ -12,18 +12,23 @@ import { shoreY } from './river';
  * Tuning knobs (m, s, radians).
  */
 export const SHOTS = {
-  /** Kartik's hand on her flank, this far ahead of her centre; hands press this far into the skin. */
-  flank: { ahead: 2.2, press: 0.06 },
-  /** The kneel: eye height, out from her skin, how far ahead of her centre the camera kneels, and what it looks at (her head, `side` m in from her centre line, `ahead` of her centre, `down` below the eye). */
+  /** Kartik's hand on her flank, this far ahead of her centre and this high above her centre line (her body is an ellipse `tall` m high there: the skin tilts up, so the back of your hand faces you); hands press this far into the skin. */
+  flank: { ahead: 2.2, up: 0.15, tall: 0.66, press: 0.06 },
+  /**
+   * Mom's hand lies on her skin `gap` m ahead of yours (toward her head) and her wrist is held `off` m off the skin;
+   * Mom kneels `out` m from her skin and `behind` m behind her hand (so her right arm reaches about 0.5 m across the floor).
+   */
+  momHand: { gap: 0.27, off: 0.05, out: 0.4, behind: 0.31 },
+  /** The kneel: eye height, out from her skin, how far ahead of her centre the camera kneels, and what it looks at (her flank by your hand, `side` m in from her centre line, `ahead` of her centre, `down` below the eye). */
   kneel: {
-    eye: 1.05,
-    out: 0.55,
-    ahead: 1.45,
+    eye: 1.2,
+    out: 0.45,
+    ahead: 2.0,
     seconds: 2.5,
-    look: { side: 0.2, ahead: 3.0, down: 0.35 },
+    look: { side: 0.1, ahead: 2.5, down: 0.45 },
   },
-  /** Mom kneels in front of her face, facing her (never between you and her eye): `side` m out from her centre line, `beyond` her nose; her hand rests on her nose (`nose` ahead of her centre, `up` above the line). */
-  mom: { side: 0.25, beyond: 0.6, nose: 3.45, up: 0.12 },
+  /** Mom kneels in front of her face, facing her (never between you and her eye): `side` m out from her centre line, `beyond` her nose. */
+  mom: { side: 0.25, beyond: 0.6 },
   /** After she lands the camera goes to watch from the pebbles: `side` m out from her centre line, `beyond` her nose, at this eye height, looking at her eye. */
   watch: { side: 4.2, beyond: 2.3, eye: 1.55, seconds: 2.5 },
   /** Her eye: the look rail stops this far from it (out to her side, `angle` rad back toward her tail, negative: ahead) and this much above it; the look point is `shift` m toward the camera (her head turns to you, so her eye comes toward you); seconds. */
@@ -75,9 +80,12 @@ export interface Shots {
   ground(z: number): number;
   /** Her -x eye. */
   eye: V3;
-  /** Kartik's hand on her skin, and Mom's beside it. */
+  /** Kartik's hand on her skin, and where Mom's wrist is held next to it (and where she kneels to do it). */
   hand: V3;
+  /** The unit vector straight into her skin at your hand (for the palm). */
+  handIn: V3;
   momHand: V3;
+  momSide: { x: number; z: number };
   /** The camera kneeling beside her, and Kartik's body (a little behind it). */
   kneel: RailKey;
   kartik: { x: number; z: number };
@@ -192,8 +200,12 @@ function packOf(
 
 export function shotsFor(at: Shore): Shots {
   const f = frameOf(at);
-  const skin = ANATOMY.halfWidth - SHOTS.flank.press;
-  const hand = f.on(SHOTS.flank.ahead, skin);
+  const { up, tall } = SHOTS.flank;
+  const wide = ANATOMY.halfWidth * Math.sqrt(1 - (up / tall) ** 2); // her flank's half width at that height (an ellipse)
+  const hand = f.on(SHOTS.flank.ahead, wide - SHOTS.flank.press, up);
+  // Straight into her skin there (the ellipse's inward normal), for the palm.
+  const into = new THREE.Vector3(wide / ANATOMY.halfWidth ** 2, -up / tall ** 2, 0).normalize();
+  const M = SHOTS.momHand;
   const eye = f.on(ANATOMY.eye.ahead, ANATOMY.eye.side, ANATOMY.eye.up);
   const kneel = kneelKey(f, hand);
   const orbit = orbitOf(f, kneel.spot);
@@ -203,7 +215,12 @@ export function shotsFor(at: Shore): Shots {
     ground: (z) => f.ground(z),
     eye,
     hand,
-    momHand: f.on(SHOTS.mom.nose, 0, SHOTS.mom.up),
+    handIn: [into.x, into.y, into.z],
+    momHand: f.on(SHOTS.flank.ahead + M.gap, wide + M.off, up),
+    momSide: {
+      x: at.noseX - ANATOMY.halfWidth - M.out,
+      z: f.on(SHOTS.flank.ahead + M.gap)[2] + M.behind,
+    },
     kneel: kneel.key,
     kartik: kneel.body,
     mom: { x: at.noseX - SHOTS.mom.side, z: at.noseZ + SHOTS.mom.beyond },

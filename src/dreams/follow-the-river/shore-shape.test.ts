@@ -100,7 +100,7 @@ describe('Mom, the canoe and the strand point sit on the beach', () => {
 
   it('keeps them the same few metres up the beach as before the shore moved', () => {
     expect(LAKE_Z + 4.5 - mom.z).toBeCloseTo(0, 6);
-    expect(nose.noseZ - lakeEdgeZ(nose.noseX, LAKE_Z)).toBeCloseTo(3.5, 6);
+    expect(nose.noseZ - lakeEdgeZ(nose.noseX, LAKE_Z)).toBeCloseTo(5, 6); // 5 m up the beach: 71 % of her out of the water
     expect(canoe?.y).toBeCloseTo(-0.0, 0);
   });
 

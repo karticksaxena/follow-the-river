@@ -3,6 +3,7 @@ import { loadModel } from '../../engine/models';
 import type { Rail } from './camera-rail';
 import type { EndingScene } from './ending-scene';
 import { facing, meetPoint } from './ending-scene';
+import { handOnHer } from './farewell-arm';
 import type { Cast } from './farewell-cast';
 import { keyFrom, rails, SHOTS, type Shots, type V3 } from './farewell-shots';
 import { propUrl } from './kits';
@@ -19,8 +20,14 @@ import { spend } from './state';
  * Tuning knobs (m, s, volume).
  */
 export const FAREWELL = {
-  /** Where its nose comes to rest, from Mom's spot (x) and from the water line (z, up the shore). */
-  nose: { fromMom: 4.5, upShore: 3.5 },
+  /**
+   * Where its nose comes to rest, from Mom's spot (x) and from the water line (z, up the shore). One placement for every
+   * beat: `upShore` / her 7 m is the share of her out of the water (5 m: 71 %, her back well above it, only the tail end
+   * in the shallows), and `fromMom` keeps her body west of the river mouth's flared bank (shoreWest ends at
+   * x = EDGE_X - flare(z) there: east of it the ground is the bank and water, which cut her in two), 1.5 m east
+   * of where Mom waits (clear of the landing).
+   */
+  nose: { fromMom: 1.5, upShore: 5 },
   /** You may kneel from this far (m) of the kneeling spot (it is by her flank, short of the wall you cannot pass). */
   kneelRadius: 1.6,
   /** The pack's E works within this of where the camera lands. */
@@ -278,21 +285,26 @@ function waitForE(
   });
 }
 
-/** Mom's hand reaches out and rests on her nose, her eyes on hers. */
-function momReaches(s: Script): void {
+/** Mom shuffles up beside you, kneeling just ahead of your hand, and rests hers on her skin next to it, her eyes on hers. */
+async function momBeside(s: Script): Promise<void> {
+  const { actor, mom } = s.scene;
   const { aim } = s.scene;
-  aim.momHand = v3(s.shots.momHand);
-  aim.momGaze = v3(s.shots.eye);
+  const { momSide, momHand, hand, eye } = s.shots;
+  aim.momGaze = v3(eye);
+  mom.rest = 'Kneel';
+  await walkWithin(s.scene, momSide);
+  if (s.cancelled) return;
+  actor.faceTo(hand[0], hand[2]);
+  aim.momHand = v3(momHand);
 }
 
-/** Kartik's arm comes up from below the frame and rests on her skin. */
+/** Kartik's arm comes up from the lower right, where the weapons sit, and lays his hand flat on her skin (see `handOnHer`). */
 function armOnHer(s: Script): ArmJobHandle {
-  const { hand } = s.shots;
-  const target = v3(hand);
+  const { target, along, palm } = handOnHer(s.shots);
   const job = {
     hand: (out: THREE.Vector3) => out.copy(target),
-    along: new THREE.Vector3(0, -0.1, 1),
-    palm: new THREE.Vector3(1, 0, 0),
+    along,
+    palm,
     rise: 0,
     goal: 1,
   };
@@ -315,18 +327,27 @@ export async function kneel(s: Script): Promise<void> {
   if (s.cancelled) return;
   goal(s, ENDING_GOALS.stay);
   ctx.cinematic(true);
-  momReaches(s);
-  await playRail(s, rails.kneel(keyFrom(ctx.stage.camera), s.shots));
+  await Promise.all([momBeside(s), playRail(s, rails.kneel(keyFrom(ctx.stage.camera), s.shots))]);
   if (s.cancelled) return;
   const job = armOnHer(s);
   await s.until(() => job.rise >= 1);
   if (!s.cancelled) await s.read(FAREWELL_PAGES.hand);
 }
 
+/** Mom takes her hand away and goes back to kneel in front of her face (the camera is about to push in to her eye, where she knelt). */
+function momBack(s: Script): void {
+  const { mom, eye } = s.shots;
+  s.scene.aim.momHand = null;
+  void walkWithin(s.scene, mom).then(() => {
+    if (!s.cancelled) s.scene.actor.faceTo(eye[0], eye[2] - 3);
+  });
+}
+
 /** She lifts her head and turns it to you; the camera pushes in to her eye, the background soft. */
 export async function look(s: Script): Promise<void> {
   const { fish, ctx } = s.sys;
   const eye = v3(s.shots.eye);
+  momBack(s);
   if (s.cast.arm) s.cast.arm.goal = 0; // your arm lowers away: it must not float as the camera moves
   fish.lookAtTarget(ctx.stage.camera.position, 1);
   await playRail(s, rails.look(keyFrom(ctx.stage.camera), s.shots), focusOn(s, eye));
@@ -376,7 +397,7 @@ function holdPack(s: Script, pack: THREE.Object3D): { job: ArmJobHandle; lower: 
     goal: 1,
   };
   s.scene.arm.add(pack);
-  pack.position.set(0, -0.12, 0.42);
+  pack.position.set(0, -0.12, 0.04); // the arm's origin is the middle of the palm: just ahead of it, hanging from the fingers
   pack.rotation.set(0, 0, 0);
   pack.scale.setScalar(1);
   pack.visible = true;

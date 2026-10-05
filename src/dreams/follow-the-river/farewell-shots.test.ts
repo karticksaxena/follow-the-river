@@ -1,16 +1,19 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
+import type { Rail } from './camera-rail';
 import { ANATOMY } from './dras-anatomy';
 import { shoreFor } from './ending-farewell';
 import { rails, SHOTS, shotsFor, type V3 } from './farewell-shots';
-import { strandRest } from './orca-strand';
-import { shoreY, WATER_Y } from './river';
+import { SHORE_CELL, shoreHeight } from './lake';
+import { restGaps, strandRest } from './orca-strand';
+import { EDGE_X, LAKE, shoreY, WATER_Y } from './river';
+import { mouthFlare } from './shore-shape';
 
 const LAKE_Z = -392;
 const at = shoreFor({ x: -3, z: -387.5 }, LAKE_Z);
 const shots = shotsFor(at);
-/** Everywhere Mom is in the farewell: where she starts (her meeting spot), and kneeling at her face. */
-const MOMS = [{ x: -3, z: -387.5 }, shots.mom];
+/** Everywhere Mom is before the hand: her meeting spot, where she backs off to (retreatPoint), and kneeling at her face. */
+const MOMS = [{ x: -3, z: -387.5 }, { x: -3, z: LAKE_Z + 2.5 }, shots.mom];
 
 /** Every camera point of the farewell (keys of every rail, and the kneeling spots). */
 const POINTS: [string, V3][] = [
@@ -40,7 +43,7 @@ function toCentreLine(x: number, z: number): number {
 describe('the farewell shots', () => {
   it('keeps every camera point on the pebbles or above the water', () => {
     const bad = POINTS.filter(([, [, y, z]]) => {
-      const onPebbles = z >= LAKE_Z + 0.5 && z <= LAKE_Z + 6;
+      const onPebbles = z >= LAKE_Z + 0.5 && z <= LAKE_Z + 9; // the pebbles end at 6, flat grass goes on level with them
       const overWater = z < LAKE_Z + 0.5 && y >= WATER_Y + 1;
       return !(onPebbles || overWater);
     }).map(([name]) => name);
@@ -57,8 +60,8 @@ describe('the farewell shots', () => {
   it('keeps the rails clear of her too, along their whole way', () => {
     const cam = new THREE.PerspectiveCamera();
     const all = [
-      rails.watch({ at: [-4, 1.6, LAKE_Z + 12], look: [0, 1, LAKE_Z + 5] }, shots),
-      rails.kneel({ at: [-2, 1.6, LAKE_Z + 3], look: [0, 1, LAKE_Z + 5] }, shots),
+      rails.watch({ at: [at.noseX - 4, 1.6, LAKE_Z + 12], look: [0, 1, LAKE_Z + 5] }, shots),
+      rails.kneel({ at: [at.noseX - 3, 1.6, LAKE_Z + 3], look: [0, 1, LAKE_Z + 5] }, shots),
       rails.look(shots.kneel, shots),
       rails.pullBack(shots.eyeClose, shots),
       rails.orbit(shots),
@@ -78,13 +81,13 @@ describe('the farewell shots', () => {
     const [x] = shots.hand;
     expect(at.noseX - x).toBeLessThan(ANATOMY.halfWidth);
     expect(at.noseX - x).toBeGreaterThan(ANATOMY.halfWidth * 0.8);
-    expect(shots.momHand[0]).toBeCloseTo(at.noseX); // Mom's rests on her nose, in front of her face
-    expect(shots.momHand[2]).toBeGreaterThan(shots.hand[2]);
+    expect(at.noseX - shots.momHand[0]).toBeLessThan(ANATOMY.halfWidth + 0.15); // Mom's wrist is just off her skin, on the same side
+    expect(shots.momHand[2]).toBeGreaterThan(shots.hand[2]); // ahead of yours, toward her head
   });
 
   it('keeps every rail 0.6 m from Mom (wherever she kneels) at every one of 1000 samples', () => {
     const cam = new THREE.PerspectiveCamera();
-    const far = { at: [-2, 1.6, LAKE_Z + 3] as V3, look: [0, 1, LAKE_Z + 5] as V3 };
+    const far = { at: [at.noseX - 3, 1.6, LAKE_Z + 3] as V3, look: [0, 1, LAKE_Z + 5] as V3 };
     const all = [
       rails.watch(far, shots),
       rails.kneel(shots.watch, shots),
@@ -95,11 +98,20 @@ describe('the farewell shots', () => {
       rails.toPack(shots.orbit[shots.orbit.length - 1], shots),
       rails.stand(shots.packCam, shots),
     ];
+    // Where she is while each rail plays: the early spots only until the kneel; beside your hand for the kneel and the hand page; then back at her face.
+    const moms = (rail: Rail): readonly { x: number; z: number }[] =>
+      rail === all[0]
+        ? MOMS
+        : rail === all[1] || rail === all[2]
+          ? [shots.mom, shots.momSide]
+          : [shots.mom];
     for (const rail of all) {
       for (let i = 0; i <= 1000; i++) {
         rail.pose((i / 1000) * rail.seconds, cam);
-        for (const mom of MOMS) {
-          expect(Math.hypot(cam.position.x - mom.x, cam.position.z - mom.z)).toBeGreaterThan(0.6);
+        for (const mom of moms(rail)) {
+          // Beside your hand she is shuffling in while you kneel (from wherever you stood): 0.45 m, never through her.
+          const least = mom === shots.momSide ? 0.45 : 0.6;
+          expect(Math.hypot(cam.position.x - mom.x, cam.position.z - mom.z)).toBeGreaterThan(least);
         }
       }
     }
@@ -110,7 +122,7 @@ describe('the farewell shots', () => {
       const [cx, , cz] = key.at;
       const [ex, , ez] = shots.eye;
       const len = Math.hypot(ex - cx, ez - cz);
-      for (const mom of MOMS) {
+      for (const mom of [shots.mom]) {
         const along = ((mom.x - cx) * (ex - cx) + (mom.z - cz) * (ez - cz)) / len;
         const across = Math.abs(((mom.x - cx) * (ez - cz) - (mom.z - cz) * (ex - cx)) / len);
         expect(along > len || along < 0 || across > 0.5).toBe(true);
@@ -188,5 +200,77 @@ describe('the farewell shots', () => {
     const sun = Math.atan2(-0.675, -0.737); // dawn.ts: the sun's azimuth (about 222 degrees)
     const gap = Math.abs(Math.atan2(Math.sin(az - sun), Math.cos(az - sun)));
     expect(gap).toBeGreaterThan((95 * Math.PI) / 180); // beyond the frame's half width and its glow
+  });
+});
+
+/** The z of the shore mesh's k-th row from the pebbles' end. */
+const row = (k: number): number => LAKE_Z + LAKE.pebbleDepth - k * SHORE_CELL;
+
+/** The shore mesh's height at z: linear between its rows. */
+const mesh = (z: number): number => {
+  const k = Math.floor((LAKE_Z + LAKE.pebbleDepth - z) / SHORE_CELL);
+  const [a, b] = [row(k), row(k + 1)];
+  const u = (a - z) / (a - b);
+  return shoreHeight(LAKE_Z - a) * (1 - u) + shoreHeight(LAKE_Z - b) * u;
+};
+
+describe('where she lies, the same in every beat', () => {
+  const lo = REST.z - (ANATOMY.length / 2) * Math.cos(REST.pitch); // tail end
+  const hi = REST.z + (ANATOMY.length / 2) * Math.cos(REST.pitch); // nose
+
+  it('has 70-80 % of her out of the water, her back well above it and only the tail end in the shallows', () => {
+    const share = (hi - LAKE_Z) / (hi - lo);
+    expect(share).toBeGreaterThanOrEqual(0.7);
+    expect(share).toBeLessThanOrEqual(0.8);
+    expect(lo).toBeLessThan(LAKE_Z); // the tail end is in the water
+    expect(REST.y - WATER_Y).toBeGreaterThan(1); // the root (her mid-body) is more than a metre over the water: her back well above it
+  });
+
+  it('is the one placement the shots, the stranding and the dawn are all built on', () => {
+    const f = Math.cos(REST.pitch);
+    const [, ey] = shots.eye;
+    expect(ey).toBeCloseTo(
+      REST.y + ANATOMY.eye.ahead * Math.sin(REST.pitch) + ANATOMY.eye.up * f,
+      6,
+    );
+    expect(shots.hand[2]).toBeCloseTo(
+      REST.z + SHOTS.flank.ahead * f - SHOTS.flank.up * Math.sin(REST.pitch),
+      6,
+    );
+  });
+
+  it('lies on the rendered shore (its 2 m grid), not just on the formula', () => {
+    // The shore mesh is linear between rows every SHORE_CELL m down from the pebbles' end; rows fall on the slope's kinks.
+    expect(LAKE.pebbleDepth % SHORE_CELL).toBe(0);
+    expect(LAKE.slopeStart % SHORE_CELL).toBe(0);
+    for (let z = LAKE_Z - 3; z < LAKE_Z + 7; z += 0.1) {
+      expect(mesh(z)).toBeCloseTo(shoreY(z - LAKE_Z), 6);
+    }
+    const gaps = restGaps(REST, mesh);
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(-0.001); // no ground through her
+    expect(Math.min(...gaps)).toBeLessThan(0.01);
+  });
+
+  it('keeps her body west of the river mouth bank (it crossed her in two when she lay further east)', () => {
+    for (let ahead = -1; ahead <= 3; ahead += 0.25) {
+      const z = REST.z + ahead * Math.cos(REST.pitch);
+      if (z < LAKE_Z + 0.5) continue;
+      const half = ahead > 2.8 ? 0.2 : ANATOMY.halfWidth;
+      expect(at.noseX + half).toBeLessThan(EDGE_X - mouthFlare(z, LAKE_Z) - 0.1);
+    }
+  });
+
+  it("puts Mom's hand within 0.35 m of yours, on her skin, with Mom close enough to reach it", () => {
+    const d = Math.hypot(...shots.hand.map((v, i) => v - (shots.momHand[i] ?? 0)));
+    expect(d).toBeLessThan(0.35);
+    expect(d).toBeGreaterThan(0.15); // side by side, not on top of each other
+    const reach = Math.hypot(
+      shots.momSide.x - shots.momHand[0],
+      shots.momSide.z - shots.momHand[2],
+    );
+    expect(reach).toBeLessThan(0.55); // across the floor; her shoulder is about 0.5 m above
+    expect(toCentreLine(shots.momSide.x, shots.momSide.z)).toBeGreaterThan(
+      ANATOMY.halfWidth + 0.25,
+    );
   });
 });

@@ -1,16 +1,22 @@
 import * as THREE from 'three/webgpu';
 import { loadModel } from '../../engine/models';
+import type { Shots } from './farewell-shots';
 import { characterUrl } from './kits';
 
 /**
- * Kartik's first-person arm (`kartik-arm.glb`: a rigid mesh, origin at the elbow, +Z along the
- * fingers, +Y up with the palm facing -Y, thumb +X) as a child of the camera. Tuning knobs (m).
+ * Kartik's first-person arm (`kartik-arm.glb`: a rigid mesh, origin at the middle of the palm, +Z along the
+ * fingers, +Y up (the back of the hand) with the palm facing -Y, thumb +X; the wrist is bent back, so the
+ * forearm trails behind and above the hand) as a child of the camera. Tuning knobs (m).
  */
 export const ARM = {
-  /** Elbow to the middle of the palm along the fingers. */
-  palm: 0.38,
-  /** Where the elbow starts when the arm is not yet in the frame: below it, a little right and toward the camera (camera space). */
-  hidden: { x: 0.12, y: -0.9, z: 0.25 },
+  /** Where the hand starts when the arm is not yet in the frame: below it, to the right where the weapons sit, a little toward the camera (camera space). */
+  hidden: { x: 0.3, y: -0.9, z: 0.2 },
+  /**
+   * Laid on her skin: the palm centre sits `palmOff` m off it (the shots' hand point is `press` m inside it), the
+   * fingers point up her side (`fingersUp`) and a little toward her tail (`fingersBack`), so the forearm, bent
+   * back at the wrist, comes in from the lower right of the frame.
+   */
+  onHer: { palmOff: 0.09, fingersUp: 1, fingersBack: 0.35 },
 } as const;
 
 interface V3Like {
@@ -55,11 +61,29 @@ export function placeArm(
   y0.setFromMatrixColumn(m, 1);
   turn.setFromAxisAngle(AXIS_Z, Math.atan2(p.dot(x0), -p.dot(y0))); // the palm turns to `palm`
   arm.quaternion.setFromRotationMatrix(m).multiply(turn);
-  arm.position.copy(t).addScaledVector(d, -ARM.palm);
+  arm.position.copy(t);
   const away = 1 - smooth(Math.min(1, Math.max(0, rise)));
   arm.position.x += ARM.hidden.x * away;
   arm.position.y += ARM.hidden.y * away;
   arm.position.z += ARM.hidden.z * away;
+}
+
+/**
+ * Pure: where the palm goes (world), which way the fingers point and which way the palm faces, to lay Kartik's
+ * hand flat on her skin at `shots.hand` (`handIn` is straight into her skin there).
+ */
+export function handOnHer(shots: Pick<Shots, 'hand' | 'handIn'>): {
+  target: THREE.Vector3;
+  along: THREE.Vector3;
+  palm: THREE.Vector3;
+} {
+  const [ix, iy, iz] = shots.handIn;
+  const palm = new THREE.Vector3(ix, iy, iz);
+  const target = new THREE.Vector3(...shots.hand).addScaledVector(palm, -ARM.onHer.palmOff);
+  // Up her side along the skin (perpendicular to `handIn` in x, y), and a little back along her.
+  const up = ARM.onHer.fingersUp;
+  const along = new THREE.Vector3(-iy * up, ix * up, -ARM.onHer.fingersBack).normalize();
+  return { target, along, palm };
 }
 
 /** Loads the arm, parented to nothing yet and hidden. */
