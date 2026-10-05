@@ -14,6 +14,7 @@ import {
   type Thought,
   type Tuning,
 } from './brain';
+import { type LodClock } from './lod';
 import { addRim, CLIP_FOR, findHeadBone, LOOPING, pickOutfit } from './look';
 import { aimAt } from './route';
 import { steer } from './steer';
@@ -26,6 +27,9 @@ const TURN_RATE = 6;
 /** Share of its speed a zombie keeps while winding up a blow. */
 const LUNGE = 0.45;
 const PARK_Y = -50;
+/** Culling sphere: bind-pose radius times this, plus this many metres. */
+const CULL_GROW = 1.4;
+const CULL_PAD = 0.6;
 
 export interface Body {
   root: THREE.Object3D;
@@ -33,6 +37,8 @@ export interface Body {
   /** The skeleton's `Head` bone (null: the model has none), found once at build. */
   head: THREE.Object3D | null;
   mixer: THREE.AnimationMixer;
+  /** Mixer LOD clock (lod.ts): dt owed to the mixer and frames since its last update. */
+  lod: LodClock;
   actions: Map<string, THREE.AnimationAction>;
   action: THREE.AnimationAction | null;
   intent: Intent | null;
@@ -89,6 +95,21 @@ function buildActions(
   return actions;
 }
 
+/**
+ * A static culling sphere for a skinned mesh (its own bounding sphere would follow the bones: a
+ * recompute per frame). The bind-pose sphere grown by `CULL_GROW` so no pose (lying, thrown,
+ * arms out) leaves it; the mesh is culled only when well off screen. Per mesh: the geometry is shared.
+ */
+function inflatedSphere(geo: {
+  boundingSphere: THREE.Sphere | null;
+  computeBoundingSphere(): void;
+}): THREE.Sphere {
+  if (geo.boundingSphere === null) geo.computeBoundingSphere();
+  const sphere = (geo.boundingSphere ?? new THREE.Sphere()).clone();
+  sphere.radius = sphere.radius * CULL_GROW + CULL_PAD;
+  return sphere;
+}
+
 export function createBody(i: number, assets: Record<'m' | 'f', SkinnedAsset>): Body {
   const { body, outfit } = pickOutfit(i);
   const asset = assets[body];
@@ -100,7 +121,10 @@ export function createBody(i: number, assets: Record<'m' | 'f', SkinnedAsset>): 
   for (const node of skinned) if (node.name !== outfit) node.removeFromParent();
   const kept = skinned.find((node) => node.name === outfit) ?? null;
   if (kept) {
-    kept.frustumCulled = false;
+    if (kept instanceof THREE.SkinnedMesh) {
+      const geo: unknown = kept.geometry;
+      if (geo instanceof THREE.BufferGeometry) kept.boundingSphere = inflatedSphere(geo);
+    }
     addRim(kept);
   }
   const mixer = new THREE.AnimationMixer(root);
@@ -112,6 +136,7 @@ export function createBody(i: number, assets: Record<'m' | 'f', SkinnedAsset>): 
     mesh: kept,
     head: findHeadBone(root),
     mixer,
+    lod: { owed: 0, frames: i },
     actions,
     action: null,
     intent: null,
@@ -143,6 +168,7 @@ export function park(b: Body): void {
   b.fly = 0;
   b.splashDue = false;
   b.mixer.stopAllAction();
+  b.lod.owed = 0;
   b.action = null;
   b.intent = null;
 }

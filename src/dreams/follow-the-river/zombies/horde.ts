@@ -15,8 +15,10 @@ import {
   seize as seizeMind,
   think,
   throwByFish as throwMind,
+  type Intent,
   type Tuning,
 } from './brain';
+import { advanceMixer, facingCos, mixerStep } from './lod';
 import { bodyHit, CLIP_FOR, headCentre, timeScaleFor, type Point } from './look';
 import { THROWN, thrownTilt } from './thrown';
 import { createVoices, type Voices } from './voices';
@@ -126,6 +128,23 @@ interface HordeState {
   seq: number;
 }
 
+/** Intents whose pose gameplay reads or that are on show up close: always at full rate. */
+function alwaysAnimated(intent: Intent): boolean {
+  return intent === 'strike' || intent === 'fall' || intent === 'thrown' || intent === 'struggle';
+}
+
+/** Steps the mixer, less often for far and off-screen zombies (the dt in between is accumulated). */
+function animate(b: Body, intent: Intent, dt: number, player: PlayerSense, distance: number): void {
+  const step = alwaysAnimated(intent)
+    ? 1
+    : mixerStep(
+        distance,
+        facingCos(player.look.x, player.look.z, b.x - player.x, b.z - player.z, distance),
+      );
+  const due = advanceMixer(b.lod, dt, step);
+  if (due > 0) b.mixer.update(due);
+}
+
 function tick(
   h: HordeState,
   b: Body,
@@ -152,7 +171,7 @@ function tick(
   if (t.intent === 'walk' || t.intent === 'run') {
     b.action?.setEffectiveTimeScale(timeScaleFor(CLIP_FOR[t.intent], b.tuning.speed));
   }
-  b.mixer.update(dt);
+  animate(b, t.intent, dt, player, senses.distance);
   b.root.position.set(b.x, b.y, b.z);
   b.root.rotation.y = b.yaw;
   if (t.intent === 'thrown') {

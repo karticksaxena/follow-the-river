@@ -13,6 +13,7 @@ import {
   GLINT,
   LAKE_FLOW,
   REFLECTION,
+  reflectionDue,
   RIVER_FLOW,
   setWaterAttribute,
   setWaterTier,
@@ -231,5 +232,26 @@ describe('the planar reflection per tier', () => {
     expect(reflectsPlanar(low.material)).toBe(true);
     low.material.dispose();
     setWaterTier('high');
+  });
+});
+
+describe('reflectionDue', () => {
+  it('never renders with no water in view', () => {
+    expect(reflectionDue(false, false, false, 0)).toBe(false);
+    expect(reflectionDue(false, true, true, 2)).toBe(false);
+  });
+
+  it('renders every frame when not half rate', () => {
+    for (let f = 0; f < 4; f++) expect(reflectionDue(true, false, false, f)).toBe(true);
+  });
+
+  it('half rate: every 2nd frame, but at once when the texture is stale', () => {
+    expect([0, 1, 2, 3].map((f) => reflectionDue(true, false, true, f))).toEqual([
+      true,
+      false,
+      true,
+      false,
+    ]);
+    expect(reflectionDue(true, true, true, 1)).toBe(true);
   });
 });

@@ -243,6 +243,36 @@ function withHidden<T>(materials: ReadonlySet<THREE.Material>, run: () => T): T 
   }
 }
 
+/**
+ * Pure: whether the reflection renders this frame. Never when no water is in view; the frame water
+ * comes back into view always (`stale`: the texture is old); on Medium (`halfRate`) every 2nd frame,
+ * the other frames reusing the last texture.
+ */
+export function reflectionDue(
+  inView: boolean,
+  stale: boolean,
+  halfRate: boolean,
+  frame: number,
+): boolean {
+  if (!inView) return false;
+  return stale || !halfRate || frame % 2 === 0;
+}
+
+const viewMatrix = new THREE.Matrix4();
+const viewFrustum = new THREE.Frustum();
+
+/** True when any water surface of `materials` is in the camera's view (one with no known mesh counts as seen). */
+function waterInView(materials: ReadonlySet<THREE.Material>, camera: THREE.Camera): boolean {
+  viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  viewFrustum.setFromProjectionMatrix(viewMatrix);
+  for (const m of materials) {
+    const mesh: unknown = m.userData.mesh;
+    if (!(mesh instanceof THREE.Mesh)) return true;
+    if (mesh.visible && viewFrustum.intersectsObject(mesh)) return true;
+  }
+  return false;
+}
+
 function newReflection(materials: ReadonlySet<THREE.Material>): THREE.ReflectorNode {
   const reflection = reflector({ resolutionScale: reflectionScale(waterTier), bounces: false });
   const base = reflection.reflector;
@@ -257,8 +287,16 @@ function newReflection(materials: ReadonlySet<THREE.Material>): THREE.ReflectorN
   const updateBefore = base.updateBefore.bind(base);
   // ReflectorNode hides only the material that triggered it; a second water surface in the group
   // would sample the render target being written (a GPU validation error), so hide them all.
-  base.updateBefore = (frame) =>
-    withoutShadowUpdates(() => withHidden(materials, () => updateBefore(frame)));
+  // It also skips frames it need not draw (`reflectionDue`).
+  let frameNo = 0;
+  let stale = false;
+  base.updateBefore = (frame) => {
+    const inView = !frame.camera || waterInView(materials, frame.camera);
+    const halfRate = waterTier === 'medium' && !reflectionSharp;
+    const due = reflectionDue(inView, stale, halfRate, frameNo++);
+    stale = !inView; // a frame with no water in view leaves an old texture: redraw at once when it returns
+    if (due) withoutShadowUpdates(() => withHidden(materials, () => updateBefore(frame)));
+  };
   return reflection;
 }
 
@@ -410,6 +448,7 @@ export function createWaterMesh(
   const geo = new THREE.PlaneGeometry(width, length);
   setWaterAttribute(geo, (x) => width / 2 - Math.abs(x));
   const mesh = new THREE.Mesh(geo, material);
+  material.userData.mesh = mesh; // the reflection pass skips frames while no water mesh is in view
   mesh.rotation.x = -Math.PI / 2;
   const { target } = waterReflection(material);
   if (!target.parent) mesh.add(target); // a shared reflector sits on its first surface only
