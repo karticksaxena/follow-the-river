@@ -26,7 +26,7 @@ import {
 } from './fish-parts';
 import { callOut, playSplash } from './fish-sound';
 import { createState, type Finale, type FishState, type Rise } from './fish-state';
-import { blowOut, openJaw, stepMist, stepStrand } from './fish-strand';
+import { blowOut, openJaw, stepMist, stepStrand, unsag } from './fish-strand';
 import { characterUrl, propUrl } from './kits';
 import { jawAt, newGrab, stepGrab, type GrabHooks, type StrikeStyle } from './orca-grab';
 import { mistColor, SICK } from './orca-sick';
@@ -307,6 +307,7 @@ function updateFish(
   // the heading turned NaN for good and the orca was never drawn again.
   if (!(dt > 0)) return;
   f.time += dt;
+  unsag(f);
   f.mixer.update(dt);
   if (horde && horde.onSplash !== f.onThrown) horde.onSplash = f.onThrown;
   if (!f.placed) {

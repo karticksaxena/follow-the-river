@@ -71,6 +71,8 @@ export interface FishState {
   readonly trunkRest: THREE.Vector3;
   readonly eye: THREE.MeshStandardNodeMaterial | null;
   readonly sagBones: readonly THREE.Object3D[];
+  /** The sag (0..1) applied to those bones last frame (see `unsag`). */
+  sagK: number;
   /** Where the zombie she struck last was (read-only for the ending), or null. */
   lastStrike: { x: number; z: number } | null;
   readonly buffer: Float32Array;
@@ -227,6 +229,7 @@ export function createState(
     trunkRest: (body.getObjectByName('Spine1')?.position ?? new THREE.Vector3()).clone(),
     eye: eyeOf(body),
     sagBones: STRAND.bend.bones.flatMap((n) => body.getObjectByName(n) ?? []),
+    sagK: 0,
     lastStrike: null,
     buffer,
     packFrom: new THREE.Vector3(),

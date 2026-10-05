@@ -47,10 +47,22 @@ export function stepMist(f: FishState, dt: number): void {
 }
 
 /** Her spine and tail sag `k` (0..1) of `STRAND.bend` on top of the animation (after `mixer.update`). */
-function sag(f: FishState, k: number): void {
+export function sag(f: FishState, k: number): void {
+  f.sagK = k;
   if (k <= 0) return;
   const q = turn.setFromAxisAngle(X_AXIS, -STRAND.bend.angle * k);
   for (const bone of f.sagBones) bone.quaternion.multiply(q);
+}
+
+/**
+ * Takes last frame's sag off (call before `mixer.update`). The mixer only writes a bone whose
+ * animated value changed, so a bone a clip holds still would keep every frame's sag and pile it up.
+ */
+export function unsag(f: FishState): void {
+  if (f.sagK <= 0) return;
+  const q = turn.setFromAxisAngle(X_AXIS, STRAND.bend.angle * f.sagK);
+  for (const bone of f.sagBones) bone.quaternion.multiply(q);
+  f.sagK = 0;
 }
 
 /** One frame of the last leap: pose her, blow when she surfaces, the splash on landing, then settle. */
