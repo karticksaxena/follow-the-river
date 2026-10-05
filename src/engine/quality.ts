@@ -181,29 +181,37 @@ export function adaptQuality(
   ceiling: Tier = tier,
 ): 'res' | 'tier' | 'raise' | null {
   if (stepQuality(q, frameMs, dt)) return 'res';
-  if (
-    auto &&
-    tier !== 'low' &&
-    q.step === LAST &&
-    q.slow >= QUALITY.slowFor &&
-    q.since >= QUALITY.minGap
-  ) {
-    settle(q, TIERS[lowerTier(tier)].dropStep);
+  const change = tierDue(q, tier, auto, ceiling);
+  if (change) settleTier(q, tier, change);
+  return change;
+}
+
+/** Auto's tier verdict for now (pure: `q` is untouched): lower, raise, or keep. */
+export function tierDue(
+  q: Readonly<Quality>,
+  tier: Tier,
+  auto: boolean,
+  ceiling: Tier = tier,
+): 'tier' | 'raise' | null {
+  if (!auto) return null;
+  if (tier !== 'low' && q.step === LAST && q.slow >= QUALITY.slowFor && q.since >= QUALITY.minGap)
     return 'tier';
-  }
   if (
-    auto &&
     RANK[tier] < RANK[ceiling] &&
     q.step === 0 &&
     q.fast >= QUALITY.raiseFor &&
     q.raises < QUALITY.maxRaises
-  ) {
-    const raises = q.raises + 1;
-    settle(q, TIERS[raiseTier(tier)].dropStep);
-    q.raises = raises;
+  )
     return 'raise';
-  }
   return null;
+}
+
+/** Applies a verdict of `tierDue`: the resolution restarts at the new tier's step. Returns the new tier. */
+export function settleTier(q: Quality, tier: Tier, change: 'tier' | 'raise'): Tier {
+  const next = change === 'tier' ? lowerTier(tier) : raiseTier(tier);
+  settle(q, TIERS[next].dropStep);
+  if (change === 'raise') q.raises += 1;
+  return next;
 }
 
 /** Pixel ratio for the renderer at the current step. */

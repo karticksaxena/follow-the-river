@@ -6,13 +6,13 @@ import type { GradePreset } from './grade';
 import { createPerf, type Perf } from './perf';
 import { createPost, POST } from './post';
 import {
-  adaptQuality,
   frameCost,
   isHitch,
-  lowerTier,
   newQuality,
   pixelRatio,
-  raiseTier,
+  settleTier,
+  stepQuality,
+  tierDue,
   type Graphics,
   type Quality,
   type Tier,
@@ -53,7 +53,10 @@ export interface Stage {
   warmFocus(): void;
   /** True: the loop draws and updates nothing (the page stays responsive while `compileAsync` warms a scene behind black). */
   hold: boolean;
-  /** True while a scene warms up behind black: the loop runs, but Auto quality ignores the (hitchy) frames. */
+  /**
+   * True while a scene warms up behind black: the loop runs, but Auto quality ignores the (hitchy)
+   * frames. Setting it true applies a tier change Auto has been waiting to make (see `adapt`).
+   */
   warming: boolean;
   /** The scene being drawn; home and dreams swap it. */
   scene: THREE.Scene;
@@ -98,6 +101,10 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   let setting: Graphics = 'auto';
   let tier: Tier = autoStart;
   let cap: MaxFps = '60';
+  let warming = false;
+  // Auto's tier change, held for the next warm-up: a new tier rebuilds the post graph, whose
+  // pipelines compile on the next frame (a 1 s freeze in play). Behind the loader nobody sees it.
+  let due: 'tier' | 'raise' | null = null;
   const pacer = newPacer();
   const perf = import.meta.env.DEV ? createPerf(renderer) : undefined;
   const post = createPost(renderer, camera, tier);
@@ -115,7 +122,13 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
     backend: webgpu ? 'webgpu' : 'webgl2',
     scene: new THREE.Scene(),
     hold: false,
-    warming: false,
+    get warming() {
+      return warming;
+    },
+    set warming(on) {
+      warming = on;
+      if (on) applyDue();
+    },
     quality,
     get tier() {
       return tier;
@@ -124,6 +137,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
       if (graphics === setting) return; // a volume slider save must not reset a tier Auto stepped down
       setting = graphics;
       auto = graphics === 'auto';
+      due = null;
       tier = post.setTier(graphics === 'auto' ? autoStart : graphics);
       setSurfaceTier(tier);
       quality.since = 0;
@@ -152,25 +166,26 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
       renderer.domElement.remove();
     },
   };
-  /** Resolution first, then (Auto only) the tier; each at most every `QUALITY.minGap` s. */
+  /** Resolution in play; a tier change Auto wants waits for `applyDue` (each at most every `QUALITY.minGap` s). */
   const adapt = (dt: number, workMs: number): void => {
     const frameMs = frameCost(dt * 1000, workMs, capPeriod(cap) * 1000);
-    const change = adaptQuality(quality, tier, auto, frameMs, dt, autoStart);
-    if (change === 'tier') {
-      tier = post.setTier(lowerTier(tier));
-      setSurfaceTier(tier);
+    if (stepQuality(quality, frameMs, dt)) {
+      due = null; // the frame time moved: judge the tier afresh
+      onResize();
+      if (import.meta.env.DEV) longFrames.push([-1, quality.step]);
+      return;
     }
-    if (change === 'raise') {
-      tier = post.setTier(raiseTier(tier));
-      setSurfaceTier(tier);
-    }
-    if (change) onResize();
+    due ??= tierDue(quality, tier, auto, autoStart);
+  };
+  /** Behind a warm-up's loader: the held tier change happens, and the warm-up compiles the new graph. */
+  const applyDue = (): void => {
+    if (!due) return;
+    tier = post.setTier(settleTier(quality, tier, due));
+    due = null;
+    setSurfaceTier(tier);
+    onResize();
     // DEV marker in `__kdLong`: [-1, resolution step] for a resize, [-2, 0|1|2 = tier now] for a tier change (a rebuilt post graph).
-    if (import.meta.env.DEV && change) {
-      longFrames.push(
-        change === 'res' ? [-1, quality.step] : [-2, ['low', 'medium', 'high'].indexOf(tier)],
-      );
-    }
+    if (import.meta.env.DEV) longFrames.push([-2, ['low', 'medium', 'high'].indexOf(tier)]);
   };
   // DEV: `window.__kdLong` lists every frame over LONG_FRAME as [time ms, frame ms, new pipelines] (hitches show up here).
   const longFrames: number[][] = [];
@@ -193,7 +208,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
     runUpdaters(updaters, dt);
     post.update(dt);
     post.render(stage.scene);
-    if (dt > 0 && !stage.warming && !isHitch(pacer.dt)) adapt(dt, performance.now() - start);
+    if (dt > 0 && !warming && !isHitch(pacer.dt)) adapt(dt, performance.now() - start);
     if (import.meta.env.DEV) {
       const made = pipelineCount() - pipelines; // pipelines this frame created
       pipelines += made;

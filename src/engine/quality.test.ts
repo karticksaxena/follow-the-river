@@ -6,7 +6,9 @@ import {
   lowerTier,
   pixelRatio,
   QUALITY,
+  settleTier,
   stepQuality,
+  tierDue,
   TIERS,
   type Quality,
   type Tier,
@@ -147,6 +149,25 @@ describe('TIERS (what each graphics tier turns on)', () => {
     const q = { ...fresh(), step: QUALITY.steps.length - 1, slow: 5 };
     expect(adaptQuality(q, 'medium', true, 40, 1 / 60)).toBe('tier');
     expect(q.step).toBe(TIERS.low.dropStep);
+  });
+});
+
+describe('tierDue / settleTier (a tier change waits for the next warm-up)', () => {
+  it('judges without touching the state; settling applies it later', () => {
+    const q = { ...fresh(), step: QUALITY.steps.length - 1, slow: 5 };
+    const before = { ...q };
+    expect(tierDue(q, 'high', true)).toBe('tier');
+    expect(tierDue(q, 'high', false)).toBeNull(); // a fixed tier never changes
+    expect(q).toEqual(before); // play goes on at the same tier and resolution
+    expect(settleTier(q, 'high', 'tier')).toBe('medium');
+    expect(q.step).toBe(TIERS.medium.dropStep);
+  });
+
+  it('a raise counts toward the cap', () => {
+    const q = { ...fresh(), fast: QUALITY.raiseFor };
+    expect(tierDue(q, 'low', true, 'high')).toBe('raise');
+    expect(settleTier(q, 'low', 'raise')).toBe('medium');
+    expect(q.raises).toBe(1);
   });
 });
 
