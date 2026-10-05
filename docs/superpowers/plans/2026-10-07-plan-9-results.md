@@ -1,6 +1,6 @@
 # Plan 9 results
 
-TODO (controller): the A15 farewell fix round (task-A15-fix1) and the final whole-branch review are still pending. Update this file when they land.
+Status: every task is done and checked in Chrome; the final whole-branch review ran (three reviewers by area) and its Critical/Important findings are fixed with tests. `pnpm run check` is green (105 files, 781 tests). Branch `plan-9` is ready to fast-forward local `main` (not pushed).
 
 Plan: `docs/superpowers/plans/2026-10-07-plan-9-flawless.md`. Branch `plan-9`. Record of every task, review and Chrome check: `.superpowers/sdd/2026-10-07-plan-9-flawless/progress.md`.
 
@@ -20,7 +20,7 @@ Plan: `docs/superpowers/plans/2026-10-07-plan-9-flawless.md`. Branch `plan-9`. R
 - A10: Kartik's body and first-person arm, Mom's new mocap clips, head-look and hand IK (`createCharacter`).
 - A11: the intro phone and Film pose. Mom looks at you. The phone sits in her palm with the screen facing her (tested on the real rig).
 - A12: real recordings replace every synthesised Dras sound (blows, splashes, calls, clicks), paddle strokes in sync with Mom's rowing, birds at sunrise, no synth drone. The paddle now dips into the water so strokes fire.
-- A15: the farewell as a cinematic (both hands on her, she looks at you, the orbit, the last fish pack, the wake scroll). The first round is committed (e7d8064); the fix round is pending.
+- A15: the farewell as a cinematic. She swims in at the surface and strands; Mom sings by her head; your hand and Mom's on her skin; she lifts her head and looks at you; the orbit; the last fish pack; dawn over the lake and Mom's "Let's go home". Two fix rounds from the controller's contact sheets: Mom no longer in front of the lens, a lantern key plus moon rim (kneel/look 0.09 to about 0.12-0.20 mean, nothing clipped), Mom's skin capped under the lantern (no "firecracker" glow), a dark lake during the farewell, the ride camera released, the dawn looking over the lake instead of the dam (clipped 40% to 0.2%), the sharp reflection kept through the dawn, Dras in focus in the pack shot.
 - A16: canoe ride with a speed profile, story beats, Kartik in the bow, an end shot and replay. Inner hull floor, Mom's hands grip the paddle by IK, the end shot cuts in clear of both heads and always ends.
 - A17 launch prep: `?webgl` Night 1 and canoe checked, old saves checked, docs and licences (this pass).
 
@@ -48,6 +48,13 @@ Harness numbers are sequential CPU+GPU on an Apple M3 Pro in a hidden tab, so th
 - Round b (skyline merged per 128 m cell, pickups merged, small props off shadows and reflection): Low 142 draws, 4.8-5/8; Medium about 1120 draws, 20-24/23-37; High 1132 draws, 20.5/23.6.
 - Round c (one shared reflection per group, no shadow re-render in the reflection pass, all water hidden during its own pass): Low 147 draws 4.2/6.9; Medium 350 draws 6.4/9.5; High 348 draws 7.4/12.2.
 - Vegetation budgets (built-mesh test): forest 268k/764k/1.06M triangles Low/Medium/High, suburbs 260k/450k/729k, canoe 239k/517k/1.49M.
+- Final per-scene frame times (frozen f349794, quiet browser, spawn view; draws, median/p95 ms):
+  - Day 1 city: Low 140, 4.0/6.4; Medium 525, 7.5/10.3; High 525, 8.8/11.9.
+  - Night 1 city: Low 153, 3.7/6.7; Medium 627, 8.4/11.1; High 652, 10.4/13.7.
+  - Night 2 suburbs: Low 144, 4.4/7.1; Medium 499, 8.6/11.4; High 561, 11.3/14.3.
+  - Night 3 forest: Low 137, 3.7/6.0; Medium 311, 6.2/8.9; High 349, 7.3/10.3.
+  - p95 is at most 16 ms on every tier in every scene measured. An integrated GPU is roughly 2.5-5 times slower, so Auto should settle on Low or Medium there.
+- A tier step mid-chapter (Auto or the menu) now also narrows the vegetation reach and drops tree/skyline shadows and reflection draws (final review finding).
 
 ### Visibility pass (G9)
 
@@ -66,7 +73,17 @@ The ride end froze because `disposeScene` threw (`reading traverse`): `CSMShadow
 - Luminance probe: mean sRGB luminance and crushed share per scene (numbers above).
 - Perf: `kd.perf` per-frame values and draw counts at fixed spots, per tier.
 - Measured examples: torch stun 0.92 s; first body arrow leaves a zombie alive, second kills; arrows 6, 5, 4, 3 as hit, kill, miss; paddle blades dip to y -0.062 with 17 of 50 frames under the surface; the end shot's rail distance stays at or above 0.6 m over 1001 samples.
+- Overnight the display slept, so Chrome treated the window as hidden and throttled timers to about once a minute; loads crawled. The fix was a virtual clock (`setTimeout`, `setInterval` and rAF queued and fired by the frame stepper), after which a scene loads in about 10 s of virtual time.
+- The whole ending path was played through on the final build: the last stand, the farewell beats, dawn, the canoe ride, the end shot, the credits and home, with the save marked `end` and no exceptions.
 - Not checked in a real browser session by a person: see "Check by hand".
+
+## Final review
+
+Three Sonnet reviewers by area (engine and session; story and cinematics; world and graphics) with the plan's Review Focus list.
+- Engine: no Critical or Important findings.
+- World: tier steps mid-chapter did not reduce the world's cost (fixed). Minors were deferred: a small template leak, a leak after a failed load, and a 60-line function.
+- Story: three Important soft-locks or logic slips were fixed with failing-first tests. Dras is now armed after a death in the last stand. The canoe ride and the ending now recover from a load error instead of a black screen. Stale E presses and feeding Dras during the last stand no longer misfire. A per-frame allocation was removed.
+- `play.ts` was split under 500 lines (no behaviour change).
 
 ## Rulings (one line each)
 
@@ -96,8 +113,10 @@ The ride end froze because `disposeScene` threw (`reading traverse`): `CSMShadow
 ## Known gaps and deferred items
 
 - Plan B4 (arms on the weapons) not done.
-- Dras sickness, flinch and farewell polish: Mom flinches only within 4 m of a strike; A15 fix round pending.
-- Dawn end state at the lake is still hazy at about 14 s; the Night 1 promenade walkway under the torch reads smooth grey; canoe ground a little dark (lift `CANOE_BANK` gain from about 0.5 toward 0.75); canoe inner floor near-black.
+- Mom's one-knee kneel at the farewell still reads a little like a lunge (a better clip would need a new mocap pass).
+- Dras's tail lift on the shore peaks about 1.4 m over rest (reads as a weak lift; capping it needs a new Blender clip).
+- A straight seam where the lake's pebble beach meets the grass is visible from the farewell's wider shots.
+- The Night 1 promenade walkway under the torch reads smooth grey.
 - Canoe and flashback water are not tier-seeded (one recompile on first use).
 - Distant zombie shadows are limited to the nearest 4 within 15 m every 0.5 s.
 - No up-to-1.2 m beach curve (pinned zones cover the beach); bent water uses 10 m rows; props in the overrun are not bent.
@@ -112,3 +131,4 @@ The ride end froze because `disposeScene` threw (`reading traverse`): `CSMShadow
 - Safari (WebGPU or WebGL fallback, audio start, full screen).
 - Real frame rate on an integrated-GPU laptop. The harness overestimates; check Low, Medium and High, and that Auto settles sensibly.
 - One full play-through with mouse and keyboard, on the difficulty you choose: intro, Day 1 to Night 3, the farewell, the canoe ride and credits, then "Watch the ending again".
+- Merge: this session is sandboxed to the plan-9 worktree, so it cannot move `main` (checked out in `~/Code/Games`). Fast-forward it with `cd ~/Code/Games && git merge --ff-only plan-9`, then reload the :5173 tab. Nothing has been pushed.
