@@ -160,6 +160,7 @@ async function setUp(h: EndingHost, st: State): Promise<void> {
   if (st.cancelled) return scene.dispose();
   st.scene = scene;
   st.pack ??= await loadPackOnWater(h.sys.world.scene);
+  if (st.cancelled) return;
   st.cast ??= createCast(scene, ctx.stage.camera, h.sys.fish);
   ctx.warmFocus(); // the depth-of-field graph compiles here, behind the black
   st.pack.visible = false;
@@ -352,17 +353,34 @@ async function runStep(h: EndingHost, st: State, step: EndingStep, at: Shore): P
   } else if (step === 'credits') await read(h, st, ENDING_PAGES.credits);
 }
 
-/** The whole ending, step by step; every await is followed by a cancelled check. */
+/** A load or a step failed: give the player the world back and read them out (home, credits) instead of a black, held screen. */
+async function recover(h: EndingHost, st: State): Promise<void> {
+  const { ctx, fish } = h.sys;
+  h.run.frozen = false;
+  stopBeds(st);
+  endCinema(h, st);
+  fish.setGuards([]);
+  await ctx.overlay.fade(false); // the next `read` also releases the hold
+  if (st.cancelled) return;
+  await read(h, st, ENDING_PAGES.home);
+  if (!st.cancelled) await read(h, st, ENDING_PAGES.credits);
+}
+
+/** The whole ending, step by step; every await is followed by a cancelled check. It always settles, and a failure never strands the player. */
 async function play(h: EndingHost, st: State): Promise<void> {
   const { meetAt, lake } = h.sys.area;
   if (!meetAt || !lake) return;
-  const at = shoreFor(meetAt, lake.z);
-  st.shots = shotsFor(at);
-  let step: EndingStep = 'mom';
-  await setUp(h, st);
-  while (step !== 'done' && !st.cancelled) {
-    await runStep(h, st, step, at);
-    step = nextEndingStep(step);
+  try {
+    const at = shoreFor(meetAt, lake.z);
+    st.shots = shotsFor(at);
+    let step: EndingStep = 'mom';
+    await setUp(h, st);
+    while (step !== 'done' && !st.cancelled) {
+      await runStep(h, st, step, at);
+      step = nextEndingStep(step);
+    }
+  } catch {
+    await recover(h, st).catch(() => undefined);
   }
   if (!st.cancelled) h.sys.ctx.finish();
 }

@@ -134,6 +134,7 @@ function take(c: Ctl, found: PickupDef): void {
 
 /** E at the edge: a pack into the river. At night the orca gets hungrier on the spot. */
 function throwPack(c: Ctl): void {
+  if (c.run.ending !== 'no') return;
   const left = spend(c.run.live.supplies, 'fishPacks', 1);
   if (!left) return;
   c.run.live.supplies = left;
@@ -153,7 +154,8 @@ function find(c: Ctl): void {
   else if (c.pickup) c.target = 'pickup';
   // The wait spot is tested first so the prompt doesn't flip at the campfire, by the water.
   else if (!night && nearSpot(x, z, c.sys.area.waitSpot, WAIT_RADIUS)) c.target = 'wait';
-  else if (canThrow(x, EDGE_X, c.run.live.supplies.fishPacks)) c.target = 'fish';
+  else if (c.run.ending === 'no' && canThrow(x, EDGE_X, c.run.live.supplies.fishPacks))
+    c.target = 'fish'; // never in the last stand: a pack would replace Dras's fight style
   else c.target = null;
 }
 
@@ -197,7 +199,8 @@ function scripted(c: Ctl): void {
   const { x, z } = c.sys.ctx.stage.camera.position;
   const act = c.run.interact;
   c.target = act && Math.hypot(x - act.at.x, z - act.at.z) <= act.radius ? 'interact' : null;
-  if (c.target && c.sys.ctx.keys.consumePress('KeyE')) use(c);
+  const pressed = c.sys.ctx.keys.consumePress('KeyE'); // every frame: a stale press must not fire on arrival
+  if (c.target && pressed) use(c);
 }
 
 function tick(c: Ctl, dt: number): void {
