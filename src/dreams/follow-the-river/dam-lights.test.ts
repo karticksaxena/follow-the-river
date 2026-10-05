@@ -6,7 +6,8 @@ describe('damNightLights', () => {
     const mesh = damNightLights();
     expect(mesh.geometry.getAttribute('position').count).toBe((3 + 8) * 4);
     const color = mesh.geometry.getAttribute('color');
-    for (let i = 0; i < color.array.length; i++) expect(color.array[i]).toBeLessThan(0.3);
+    for (let i = 0; i < color.array.length; i++) expect(color.array[i]).toBeLessThan(0.6);
     expect(mesh.children).toHaveLength(0);
+    expect(mesh.material).toMatchObject({ fog: false });
   });
 });

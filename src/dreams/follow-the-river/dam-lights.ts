@@ -4,10 +4,10 @@ import * as THREE from 'three/webgpu';
 /**
  * Night details for the dam prop (local coords: x along the crest, y up, +z downstream): a few
  * dim lit windows on the control house and a row of lamp dots along the crest railing, as one
- * merged unlit mesh (no real lights). Dim on purpose, never bright. Tuning knobs.
+ * merged unlit mesh (no real lights), unfogged so they read through the haze. Dim on purpose, never bright. Tuning knobs.
  */
-const WINDOW_COLOR = 0x8a5a26;
-const LAMP_COLOR = 0x5a3e1c;
+const WINDOW_COLOR = 0xc8873a;
+const LAMP_COLOR = 0x9a6a30;
 /** The house front is at z -1; windows sit 4 cm proud of it. Each is [centre x, centre y, width]. */
 const HOUSE_FRONT_Z = -0.96;
 const WINDOWS: readonly (readonly [number, number, number])[] = [
@@ -55,7 +55,7 @@ export function damNightLights(): THREE.Mesh {
   for (const p of parts) p.dispose();
   const mesh = new THREE.Mesh(
     geometry,
-    new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }),
+    new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: false }),
   );
   mesh.name = 'dam-night-lights';
   return mesh;
