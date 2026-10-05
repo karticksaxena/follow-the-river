@@ -74,6 +74,8 @@ export function lightViewmodel(root: THREE.Object3D, node: ViewLights['node']): 
   const copies = new Map<unknown, THREE.Material | null>();
   root.traverse((n) => {
     if (!(n instanceof THREE.Mesh)) return;
+    n.castShadow = false; // a viewmodel hangs off the camera: its shadow would stripe the torch's pool
+    n.receiveShadow = false;
     const source: unknown = n.material;
     if (!copies.has(source)) copies.set(source, lit(source, node));
     const copy = copies.get(source);

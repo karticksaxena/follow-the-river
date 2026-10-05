@@ -64,6 +64,7 @@ describe('lightViewmodel', () => {
     const root = new THREE.Group();
     const a = new THREE.Mesh(new THREE.BufferGeometry(), source);
     const b = new THREE.Mesh(new THREE.BufferGeometry(), source);
+    a.castShadow = a.receiveShadow = true;
     root.add(a, b);
     lightViewmodel(root, v.node);
     expect(a.material).toMatchObject({
@@ -73,5 +74,11 @@ describe('lightViewmodel', () => {
     });
     expect(b.material).toBe(a.material);
     expect(source).not.toBe(a.material);
+    expect([a.castShadow, a.receiveShadow, b.castShadow, b.receiveShadow]).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
   });
 });
