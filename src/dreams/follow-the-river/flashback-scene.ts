@@ -42,9 +42,9 @@ export const LAB_LIGHT = {
 } as const;
 
 export const TANK_LIGHT = {
-  ambient: { sky: 0x1a262e, ground: 0x08080a, intensity: 0.6 },
+  ambient: { sky: 0x1a262e, ground: 0x08080a, intensity: 1 },
   fog: { color: 0x04070a, near: 3, far: 18 },
-  inside: { color: 0x2a6a7a, intensity: 9.5, distance: 8, at: [0, 1.6, 0] as Vec },
+  inside: { color: 0x2a6a7a, intensity: 12, distance: 8, at: [0, 1.6, 0] as Vec },
   glassOpacity: 0.18,
   waterOpacity: 0.38,
 } as const;

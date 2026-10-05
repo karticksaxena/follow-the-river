@@ -1,5 +1,6 @@
 import { color, float, normalView, positionViewDirection, uniform } from 'three/tsl';
 import * as THREE from 'three/webgpu';
+import { outdoors } from '../../../engine/interiors';
 import { raySphere, type Vec3 } from '../../../engine/ray';
 import type { Intent } from './brain';
 
@@ -144,9 +145,11 @@ export function bodyHit(
 /**
  * The moon's faint rim on people (a fresnel on the emissive channel, so it lights no surface, only
  * the silhouette's edge): `strength` is the most it adds (linear), `power` how thin the edge is,
- * `color` a dim moon blue. Scaled by the moon's opacity, so it is gone by day and at sunrise.
+ * `color` a dim moon blue. Scaled by the moon's opacity, so it is gone by day and at sunrise, and
+ * masked indoors (a sleeper in a dark house shows only in the torch). Faint: torch off, a zombie
+ * 15 m away is a shape, not a figure (Kartik: "even if I turn off the torch, I can see the zombies").
  */
-export const RIM = { strength: 0.22, power: 3.5, color: 0x7f9bc4 } as const;
+export const RIM = { strength: 0.1, power: 3.5, color: 0x7f9bc4 } as const;
 
 /** Pure: the rim's strength for a moon of opacity `moon` (0..1). */
 export const rimStrength = (moon: number): number => RIM.strength * Math.min(1, Math.max(0, moon));
@@ -166,7 +169,7 @@ function rimmed(src: THREE.MeshStandardMaterial): THREE.Material {
   if (!m) {
     const node = new THREE.MeshStandardNodeMaterial().copy(src);
     const edge = float(1).sub(normalView.dot(positionViewDirection).saturate()).pow(RIM.power);
-    node.emissiveNode = color(RIM.color).mul(edge).mul(rimLevel);
+    node.emissiveNode = color(RIM.color).mul(edge).mul(rimLevel).mul(outdoors()); // none indoors
     node.userData.cached = true; // shared by every clone, like its source
     m = node;
     rimMade.set(src, m);
