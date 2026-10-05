@@ -65,9 +65,9 @@ export function inBeamDistance(
 export const WATCH = { horde: 0, mom: 1, dras: 2 } as const;
 const SLOTS = 3;
 
-/** Where the torch points, in camera space: slightly inward, `FLASHLIGHT.pitch` below the view. Writes `out`. */
+/** Where the torch points, in camera space: slightly inward (it is held on the right), `FLASHLIGHT.pitch` below the view. Writes `out`. */
 export function torchAim<T extends { set(x: number, y: number, z: number): unknown }>(out: T): T {
-  out.set(-0.05, -0.12 - Math.tan(FLASHLIGHT.pitch), -1);
+  out.set(0.05, -0.12 - Math.tan(FLASHLIGHT.pitch), -1);
   return out;
 }
 
@@ -134,8 +134,8 @@ export function createFlashlight(camera: THREE.Camera, tier: Tier = 'high'): Fla
     FLASHLIGHT.penumbra,
     FLASHLIGHT.decay,
   );
-  // Held in the left hand, so its cone misses the bow in the right (it blew the bow out to white).
-  light.position.set(-0.25, -0.12, 0);
+  // Held on the right, with the weapons; view-light.ts keeps it from blowing the viewmodel out to white.
+  light.position.set(0.25, -0.12, 0);
   light.castShadow = true;
   light.shadow.mapSize.set(TIERS[tier].torchShadowMap, TIERS[tier].torchShadowMap);
   light.shadow.bias = -0.0005;

@@ -2,6 +2,7 @@ export type HintId =
   | 'pickup'
   | 'shack'
   | 'bow'
+  | 'bowStory'
   | 'fish'
   | 'wait'
   | 'night'
@@ -31,7 +32,15 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
     'Switched off, it slowly charges back up.',
   ],
   battery: ['A spare battery. When the flashlight runs low, press R to put it in.'],
-  bow: ['Click to shoot your bow. It is silent.', 'Walk over your arrows to pick them back up.'],
+  bow: [
+    'Click to shoot your bow. It is silent.',
+    'Walk over arrows that missed to pick them back up. One that hits a zombie stays in it.',
+  ],
+  /** Story keeps arrows that hit (difficulty.ts `keepHitArrows`). */
+  bowStory: [
+    'Click to shoot your bow. It is silent.',
+    'Walk over your arrows to pick them back up, even ones that hit.',
+  ],
   fish: [
     "Stand at the water's edge and press E to throw a fish pack in.",
     'Every fish pack you feed her makes her hungrier.',
@@ -51,7 +60,7 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   waveHouse: [
     'They are coming, and they will keep coming. The crate is in one of the houses here: take your flashlight.',
   ],
-  clear: ['The barricade is down. Keep going downstream.'],
+  clear: ['The barricade is down and you catch your breath. Keep going downstream.'],
   hurt: ['You are hurt. Three hits and you are dead.'],
   tape: ["A video tape. Mom's handwriting on the label."],
   night1: [

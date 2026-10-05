@@ -22,7 +22,7 @@ export const DREAMS: readonly DreamInfo[] = [
       'A head shot always kills. A body shot takes more the harder the game: one on Story, two on Normal, three on Hard.',
       'Dras helps near you and takes some of each wave. When you are out of ammo, lead them to the water and keep moving.',
       '1 to 4: switch weapons. R: put in a spare battery.',
-      'The bow is silent. Walk over arrows to pick them up again.',
+      'The bow is silent. Walk over arrows that missed to pick them up again; on Story, ones that hit too.',
       'Three hits and you die. Dying restarts the day or night with what you had when it began.',
     ],
     load: async () => (await import('./follow-the-river/index')).createDream(),

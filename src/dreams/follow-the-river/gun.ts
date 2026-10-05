@@ -6,6 +6,7 @@ import { loadModel } from '../../engine/models';
 import type { Vec3 } from '../../engine/ray';
 import { propUrl } from './kits';
 import { GUN_KINDS, type GunKind } from './state';
+import { lightViewmodel, viewLightsFor } from './view-light';
 import { GUNS, spreadDir, stepTimers, tryShot, type GunSpec, type GunTimers } from './weapons';
 import type { Horde } from './zombies/horde';
 
@@ -104,6 +105,7 @@ async function makeGun(
   view.position.set(spec.view.x, spec.view.y, spec.view.z);
   view.visible = false;
   view.add(await loadModel(propUrl(spec.model)));
+  lightViewmodel(view, viewLightsFor(camera).node); // lit by the world, never by the torch
   camera.add(view);
   const s: GunState = {
     spec,
@@ -144,6 +146,7 @@ export async function createArmory(
   return {
     guns: { pistol: pistol.gun, shotgun: shotgun.gun, rifle: rifle.gun },
     update(dt) {
+      viewLightsFor(camera).update(dt);
       let lit = 0;
       for (const st of states) {
         updateGun(st, dt);

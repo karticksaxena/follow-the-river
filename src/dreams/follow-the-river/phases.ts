@@ -43,7 +43,7 @@ export interface Flow {
 export function hintPages(f: Flow, id: HintId): readonly string[] {
   if (f.run.live.hints.includes(id)) return [];
   f.run.live.hints.push(id);
-  return HINTS[id];
+  return HINTS[id === 'bow' && f.sys.ctx.difficulty() === 'story' ? 'bowStory' : id];
 }
 
 /** Shows a hint now, unless the player is already reading something. */
@@ -181,5 +181,6 @@ export function checkpoint(f: Flow, cleared: number): void {
   if (f.run.frozen || f.run.dying !== 'no') return;
   f.save = clearWave(f.save, f.run.live, cleared);
   f.store.save(f.save);
+  f.run.health = MAX_HEALTH; // the HUD hearts follow run.health every frame
   showHint(f, 'clear');
 }

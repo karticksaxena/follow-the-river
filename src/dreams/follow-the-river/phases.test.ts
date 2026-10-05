@@ -1,7 +1,8 @@
 /* oxlint-disable vitest/require-mock-type-parameters, typescript/no-unsafe-type-assertion -- partial fakes of big interfaces */
 import { describe, expect, it, vi } from 'vitest';
-import { beginPhase, type Flow } from './phases';
-import { freshRun } from './state';
+import { MAX_HEALTH } from './flow';
+import { beginPhase, checkpoint, hintPages, type Flow } from './phases';
+import { freshRun, restartPhase } from './state';
 
 vi.mock('./lighting', async (orig) => ({
   ...(await orig<typeof import('./lighting')>()),
@@ -63,5 +64,32 @@ describe('beginPhase', () => {
     beginPhase(f);
     expect(f.onReset).toHaveBeenCalled();
     expect(fish.strikes).toBe(0); // no strikes until a wave begins
+  });
+});
+
+const flow = (difficulty: string, dying: string): Flow =>
+  ({
+    sys: { ctx: { isPaused: () => true, difficulty: () => difficulty } },
+    run: { frozen: false, dying, health: 30, live: restartPhase(freshRun()) },
+    save: freshRun(),
+    store: { save: vi.fn() },
+  }) as unknown as Flow;
+
+describe('wave cleared', () => {
+  it('restores full health', () => {
+    const f = flow('normal', 'no');
+    checkpoint(f, 1);
+    expect(f.run.health).toBe(MAX_HEALTH);
+  });
+
+  it('leaves a dying player alone', () => {
+    const f = flow('normal', 'falling');
+    checkpoint(f, 1);
+    expect(f.run.health).toBe(30);
+  });
+
+  it('picks the bow hint by difficulty', () => {
+    expect(hintPages(flow('story', 'no'), 'bow').join(' ')).toMatch(/even ones that hit/);
+    expect(hintPages(flow('hard', 'no'), 'bow').join(' ')).toMatch(/stays in it/);
   });
 });

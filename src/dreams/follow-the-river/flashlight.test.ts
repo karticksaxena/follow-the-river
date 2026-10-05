@@ -197,3 +197,9 @@ describe('groundScale (the pool on pale paving)', () => {
     }
   });
 });
+
+describe('torch side', () => {
+  it('is held on the right, with the weapons', () => {
+    expect(createFlashlight(new THREE.PerspectiveCamera()).light.position.x).toBeGreaterThan(0);
+  });
+});
