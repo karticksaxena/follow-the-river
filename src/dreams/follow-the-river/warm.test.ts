@@ -58,7 +58,15 @@ describe('warmNight', () => {
       log.indexOf('frame hold=false warming=true views=true,true,true'),
     );
     expect(log.some((l) => l.startsWith('frame hold=true'))).toBe(false); // the loop runs
-    expect(log.slice(-2)).toEqual(['orca off', 'reset']);
+    const reset = log.lastIndexOf('reset');
+    expect(log[reset - 1]).toBe('orca off');
+    // then a few frames in the player's own view, still warming, everything back as it was
+    expect(log.slice(reset + 1).length).toBeGreaterThan(0);
+    expect(
+      log
+        .slice(reset + 1)
+        .every((l) => l === 'frame hold=false warming=true views=false,true,false'),
+    ).toBe(true);
     expect([bow.visible, gunA.visible, gunB.visible]).toEqual([false, true, false]);
     expect(camera.position.set).toHaveBeenLastCalledWith(3, 1.7, -4); // exactly where it was
     expect(camera.rotation.set).toHaveBeenLastCalledWith(0.1, 0.2, 0, 'YXZ');

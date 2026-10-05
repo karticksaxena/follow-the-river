@@ -35,6 +35,8 @@ const WARM_YAW = -Math.PI / 2;
 const WARM_PITCH = -0.2;
 /** Real loop frames drawn behind black: the torch, motion, shadows and the water reflection all run. */
 const WARM_FRAMES = 25;
+/** Then a few more in the player's own view (what faces downstream: lamp glows, sky discs, the AO pass). */
+const VIEW_FRAMES = 4;
 
 /** Resolves after the stage's loop has run `n` frames. */
 function frames(stage: Stage, n: number): Promise<void> {
@@ -106,6 +108,7 @@ export async function warmNight(sys: Systems, battery: number): Promise<void> {
     undoCamera();
     sys.horde.reset(); // park the bodies so the wave starts clean
     stage.hold = false;
+    await frames(stage, VIEW_FRAMES); // still behind black: the restored view compiles too
     stage.warming = false;
   }
 }
