@@ -7,6 +7,7 @@ import type { Vec3 } from '../../engine/ray';
 import { giveArms, loadArms } from './fp-arms';
 import { propUrl } from './kits';
 import type { Sounds } from './sounds';
+import { lightViewmodel, viewLightsFor } from './view-light';
 import type { Horde } from './zombies/horde';
 
 /** Arrow speed (m/s), gravity (m/s², gentle on purpose), reload (s), flight time (s), arrows in the pool. */
@@ -225,6 +226,7 @@ function createBowState(
   nocked.position.set(0, 0, -0.25);
   view.add(bowModel, nocked);
   giveArms(view, arms, 'bow');
+  lightViewmodel(view, viewLightsFor(camera).node); // lit by the world, never by the torch
   camera.add(view);
   const arrows = Array.from({ length: BOW.pool }, newArrow);
   const meshes = arrows.map(() => {
@@ -255,7 +257,10 @@ export async function createBow(
     },
     view: s.view,
     fire: (eye, look) => fireArrow(s, eye, look),
-    update: (dt, horde, grid, player) => updateBow(s, dt, horde, grid, player),
+    update(dt, horde, grid, player) {
+      viewLightsFor(camera).update(dt);
+      return updateBow(s, dt, horde, grid, player);
+    },
     reset: () => resetBow(s),
     dispose() {
       camera.remove(s.view);
