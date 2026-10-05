@@ -233,6 +233,15 @@ const quaternion = new THREE.Quaternion();
 const scaling = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
+/**
+ * A cell's instance capacity. three writes it into the shader (a uniform array of that many
+ * matrices), so each distinct capacity is another pipeline in every pass: the walk met new ones and
+ * compiled mid-play. A few sizes keep the variants few enough to warm. Above 1024 three reads the
+ * matrices as a vertex attribute, which does not depend on the count.
+ */
+const CAPACITIES = [4, 16, 64, 256, 1024] as const;
+export const capacityFor = (n: number): number => CAPACITIES.find((c) => c >= n) ?? n;
+
 interface Group {
   category: Category;
   kind: Kind;
@@ -295,9 +304,10 @@ function instances(part: Part, g: Group, tier: Tier): THREE.InstancedMesh {
   const mesh = new THREE.InstancedMesh(
     instancedGeometry(part.geometry, scales),
     materialFor(part.source, g.category, g.kind, tier),
-    g.plants.length,
+    capacityFor(g.plants.length),
   );
   mesh.instanceMatrix.array.set(matrices);
+  mesh.count = g.plants.length;
   const solid = g.category === 'trees' || g.category === 'rocks';
   // Near trees and rocks cast shadows on High only; grass and ferns neither cast nor receive.
   mesh.receiveShadow = solid || g.category === 'trees-far';
@@ -384,17 +394,19 @@ export class Vegetation extends THREE.Group {
   }
 
   /**
-   * Warm-up: the cull stands still, with every cell on show (`sample` false: so each material
-   * compiles) or only the smallest cell of each material (`sample` true: enough for the shadow,
-   * prepass and reflection pipelines, which are keyed per material, at a fraction of the draw cost).
-   * Returns the undo, after which the next frame culls again.
+   * Warm-up: the cull stands still, with every cell on show (`sample` false: each cell is its own
+   * node build in three, keyed by its uuid) or one cell per material and capacity (`sample` true:
+   * the pipelines, at a fraction of the draw cost). Returns the undo, after which the next frame culls again.
    */
   showAll(sample = false): () => void {
     this.forced = true;
-    const pick = new Map<THREE.Material | THREE.Material[], Cell>();
+    const pick = new Map<string, Cell>();
     for (const c of this.cells) {
-      const best = pick.get(c.mesh.material);
-      if (!best || c.mesh.count < best.mesh.count) pick.set(c.mesh.material, c);
+      const { material, instanceMatrix } = c.mesh;
+      const ids = Array.isArray(material) ? material.map((m) => m.uuid).join() : material.uuid;
+      const key = `${ids}:${instanceMatrix.count}`;
+      const best = pick.get(key);
+      if (!best || c.mesh.count < best.mesh.count) pick.set(key, c);
     }
     const shown = new Set(pick.values());
     for (const c of this.cells) c.mesh.visible = !sample || shown.has(c);

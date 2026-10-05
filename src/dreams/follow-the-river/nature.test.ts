@@ -6,9 +6,13 @@ import { SUBURBS } from './areas/suburbs';
 import type { AreaDef } from './areas/types';
 import { meshY, pathX, RIVER_HALF, TERRAIN, terrainY } from './canoe-scene';
 import { canoePlants } from './canoe-vegetation';
-import { addVegetation, type Vegetation } from './nature';
+import { addVegetation, capacityFor, type Vegetation } from './nature';
 import { shackBounds } from './shack';
 import { type Plant, plantsOf, stripGrass } from './vegetation';
+
+/** A cell's shader variant: three bakes the instance capacity into the shader. */
+const variant = (m: THREE.InstancedMesh): string =>
+  `${m.material instanceof THREE.Material ? m.material.uuid : ''}:${m.instanceMatrix.count}`;
 
 /** Vegetation meshes shown per pass: every one is a draw call. */
 const MAX_MESHES = 60;
@@ -185,6 +189,13 @@ describe('Vegetation.setTier (Auto or the pause menu changes the tier mid-chapte
     expect(new Set(sample.map((m) => m.material)).size).toBe(
       new Set(all.map((m) => m.material)).size,
     );
+    // every (material, capacity) shader variant is in the sample, so the warm-up meets them all
+    expect(new Set(sample.map(variant))).toEqual(new Set(all.map(variant)));
     undo();
   }, 60000);
+
+  it('capacityFor rounds up to a few sizes (each is a shader variant); past 1024 the count is free', () => {
+    expect([1, 4, 5, 16, 17, 200, 1024].map(capacityFor)).toEqual([4, 4, 16, 16, 64, 256, 1024]);
+    expect(capacityFor(3000)).toBe(3000);
+  });
 });
