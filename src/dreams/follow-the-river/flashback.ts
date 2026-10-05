@@ -39,10 +39,11 @@ async function run(
 ): Promise<void> {
   const { stage, overlay } = ctx;
   const previous = stage.scene;
+  const stopLoading = overlay.loading();
   const [flashback] = await Promise.all([
     buildFlashback(tape, ctx).catch(() => null), // a failed load still plays the tape as text
     overlay.fade(true, FLASHBACK_FADE_MS),
-  ]);
+  ]).finally(stopLoading);
   if (stage.scene !== previous) {
     // The dream was quit or swapped scenes while we loaded.
     flashback?.dispose();

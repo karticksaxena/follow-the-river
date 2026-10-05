@@ -37,6 +37,7 @@ function host(): {
   const run = { ending: 'no', frozen: false, cutscene: false, interact: null, live: {} };
   const ctx = {
     overlay: {
+      loading: () => (): void => undefined,
       fade: vi.fn<(b: boolean) => Promise<void>>(async (b) => void log.push(b ? 'black' : 'clear')),
     },
     hold: vi.fn<() => void>(),

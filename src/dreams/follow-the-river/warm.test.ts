@@ -1,5 +1,6 @@
 /* oxlint-disable vitest/require-mock-type-parameters, typescript/no-unsafe-type-assertion -- partial fakes of big interfaces */
 import { describe, expect, it, vi } from 'vitest';
+import type { Overlay } from '../../engine/ui';
 import type { Systems } from './run';
 import { readWhileWarming, warmNight } from './warm';
 
@@ -91,20 +92,27 @@ describe('readWhileWarming', () => {
       hooks.closeReader = done ?? hooks.closeReader;
     });
     const warm = new Promise<void>((r) => (hooks.endWarm = r));
+    const stop = vi.fn();
+    const loading = vi.fn(() => stop);
+    const overlay = { loading } as unknown as Overlay;
     let done = false;
-    const run = readWhileWarming({ read }, ['Night 1'], warm).then(() => (done = true));
+    const run = readWhileWarming({ read, overlay }, ['Night 1'], warm).then(() => (done = true));
     expect(read).toHaveBeenCalledOnce();
     hooks.closeReader();
     await Promise.resolve();
     expect(done).toBe(false); // read closed, still compiling
+    expect(loading).toHaveBeenCalledOnce(); // so the loader shows, not a bare black screen
+    expect(stop).not.toHaveBeenCalled();
     hooks.endWarm();
     await run;
+    expect(stop).toHaveBeenCalledOnce();
     expect(done).toBe(true);
   });
 
   it('with no pages waits for the warm-up alone', async () => {
     const read = vi.fn();
-    await readWhileWarming({ read }, [], Promise.resolve());
+    const overlay = { loading: () => () => undefined } as unknown as Overlay;
+    await readWhileWarming({ read, overlay }, [], Promise.resolve());
     expect(read).not.toHaveBeenCalled();
   });
 });

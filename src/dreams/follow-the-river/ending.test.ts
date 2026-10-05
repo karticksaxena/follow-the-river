@@ -12,6 +12,7 @@ import {
   nightEnd,
   sickenToEnd,
   struckNear,
+  waitDone,
   WAVE,
   waveCount,
   waveDue,
@@ -316,5 +317,19 @@ describe('bedFade', () => {
     expect(step(0.3)).toBe(true);
     expect(log).toEqual(['water stop', 'water off', 'birds stop', 'birds off']);
     expect(beds).toHaveLength(0);
+  });
+});
+
+describe('waitDone', () => {
+  it('ends a wait whose step throws, so the ending never freezes on it', () => {
+    // Kartik: stuck at "Let's go home" - the dawn's bed fade threw (a sound freed twice).
+    const throwing = {
+      pred: (): boolean => {
+        throw new Error('InvalidAccessError: not connected');
+      },
+    };
+    expect(waitDone(throwing, 0.016)).toBe(true);
+    expect(waitDone({ pred: () => false }, 0.016)).toBe(false);
+    expect(waitDone({ pred: () => true }, 0.016)).toBe(true);
   });
 });

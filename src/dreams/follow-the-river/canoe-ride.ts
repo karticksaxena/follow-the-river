@@ -372,10 +372,11 @@ async function run(
   const { stage, overlay } = ctx;
   const previous = stage.scene;
   const length = travelled(RIDE.seconds + RIDE.tail, STOP_AT);
+  const stopLoading = overlay.loading('Setting out…');
   const [cs] = await Promise.all([
     buildCanoeScene(length, stage).catch(() => null),
     replay ? undefined : overlay.fade(true, RIDE.fadeMs),
-  ]);
+  ]).finally(stopLoading);
   if (stage.scene !== previous || !cs) {
     cs?.dispose();
     if (cs) return done();

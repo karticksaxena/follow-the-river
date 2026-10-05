@@ -28,7 +28,12 @@ describe('playCanoeRide', () => {
     const fade = vi.fn(() => Promise.resolve());
     const read = vi.fn((_pages: readonly string[], done?: () => void) => done?.());
     const stage = { scene: previous, camera: {}, addUpdater: vi.fn(() => () => undefined) };
-    const ctx = { stage, overlay: { fade, root: {} }, read, hold: vi.fn() };
+    const ctx = {
+      stage,
+      overlay: { fade, root: {}, loading: () => (): void => undefined },
+      read,
+      hold: vi.fn(),
+    };
     await playCanoeRide(ctx as never, {} as never);
     expect(dispose).toHaveBeenCalled();
     expect(stage.scene).toBe(previous);

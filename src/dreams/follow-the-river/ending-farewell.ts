@@ -108,7 +108,12 @@ function callAt(s: Script, at: Shore, buffer: AudioBuffer, volume: number): void
   const sound = ctx.audio.positional(head, 6);
   sound.setBuffer(buffer);
   sound.setVolume(volume);
+  // Freed once: when it ends AND again by the dawn's bed fade. A second disconnect threw and froze the
+  // ending at "Let's go home" (Kartik: "the game is literally stuck").
+  let freed = false;
   const free = (): void => {
+    if (freed) return;
+    freed = true;
     sound.disconnect();
     world.scene.remove(head);
   };

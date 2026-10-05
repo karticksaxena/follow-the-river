@@ -1,5 +1,4 @@
 import * as THREE from 'three/webgpu';
-import { showMessage } from '../../engine/menus';
 import { browserStorage, createSaveStore, type SaveStore } from '../../engine/save';
 import { DIFFICULTIES } from '../../engine/settings';
 import { withTimeout } from '../../engine/time';
@@ -27,8 +26,6 @@ import {
 
 /** Every phase that has a chapter; the saved `end` has none. */
 const PLAYABLE: readonly Phase[] = ['day1', 'night1', 'day2', 'night2', 'day3', 'night3'];
-/** Show "Loading…" only when a scene swap takes longer than this. */
-const LOADING_DELAY_MS = 300;
 const LOAD_FAILED = "Couldn't load the next part. Check your internet connection and try again.";
 /** The page whose click regains control after a scene swap. */
 const RESUME_PAGES: readonly string[] = ['The dream begins again.'];
@@ -141,14 +138,14 @@ export function createDream(): DreamModule {
     ctx.hold();
     await overlay.fade(true);
     if (disposed) return;
-    const loading = setTimeout(() => showMessage(overlay, '', 'Loading…'), LOADING_DELAY_MS);
+    const stopLoading = overlay.loading();
     let failed = false;
     try {
       await withTimeout(swap(), LOAD_TIMEOUT_MS);
     } catch {
       failed = true;
     } finally {
-      clearTimeout(loading);
+      stopLoading();
     }
     if (disposed) return;
     if (failed || (!chapter && !intro && !cold)) {

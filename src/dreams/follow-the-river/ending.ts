@@ -148,14 +148,38 @@ const until = (st: State, pred: Wait['pred']): Promise<void> =>
     st.wait = { pred, resolve };
   });
 
+/** A wait whose step throws is over: the ending moves on instead of freezing forever on that frame. */
+export function waitDone(wait: Pick<Wait, 'pred'>, dt: number): boolean {
+  try {
+    return wait.pred(dt);
+  } catch {
+    return true;
+  }
+}
+
 /** Fade to black, clear the bank, put Mom on the shore, turn to her, fade back in. */
 async function setUp(h: EndingHost, st: State): Promise<void> {
-  const { ctx, horde } = h.sys;
+  const { ctx } = h.sys;
   h.run.ending = 'fight';
   h.run.frozen = true;
   ctx.hold();
   await ctx.overlay.fade(true);
   if (st.cancelled) return;
+  const stopLoading = ctx.overlay.loading();
+  try {
+    await buildLake(h, st);
+  } finally {
+    stopLoading();
+  }
+  if (st.cancelled) return;
+  await ctx.overlay.fade(false);
+  if (st.cancelled) return;
+  h.run.frozen = false;
+}
+
+/** The behind-black work of `setUp`: the lake scene, the pack, Mom on the shore, the compile. */
+async function buildLake(h: EndingHost, st: State): Promise<void> {
+  const { ctx, horde } = h.sys;
   horde.reset();
   const scene = st.scene ?? (await buildEndingScene(h.sys));
   if (st.cancelled) return scene.dispose();
@@ -170,10 +194,6 @@ async function setUp(h: EndingHost, st: State): Promise<void> {
   const mom = h.sys.area.meetAt;
   if (mom) ctx.player.teleport(cam.x, cam.z, facing(cam.x, cam.z, mom.x, mom.z) + Math.PI);
   await ctx.stage.renderer.compileAsync(h.sys.world.scene, ctx.stage.camera);
-  if (st.cancelled) return;
-  await ctx.overlay.fade(false);
-  if (st.cancelled) return;
-  h.run.frozen = false;
 }
 
 const read = (h: EndingHost, st: State, pages: readonly string[]): Promise<void> =>
@@ -457,7 +477,7 @@ export function createEnding(h: EndingHost): Ending {
       if (!st.started || st.cancelled) return;
       st.scene?.update(dt); // Mom keeps moving behind the pages: she kneels as Mom speaks
       const paused = h.sys.ctx.isPaused();
-      if (!paused && st.wait?.pred(dt)) {
+      if (!paused && st.wait && waitDone(st.wait, dt)) {
         const { resolve } = st.wait;
         st.wait = null;
         resolve();

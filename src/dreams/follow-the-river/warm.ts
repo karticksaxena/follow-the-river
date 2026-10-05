@@ -115,7 +115,7 @@ export async function warmNight(sys: Systems, battery: number): Promise<void> {
 
 /** Shows `pages` now and resolves when the player has closed them (at once if none) and `warm` is done. */
 export async function readWhileWarming(
-  ctx: Pick<DreamContext, 'read'>,
+  ctx: Pick<DreamContext, 'read' | 'overlay'>,
   pages: readonly string[],
   warm: Promise<void>,
 ): Promise<void> {
@@ -123,5 +123,7 @@ export async function readWhileWarming(
     if (pages.length > 0) ctx.read(pages, done);
     else done();
   });
-  await Promise.all([read, warm]);
+  await read;
+  const stopLoading = ctx.overlay.loading(); // the pages are closed but the shaders are not ready
+  await warm.finally(stopLoading);
 }

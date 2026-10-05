@@ -264,3 +264,39 @@ h1.title {
 .cinematic .hud {
   visibility: hidden;
 }
+
+/* Loader: a slow muted ring over the black fader; the HUD is hidden while a wait is on. */
+.loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  color: var(--dim);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.loader.on {
+  opacity: 1;
+}
+.loader p {
+  margin: 0;
+}
+.loader-ring {
+  width: 34px;
+  height: 34px;
+  border: 2px solid #2a2840;
+  border-top-color: var(--dim);
+  border-radius: 50%;
+  animation: loader-spin 1.6s linear infinite;
+}
+@keyframes loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+#overlay.loading .hud {
+  visibility: hidden;
+}
