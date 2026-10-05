@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shoreHeight, waterlineDistance } from './lake';
+import { beachBlend, shoreHeight, waterlineDistance } from './lake';
 import { EDGE_X, FAR_EDGE_X, LAKE, shoreY, WATER_Y } from './river';
 
 describe('shoreHeight', () => {
@@ -22,5 +22,15 @@ describe('waterlineDistance (the foam band)', () => {
   });
   it('follows the flared bank in the mouth, not the lake line', () => {
     expect(waterlineDistance(EDGE_X + 2, frame.z + 20, frame)).toBeCloseTo(2);
+  });
+});
+
+describe('beachBlend (pebbles to land)', () => {
+  it('is pebbles on the slope and fully land by the shore mesh edge, so no seam against the ground', () => {
+    expect(beachBlend(0)).toBe(0);
+    expect(beachBlend(-LAKE.slopeStart)).toBe(0);
+    expect(beachBlend(-LAKE.pebbleDepth)).toBe(1); // the ground plane starts here
+    expect(beachBlend(-30)).toBe(1);
+    expect(beachBlend(-5)).toBeGreaterThan(0);
   });
 });

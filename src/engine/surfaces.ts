@@ -53,6 +53,18 @@ export function puddleAmount(noise01: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/** A ragged seam (`SurfaceLook.ragged`): how far noise shifts it (blend units) and its noise per metre. */
+export const RAGGED = { shift: 0.8, freq: 0.45 } as const;
+
+/**
+ * Pure: the blend (0 base .. 1 second surface) from the geometry's smooth blend `m` and a noise
+ * `n` (0..1): 0 stays 0 and 1 stays 1, the seam between wanders with the noise. The shader mirrors it.
+ */
+export function raggedBlend(m: number, n: number): number {
+  const x = Math.min(1, Math.max(0, m * (1 + RAGGED.shift) - (1 - n) * RAGGED.shift));
+  return x * x * (3 - 2 * x);
+}
+
 /** Pure: which maps a tier reads. Low drops ARM (and with it AO, roughness and puddles). */
 export function tierMaps(tier: Tier): { normal: boolean; arm: boolean; puddles: boolean } {
   const rich = tier !== 'low';
@@ -93,6 +105,8 @@ export interface SurfaceLook {
   blend?: SurfaceName;
   /** Flat tint (sRGB hex) for meshes without vertex colours. */
   tint?: number;
+  /** Break the `blend` seam up with world-space noise (a ragged edge, never a straight line). */
+  ragged?: boolean;
   /** The geometry carries per-vertex colours (multiplied in). */
   vertexColors?: boolean;
   /** Wet puddle patches (asphalt); Medium and High only. */
@@ -176,12 +190,24 @@ function walkwayMask(paint: THREE.Node<'vec3'>, kind: WalkwayKind): THREE.Node<'
   return mask;
 }
 
+/** The shader twin of `raggedBlend`: two octaves of world-space noise, stretched to span 0..1. */
+function raggedNode(m: THREE.Node<'float'>): THREE.Node<'float'> {
+  const p = positionWorld.xz.mul(RAGGED.freq);
+  const n = mx_noise_float(p)
+    .mul(0.6)
+    .add(mx_noise_float(p.mul(2.7)).mul(0.4))
+    .mul(0.7)
+    .add(0.5);
+  const x = m.mul(1 + RAGGED.shift).sub(float(1).sub(n.saturate()).mul(RAGGED.shift));
+  return smoothstep(0, 1, x);
+}
+
 /** The base set's maps, faded to the second set by `w` (default: the geometry's `blend` attribute). */
 function sampleLook(look: SurfaceLook, maps: Maps, w?: THREE.Node<'float'>): Sample {
   const a = sample(look.base, maps);
   if (!look.blend) return a;
   const b = sample(look.blend, maps);
-  w ??= attribute('blend', 'float');
+  w ??= look.ragged ? raggedNode(attribute('blend', 'float')) : attribute('blend', 'float');
   return {
     rgb: mix(a.rgb, b.rgb, w),
     nor: mix(a.nor, b.nor, w),

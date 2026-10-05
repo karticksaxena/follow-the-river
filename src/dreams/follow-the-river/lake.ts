@@ -15,8 +15,15 @@ import { createWaterMesh, LAKE_FLOW, setWaterAttribute } from './water';
 
 /** Shore terrain grid cell (m). A 4 m slope takes about one and a half cells. Tuning knob. */
 const CELL = 3;
-/** Pebbles fade into the land colour over this many metres, starting where the slope ends. */
-const PEBBLE_FADE = 6;
+/**
+ * Pure: 0 pebbles .. 1 land at `depth` m inside the lake outline. It reaches 1 at the shore mesh's
+ * own edge (`LAKE.pebbleDepth` on land), where the grass ground plane begins: a smaller value
+ * there left a dead straight seam. The surface shader breaks this ramp up with noise (`ragged`).
+ */
+export function beachBlend(depth: number): number {
+  const t = (-depth - LAKE.slopeStart) / (LAKE.pebbleDepth - LAKE.slopeStart);
+  return Math.min(1, Math.max(0, t));
+}
 
 /** The shore's height where the outline is `depth` m inside the lake (negative: on land). */
 export function shoreHeight(depth: number): number {
@@ -54,8 +61,7 @@ function shoreMesh(r: Rect, frame: LakeFrame, landColor: number, land: SurfaceNa
     p.setX(i, x - cx);
     const d = lakeDepth(x, z, frame);
     p.setY(i, shoreHeight(d));
-    const t = Math.min(1, Math.max(0, (-d - LAKE.slopeStart) / PEBBLE_FADE));
-    blend[i] = t * t * (3 - 2 * t);
+    blend[i] = beachBlend(d);
     c.copy(pebble).lerp(landTint, blend[i]);
     c.toArray(col, i * 3);
   }
@@ -64,7 +70,7 @@ function shoreMesh(r: Rect, frame: LakeFrame, landColor: number, land: SurfaceNa
   geo.computeVertexNormals();
   const mesh = new THREE.Mesh(
     geo,
-    surfaceMaterial({ base: 'pebbles', blend: land, vertexColors: true }),
+    surfaceMaterial({ base: 'pebbles', blend: land, vertexColors: true, ragged: true }),
   );
   mesh.position.set(cx, 0, cz);
   mesh.receiveShadow = true;

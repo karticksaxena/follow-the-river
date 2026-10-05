@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PUDDLE,
   puddleAmount,
+  raggedBlend,
   repeatPerMetre,
   SURFACES,
   tierMaps,
@@ -52,5 +53,25 @@ describe('surfaces', () => {
     expect(walkwayClass([142, 149, 179])).toBe('marking'); // centre line
     expect(walkwayClass([81, 85, 102])).toBe('marking'); // edge lines
     expect(WALKWAY_PALETTE.some((p) => p.kind === 'marking')).toBe(true);
+  });
+});
+
+const half = (n: number): number => {
+  let m = 0;
+  while (m < 1 && raggedBlend(m, n) < 0.5) m += 0.005;
+  return m;
+};
+
+describe('raggedBlend (a noisy seam between two surfaces)', () => {
+  it('is pure base at 0 and pure second surface at 1, whatever the noise', () => {
+    for (const n of [0, 0.3, 0.5, 0.8, 1]) {
+      expect(raggedBlend(0, n)).toBe(0);
+      expect(raggedBlend(1, n)).toBe(1);
+    }
+  });
+  it('puts the seam at different blends for different noise, over a soft band', () => {
+    expect(half(0)).toBeGreaterThan(half(1) + 0.3); // the line wanders
+    expect(raggedBlend(0.5, 0.5)).toBeGreaterThan(0);
+    expect(raggedBlend(0.5, 0.5)).toBeLessThan(1);
   });
 });
