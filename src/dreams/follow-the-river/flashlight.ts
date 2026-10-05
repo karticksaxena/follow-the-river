@@ -28,7 +28,8 @@ export const TORCH_EXPOSURE = {
   chest: 1.1,
   /** Ground pool: where the axis meets flat ground nearer than `groundRef` m, intensity falls by (d / groundRef)^2, never below `groundFloor`. */
   groundRef: 5,
-  groundFloor: 0.35,
+  // looking at your feet on pale paving still clipped at 0.35; 0.15 keeps the pavers readable (Chrome, Night 1)
+  groundFloor: 0.15,
 } as const;
 
 /** Pure: the torch's scale 0..1 so the pool on flat ground does not clip pale paving (`pitch`: the beam axis below horizontal, rad). */
