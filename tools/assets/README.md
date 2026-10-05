@@ -177,9 +177,10 @@ No script: seven Poly Haven CC0 sets (`asphalt_02`, `concrete_pavement`, `mud_fo
 ## Mom's extra clips
 
 `tools/blender/mom_clips.py` adds `Sit`, `Kneel`, `Throw` and `Row` to `public/assets/characters/mom.glb` (named `CharacterArmature|<name>` like her
-Quaternius clips; every existing clip, mesh and material is kept). `Sit`, `Kneel` (a seamless hold cut from `Fixing_Kneeling`) and `Throw` are retargeted
+Quaternius clips; every existing clip, mesh and material is kept). `Sit` and `Throw` are retargeted
 from Quaternius' CC0 Universal Animation Libraries 1 (`AL_Standard.fbx`) and 2 (`UAL2_Standard.glb`); `Row` is authored (Sit + torso twist + both hands on a
-swinging paddle shaft). Hips never travel. Re-running is safe (the four clips are replaced). Inputs are the downloaded packs from the zombie step:
+swinging paddle shaft), and so is `Kneel` (UAL's `Fixing_Kneeling` read as a sprinter's lunge: a 3 s double-kneel hold with both shins on the ground,
+hips low over the heels, torso leaned 18 degrees, hands on the thighs, slow breathing; the knobs are the constants above `kneel_pose`). Hips never travel. Re-running is safe (the clips named in the script are replaced). Inputs are the downloaded packs from the zombie step:
 
 ```bash
 /Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python tools/blender/mom_clips.py -- \
