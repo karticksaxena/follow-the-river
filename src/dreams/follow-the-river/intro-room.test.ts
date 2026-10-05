@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { segmentHitsBox, type Box } from '../../engine/collide';
 import { PLAYER_RADIUS } from '../../engine/player';
+import { buildDecor, SHELF_Y, WALL_THINGS } from './intro-decor';
 import { footprint, FURNITURE, furnitureColliders, ROOM_INSIDE } from './intro-room';
 import { AT, MOM_PATH, ROOM_COLLIDERS, ROOM_X } from './intro-scene';
 
@@ -76,5 +77,46 @@ describe('the intro living room furniture', () => {
         expect(inside).toBe(false);
       }
     }
+  });
+
+  it('hangs pictures at eye height on the side walls, clear of the door', () => {
+    for (const t of WALL_THINGS) {
+      expect(t.y - t.h / 2).toBeGreaterThan(0.9);
+      expect(t.y + t.h / 2).toBeLessThan(2.6);
+      const range =
+        t.wall === 'north'
+          ? [ROOM_INSIDE.minX, ROOM_INSIDE.maxX]
+          : [ROOM_INSIDE.minZ, ROOM_INSIDE.maxZ];
+      expect(t.along - t.w / 2).toBeGreaterThanOrEqual(range[0]);
+      expect(t.along + t.w / 2).toBeLessThanOrEqual(range[1]);
+    }
+    const frames = WALL_THINGS.filter((t) => t.kind === 'frame');
+    expect(frames.every((t) => t.wall !== 'north')).toBe(true); // not behind the TV
+    const west = frames.filter((t) => t.wall === 'west');
+    expect(west.every((t) => t.along + t.w / 2 < 0.65 || t.along - t.w / 2 > 1.75)).toBe(true);
+  });
+
+  it('hangs the clock above a bookcase', () => {
+    const cases = FURNITURE.filter((p) => p.kind === 'bookcaseOpen').map(footprint);
+    const clocks = WALL_THINGS.filter((t) => t.kind === 'clock');
+    expect(clocks).toHaveLength(1);
+    expect(cases.some((b) => b.minX <= clocks[0].along && clocks[0].along <= b.maxX)).toBe(true);
+    expect(clocks[0].y - clocks[0].h / 2).toBeGreaterThan(1.76);
+  });
+
+  it('has three shelves per bookcase, each clear of the one above', () => {
+    expect(SHELF_Y).toHaveLength(3);
+    expect(SHELF_Y[2] + 0.44).toBeLessThan(1.76);
+  });
+
+  it('builds the books, pictures and clock as one mesh with sane geometry', () => {
+    const mesh = buildDecor(
+      FURNITURE.filter((p) => p.kind === 'bookcaseOpen'),
+      0,
+    );
+    const pos = mesh.geometry.attributes.position.array;
+    expect(pos.length).toBeGreaterThan(3 * 36 * 12); // a dozen boxes at least
+    expect(pos.every((v) => Number.isFinite(v))).toBe(true);
+    expect(mesh.geometry.attributes.color.count).toBe(mesh.geometry.attributes.position.count);
   });
 });

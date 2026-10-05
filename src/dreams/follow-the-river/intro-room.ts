@@ -3,6 +3,7 @@ import { assetUrl } from '../../engine/assets';
 import { addBatched } from '../../engine/batch';
 import type { Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
+import { buildDecor } from './intro-decor';
 
 /** Kenney furniture is modelled small; x2 matches the home bedroom (a sofa ~2 m, a bookcase ~1.8 m). */
 const SCALE = 2;
@@ -79,10 +80,37 @@ export function furnitureColliders(dx: number): Box[] {
   });
 }
 
+/** Kenney's wood is pale and glows at dusk: worn walnut at about half the albedo. Fabrics are muted. Tuning knobs. */
+const WOOD_TINT = 0x7a5f48;
+const FABRIC = { saturation: 0.7, value: 0.8 } as const;
+const WOODS = new Set(['wood', 'woodDark']);
+const FABRICS = new Set(['carpet', 'carpetDarker']);
+
+/** Gives the piece its own tinted copies of the wood and fabric materials (the cached ones are shared with the bedroom). */
+function tint(root: THREE.Object3D): void {
+  const hsl = { h: 0, s: 0, l: 0 };
+  root.traverse((node) => {
+    if (!(node instanceof THREE.Mesh) || Array.isArray(node.material)) return;
+    const m: unknown = node.material;
+    if (!(m instanceof THREE.MeshStandardMaterial)) return;
+    const wood = WOODS.has(m.name);
+    if (!wood && !FABRICS.has(m.name)) return;
+    const copy = m.clone();
+    delete copy.userData.cached;
+    if (wood) copy.color.multiply(new THREE.Color(WOOD_TINT));
+    else {
+      copy.color.getHSL(hsl);
+      copy.color.setHSL(hsl.h, hsl.s * FABRIC.saturation, hsl.l * FABRIC.value);
+    }
+    node.material = copy;
+  });
+}
+
 async function loadPiece(p: Piece, dx: number): Promise<THREE.Object3D> {
   const model = await loadModel(assetUrl(`home/${p.kind}.glb`));
   const holder = new THREE.Group();
   const box = new THREE.Box3().setFromObject(model);
+  tint(model);
   const centre = box.getCenter(new THREE.Vector3());
   model.position.set(-centre.x, -box.min.y, -centre.z); // centred on the footprint, base at y 0
   holder.add(model);
@@ -96,6 +124,12 @@ async function loadPiece(p: Piece, dx: number): Promise<THREE.Object3D> {
 export async function furnishRoom(scene: THREE.Scene, dx: number): Promise<void> {
   const pieces = await Promise.all(FURNITURE.map((p) => loadPiece(p, dx)));
   addBatched(scene, pieces);
+  scene.add(
+    buildDecor(
+      FURNITURE.filter((p) => p.kind === 'bookcaseOpen'),
+      dx,
+    ),
+  );
   const lamp = FURNITURE.find((p) => p.kind === 'lampRoundTable');
   if (!lamp) return;
   const light = new THREE.PointLight(
