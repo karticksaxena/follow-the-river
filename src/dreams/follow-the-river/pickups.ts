@@ -1,4 +1,14 @@
-import { color, sin, smoothstep, time, uv, vec4 } from 'three/tsl';
+import {
+  cameraPosition,
+  clamp,
+  color,
+  modelPosition,
+  sin,
+  smoothstep,
+  time,
+  uv,
+  vec4,
+} from 'three/tsl';
 import * as THREE from 'three/webgpu';
 import { mergeParts } from '../../engine/batch';
 import { outdoors } from '../../engine/interiors';
@@ -165,7 +175,21 @@ const BOB = 0.04;
 const BOB_SPEED = 2;
 const SPIN_SPEED = 0.8;
 /** A faint warm halo behind every hovering pickup, so it reads at night from 10 to 20 m (never neon). Tuning knobs. */
-export const GLOW = { color: 0xffc27a, size: 1.3, strength: 0.32, pulse: 0.12, speed: 2.2 };
+export const GLOW = {
+  color: 0xffc27a,
+  size: 1.3,
+  strength: 0.45,
+  pulse: 0.35,
+  speed: 2.2,
+  /** From this distance (m) the halo grows with it, holding its on-screen size... */
+  growFrom: 12,
+  /** ...up to this one (m); past it the fog and the 40 m show range end it. */
+  growTo: 32,
+};
+
+/** Pure: how much the halo is scaled at `distance` m from the camera (1 near, distance / growFrom out to the cap). */
+export const glowScale = (distance: number): number =>
+  Math.min(Math.max(distance, GLOW.growFrom), GLOW.growTo) / GLOW.growFrom;
 
 /** One shared halo material: a soft round falloff that breathes slowly and is off inside dark interiors. */
 function glowMaterial(): THREE.SpriteNodeMaterial {
@@ -173,6 +197,9 @@ function glowMaterial(): THREE.SpriteNodeMaterial {
   const breathe = sin(time.mul(GLOW.speed)).mul(GLOW.pulse).add(1);
   const alpha = soft.mul(soft).mul(GLOW.strength).mul(breathe).mul(outdoors());
   const material = new THREE.SpriteNodeMaterial({ colorNode: vec4(color(GLOW.color), alpha) });
+  // Same curve as glowScale, in the shader: one shared material, no per-frame work.
+  const distance = modelPosition.sub(cameraPosition).length();
+  material.scaleNode = clamp(distance, GLOW.growFrom, GLOW.growTo).div(GLOW.growFrom);
   material.transparent = true;
   material.depthWrite = false;
   material.blending = THREE.AdditiveBlending;

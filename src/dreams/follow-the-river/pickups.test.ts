@@ -4,6 +4,8 @@ import {
   AMMO_BOX,
   collect,
   CRATE,
+  GLOW,
+  glowScale,
   inShowRange,
   isFull,
   nearestPickup,
@@ -113,5 +115,15 @@ describe('inShowRange', () => {
     expect(inShowRange(-14, -110, eye)).toBe(true);
     expect(inShowRange(0, -100 - SHOW_RANGE - 1, eye)).toBe(false);
     expect(SHOW_RANGE).toBeLessThan(55); // inside the night fog's far end
+  });
+});
+
+describe('glowScale', () => {
+  it('is 1 near, grows linearly with distance, and caps', () => {
+    expect(glowScale(0)).toBe(1);
+    expect(glowScale(GLOW.growFrom)).toBe(1);
+    expect(glowScale(GLOW.growFrom * 2)).toBeCloseTo(2);
+    expect(glowScale(GLOW.growTo)).toBeCloseTo(GLOW.growTo / GLOW.growFrom);
+    expect(glowScale(500)).toBe(glowScale(GLOW.growTo));
   });
 });
