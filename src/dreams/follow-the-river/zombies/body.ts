@@ -120,6 +120,9 @@ export function createBody(i: number, assets: Record<'m' | 'f', SkinnedAsset>): 
   });
   for (const node of skinned) if (node.name !== outfit) node.removeFromParent();
   const kept = skinned.find((node) => node.name === outfit) ?? null;
+  // Always casts: three keys a mesh's pipelines on its own castShadow, so flipping it per body at
+  // play time (only the nearest 4 used to cast) compiled new shaders mid-wave (a 300 ms freeze).
+  if (kept) kept.castShadow = true;
   if (kept) {
     if (kept instanceof THREE.SkinnedMesh) {
       const geo: unknown = kept.geometry;

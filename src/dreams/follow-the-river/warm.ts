@@ -191,25 +191,6 @@ async function castShadows(sys: Systems, at: THREE.Vector3): Promise<void> {
     sys.horde.update(0.016, sense, noHit);
     await frames(sys.ctx.stage, 1);
   }
-  await bothCasts(sys.ctx.stage);
-}
-
-/**
- * A mesh's own `castShadow` is part of its pipeline key and the horde flips it per body at play time
- * (the 4 nearest cast), so every skinned body (outfits, Mom, Kartik, the orca) is drawn for real
- * frames with it off, then on (the main and prepass contexts both), then put back.
- */
-async function bothCasts(stage: Stage): Promise<void> {
-  const bodies: THREE.Object3D[] = [];
-  stage.scene.traverse((o) => {
-    if ('isSkinnedMesh' in o) bodies.push(o);
-  });
-  const before = bodies.map((o) => o.castShadow);
-  for (const on of [false, true]) {
-    for (const o of bodies) o.castShadow = on;
-    await frames(stage, 2);
-  }
-  bodies.forEach((o, i) => (o.castShadow = before[i] ?? false));
 }
 
 /** Where the camera stands for each pose: where it is, the middle and the end (the lake's shore if there is one). */

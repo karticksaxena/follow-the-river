@@ -131,7 +131,6 @@ describe('warmArea', () => {
     });
     castsSeen.clear();
     await warmArea(sys, r, { battery: 100, full: true, extras: [extra] });
-    expect([castsSeen.has(false), castsSeen.has(true)]).toEqual([true, true]); // both pipeline variants were drawn
     expect(log.filter((l) => l === 'spawn').length % 13).toBe(0); // 13 outfits, again every shadow round
     expect(log.filter((l) => l === 'spawn').length).toBeGreaterThanOrEqual(13);
     expect(log.filter((l) => l === 'cast').length).toBeGreaterThanOrEqual(4); // every outfit casts in turn

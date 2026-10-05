@@ -79,41 +79,9 @@ export interface Horde {
 }
 
 /** Tuning knobs. */
-const SHADOW_EVERY = 0.5;
-const SHADOW_COUNT = 4;
-const SHADOW_RANGE = 15;
 const GROAN_MIN = 1.2;
 const GROAN_MAX = 3.5;
 const CHEST_Y = 1.1;
-
-/** Marks the SHADOW_COUNT nearest alive zombies within SHADOW_RANGE of the player as shadow casters. */
-function pickShadowCasters(
-  bodies: readonly Body[],
-  player: PlayerSense,
-  distances: Float32Array,
-  picked: Uint8Array,
-): void {
-  picked.fill(0);
-  for (let i = 0; i < bodies.length; i++) {
-    const b = bodies[i];
-    const d = Math.hypot(b.x - player.x, b.z - player.z);
-    distances[i] = b.active && isAlive(b.mind) && d <= SHADOW_RANGE ? d : Infinity;
-  }
-  for (let k = 0; k < SHADOW_COUNT; k++) {
-    let best = -1;
-    for (let i = 0; i < bodies.length; i++) {
-      if (!picked[i] && distances[i] < Infinity && (best < 0 || distances[i] < distances[best])) {
-        best = i;
-      }
-    }
-    if (best < 0) break;
-    picked[best] = 1;
-  }
-  for (let i = 0; i < bodies.length; i++) {
-    const mesh = bodies[i].mesh;
-    if (mesh) mesh.castShadow = picked[i] === 1;
-  }
-}
 
 /** All mutable horde state; the functions below operate on it (keeps each under 50 lines). */
 interface HordeState {
@@ -121,10 +89,8 @@ interface HordeState {
   readonly grid: BoxGrid;
   readonly s: Scratch;
   readonly voices: Voices;
-  readonly timers: { shadow: number; groan: number };
+  readonly timers: { groan: number };
   onSplash: ((x: number, z: number) => void) | null;
-  readonly shadowDistances: Float32Array;
-  readonly picked: Uint8Array;
   seq: number;
 }
 
@@ -257,11 +223,6 @@ function updateHorde(
     const b = h.bodies[id];
     if (b.active && b.mind.state !== 'dead') tick(h, b, id, dt, player, onHit);
   }
-  h.timers.shadow -= dt;
-  if (h.timers.shadow <= 0) {
-    h.timers.shadow = SHADOW_EVERY;
-    pickShadowCasters(h.bodies, player, h.shadowDistances, h.picked);
-  }
   h.timers.groan -= dt;
   if (h.timers.groan <= 0) {
     h.timers.groan = GROAN_MIN + Math.random() * (GROAN_MAX - GROAN_MIN);
@@ -368,7 +329,6 @@ function sleepingCount(bodies: readonly Body[]): number {
 function resetHorde(h: HordeState): void {
   h.voices.stopAll();
   for (const b of h.bodies) park(b);
-  h.timers.shadow = 0;
   h.timers.groan = GROAN_MIN;
 }
 
@@ -405,10 +365,8 @@ function createState(
       count: 0,
     },
     voices: createVoices(audio, groans, bodies),
-    timers: { shadow: 0, groan: GROAN_MIN },
+    timers: { groan: GROAN_MIN },
     onSplash: null,
-    shadowDistances: new Float32Array(capacity),
-    picked: new Uint8Array(capacity),
     seq: 0,
   };
 }
