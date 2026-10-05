@@ -30,7 +30,7 @@ export interface World {
   insideShack(x: number, z: number): boolean;
   /** The live tier changed: vegetation reach, shadows and reflections follow (no-op if unchanged). */
   setTier(tier: Tier): void;
-  /** Warm-up: every plant cell on show (or `sample`: one cell per material), wherever the camera is; returns the undo. */
+  /** Warm-up: every plant cell on show (or `sample`: one cell per species), wherever the camera is; returns the undo. */
   showAllPlants(sample?: boolean): () => void;
 }
 

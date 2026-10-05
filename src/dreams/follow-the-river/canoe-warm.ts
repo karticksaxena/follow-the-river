@@ -12,7 +12,7 @@ const BUDGET_MS = 3000;
 
 type Undo = () => void;
 
-/** Every plant cell on show, or `sample`: one per material (the cull follows the camera as the canoe moves); returns the undo. */
+/** Every plant cell on show, or `sample`: one per species (the cull follows the camera as the canoe moves); returns the undo. */
 function showPlants(scene: THREE.Scene, sample: boolean): Undo {
   const undo: Undo[] = [];
   scene.traverse((o) => {
@@ -70,7 +70,7 @@ export async function warmRide(
     stage.hold = false;
     mark(times, 'compile', t0);
     allPlants();
-    undo.push(showPlants(cs.scene, true)); // real frames: one cell per material, not the whole route
+    undo.push(showPlants(cs.scene, true)); // real frames: one cell per species, not the whole route
     for (const at of spots) {
       if (performance.now() - t0 > BUDGET_MS) break;
       camera.position.set(at.x, at.y + EYE_HEIGHT, at.z);

@@ -295,7 +295,7 @@ export async function warmArea(
     stage.hold = false;
     mark(times, 'compile', t0);
     allPlants();
-    undo.push(sys.world.showAllPlants(true)); // real frames: one cell per material, not the whole route
+    undo.push(sys.world.showAllPlants(true)); // real frames: one cell per species, not the whole route
     stage.warmFocus(); // the depth-of-field graph builds here, not at the first cutscene
     await frames(stage, 3);
     await drawPoses(sys, camera.position.x, opts, t0);

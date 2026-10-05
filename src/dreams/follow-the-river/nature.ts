@@ -14,6 +14,7 @@ import { assetUrl } from '../../engine/assets';
 import { loadModel } from '../../engine/models';
 import type { Tier } from '../../engine/quality';
 import { NO_REFLECTION_LAYER } from '../../engine/volume';
+import { cellOf, pack, type Cell, type Species } from './species';
 import {
   builtModel,
   farTree,
@@ -28,7 +29,7 @@ import {
 } from './vegetation';
 import { SCALE_ATTRIBUTE, WIND, windNode, type Fade, type WindLook } from './wind';
 
-type Category = 'trees' | 'trees-far' | 'plants' | 'grass' | 'rocks';
+export type Category = 'trees' | 'trees-far' | 'plants' | 'grass' | 'rocks';
 
 /** A plant to build, with how it is shown (see `visible`). */
 interface Item {
@@ -36,12 +37,10 @@ interface Item {
   kind: Kind;
 }
 
-/** The river runs along z: vegetation is built in cells this many metres long (z), one mesh per model each. */
+/** The river runs along z: vegetation is culled in cells this many metres long (z); each species part is one mesh. */
 const CELL = 60;
-/** Trees with no near twin (far from the path, or any tree on Low) are built in longer cells: far fewer meshes. */
+/** Trees with no near twin (far from the path, or any tree on Low) are culled in longer cells. */
 const FAR_CELL = 120;
-/** Crowns reach past their trunks: a cell's box grows by this much (m). */
-const CROWN = 6;
 /** Leaf and grass cut-outs: a harder edge than the file's 0.2 keeps the cards from looking fuzzy. */
 const ALPHA_TEST = 0.5;
 /** MegaKit's PBR is shiny; the dream is matte. */
@@ -233,15 +232,6 @@ const quaternion = new THREE.Quaternion();
 const scaling = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
-/**
- * A cell's instance capacity. three writes it into the shader (a uniform array of that many
- * matrices), so each distinct capacity is another pipeline in every pass: the walk met new ones and
- * compiled mid-play. A few sizes keep the variants few enough to warm. Above 1024 three reads the
- * matrices as a vertex attribute, which does not depend on the count.
- */
-const CAPACITIES = [4, 16, 64, 256, 1024] as const;
-export const capacityFor = (n: number): number => CAPACITIES.find((c) => c >= n) ?? n;
-
 interface Group {
   category: Category;
   kind: Kind;
@@ -292,39 +282,54 @@ function styleForTier(mesh: THREE.InstancedMesh, category: Category, tier: Tier)
   else mesh.layers.set(NO_REFLECTION_LAYER);
 }
 
-function instances(part: Part, g: Group, tier: Tier): THREE.InstancedMesh {
-  const scales = new Float32Array(g.plants.length);
-  const matrices = new Float32Array(g.plants.length * 16);
-  g.plants.forEach((p, i) => {
-    quaternion.setFromAxisAngle(UP, p.yaw);
-    matrix.compose(position.set(p.x, p.y, p.z), quaternion, scaling.setScalar(p.scale));
-    matrices.set(matrix.elements, i * 16);
-    scales[i] = p.scale;
-  });
+/** `groups`: the same kind, category and model, one per cell. */
+function speciesOf(part: Part, groups: readonly Group[], tier: Tier): Species {
+  const first = groups[0];
+  if (!first) throw new Error('a species needs plants');
+  const total = groups.reduce((n, g) => n + g.plants.length, 0);
+  const matrices = new Float32Array(total * 16);
+  const scales = new Float32Array(total);
+  let i = 0;
+  for (const g of groups) {
+    for (const p of g.plants) {
+      quaternion.setFromAxisAngle(UP, p.yaw);
+      matrix.compose(position.set(p.x, p.y, p.z), quaternion, scaling.setScalar(p.scale));
+      matrices.set(matrix.elements, i * 16);
+      scales[i++] = p.scale;
+    }
+  }
+  const geometry = instancedGeometry(part.geometry, scales.slice());
   const mesh = new THREE.InstancedMesh(
-    instancedGeometry(part.geometry, scales),
-    materialFor(part.source, g.category, g.kind, tier),
-    capacityFor(g.plants.length),
+    geometry,
+    materialFor(part.source, first.category, first.kind, tier),
+    total,
   );
   mesh.instanceMatrix.array.set(matrices);
-  mesh.count = g.plants.length;
-  const solid = g.category === 'trees' || g.category === 'rocks';
+  const solid = first.category === 'trees' || first.category === 'rocks';
   // Near trees and rocks cast shadows on High only; grass and ferns neither cast nor receive.
-  mesh.receiveShadow = solid || g.category === 'trees-far';
-  styleForTier(mesh, g.category, tier);
+  mesh.receiveShadow = solid || first.category === 'trees-far';
+  styleForTier(mesh, first.category, tier);
   mesh.matrixAutoUpdate = false;
-  mesh.computeBoundingSphere(); // frustum culling per cell
-  return mesh;
-}
-
-interface Cell {
-  mesh: THREE.InstancedMesh;
-  kind: Kind;
-  category: Category;
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
+  mesh.computeBoundingSphere(); // the whole area's
+  mesh.frustumCulled = false; // it spans the area; the cull works per cell
+  const scale = geometry.getAttribute(SCALE_ATTRIBUTE);
+  if (!(scale instanceof THREE.InstancedBufferAttribute)) throw new Error('no instance scale');
+  const species: Species = {
+    mesh,
+    category: first.category,
+    matrices,
+    scales,
+    scale,
+    cells: [],
+    dirty: true,
+  };
+  let start = 0;
+  for (const g of groups) {
+    species.cells.push(cellOf(species, g.kind, g.plants, start));
+    start += g.plants.length;
+  }
+  pack(species);
+  return species;
 }
 
 /** Fog far plane assumed when the scene has none (day, about). */
@@ -332,13 +337,15 @@ const DEFAULT_FOG = 100;
 const eye = new THREE.Vector3();
 
 /**
- * The area's vegetation: cell meshes shown or hidden by their distance to the camera (`visible`),
- * so only a few cells are ever drawn, in every pass (shadows and reflection too). The cull runs
- * from `updateMatrixWorld`, which the renderer calls on the scene once a frame; it works from the
- * camera's world position and skips when nothing moved (nested renders, a paused frame).
+ * The area's vegetation: one mesh per species, drawing only the cells near the camera (packed to
+ * the front of its buffers), in every pass (shadows and reflection too). The cull runs from
+ * `updateMatrixWorld`, which the renderer calls on the scene once a frame; it works from the
+ * camera's world position, skips when nothing moved, and repacks a species only when one of its
+ * cells turned on or off.
  */
 export class Vegetation extends THREE.Group {
   private readonly cells: Cell[] = [];
+  private readonly species: Species[] = [];
   private readonly camera: THREE.Camera | null;
   private tier: Tier;
   private lastX = NaN;
@@ -361,55 +368,28 @@ export class Vegetation extends THREE.Group {
     if (tier === this.tier) return;
     this.tier = tier;
     this.lastX = NaN; // the next apply re-culls at the new reach
-    for (const c of this.cells) styleForTier(c.mesh, c.category, tier);
+    for (const s of this.species) styleForTier(s.mesh, s.category, tier);
   }
 
-  addCell(
-    mesh: THREE.InstancedMesh,
-    kind: Kind,
-    category: Category,
-    plants: readonly Plant[],
-  ): void {
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minZ = Infinity;
-    let maxZ = -Infinity;
-    for (const p of plants) {
-      minX = Math.min(minX, p.x);
-      maxX = Math.max(maxX, p.x);
-      minZ = Math.min(minZ, p.z);
-      maxZ = Math.max(maxZ, p.z);
-    }
-    const c = CROWN;
-    this.cells.push({
-      mesh,
-      kind,
-      category,
-      minX: minX - c,
-      maxX: maxX + c,
-      minZ: minZ - c,
-      maxZ: maxZ + c,
-    });
-    this.add(mesh);
+  addSpecies(species: Species): void {
+    this.species.push(species);
+    this.cells.push(...species.cells);
+    this.add(species.mesh);
   }
 
   /**
-   * Warm-up: the cull stands still, with every cell on show (`sample` false: each cell is its own
-   * node build in three, keyed by its uuid) or one cell per material and capacity (`sample` true:
-   * the pipelines, at a fraction of the draw cost). Returns the undo, after which the next frame culls again.
+   * Warm-up: the cull stands still, with every cell on show, or (`sample`) the smallest cell of each
+   * species: every mesh draws, so every node build and pipeline happens, at a fraction of the draw
+   * cost. Returns the undo, after which the next frame culls again.
    */
   showAll(sample = false): () => void {
     this.forced = true;
-    const pick = new Map<string, Cell>();
-    for (const c of this.cells) {
-      const { material, instanceMatrix } = c.mesh;
-      const ids = Array.isArray(material) ? material.map((m) => m.uuid).join() : material.uuid;
-      const key = `${ids}:${instanceMatrix.count}`;
-      const best = pick.get(key);
-      if (!best || c.mesh.count < best.mesh.count) pick.set(key, c);
+    for (const s of this.species) {
+      let smallest: Cell | undefined;
+      for (const c of s.cells) if (!smallest || c.count < smallest.count) smallest = c;
+      for (const c of s.cells) c.shown = !sample || c === smallest;
+      pack(s);
     }
-    const shown = new Set(pick.values());
-    for (const c of this.cells) c.mesh.visible = !sample || shown.has(c);
     return () => {
       this.forced = false;
       this.lastX = NaN;
@@ -428,14 +408,18 @@ export class Vegetation extends THREE.Group {
       const dz = Math.max(c.minZ - z, 0, z - c.maxZ);
       const fx = Math.max(Math.abs(c.minX - x), Math.abs(c.maxX - x));
       const fz = Math.max(Math.abs(c.minZ - z), Math.abs(c.maxZ - z));
-      c.mesh.visible = visible(c.kind, Math.hypot(dx, dz), Math.hypot(fx, fz), this.tier, fogFar);
+      const shown = visible(c.kind, Math.hypot(dx, dz), Math.hypot(fx, fz), this.tier, fogFar);
+      if (shown === c.shown) continue;
+      c.shown = shown;
+      c.species.dirty = true;
     }
+    for (const s of this.species) if (s.dirty) pack(s);
   }
 
-  /** Tests: `apply`, then the meshes now shown. */
+  /** Tests: `apply`, then the meshes now drawn (their `count` is the instances shown). */
   cull(x: number, z: number, fogFar: number): THREE.InstancedMesh[] {
     this.apply(x, z, fogFar);
-    return this.cells.filter((c) => c.mesh.visible).map((c) => c.mesh);
+    return this.species.filter((s) => s.mesh.visible).map((s) => s.mesh);
   }
 
   override updateMatrixWorld(force?: boolean): void {
@@ -449,8 +433,8 @@ export class Vegetation extends THREE.Group {
 }
 
 /**
- * Adds MegaKit trees, plants, grass and rocks to `parent` as instanced cell meshes (one per
- * model, primitive and 60 m of z). Placements are world-space (the meshes sit at the origin); `y` is
+ * Adds MegaKit trees, plants, grass and rocks to `parent`: one instanced mesh per model and
+ * primitive, drawing the 60 m cells (of z) near the camera. Placements are world-space (the meshes sit at the origin); `y` is
  * the ground height under each. Trees sway by their leaves, grass thins out with distance per
  * `tier`. With a `camera` the cells cull themselves every frame; returns the group (tests cull it).
  */
@@ -463,10 +447,16 @@ export async function addVegetation(
   const groups = groupItems(itemsFor(plants, tier));
   const all = await Promise.all(groups.map((g) => partsOf(g.category, g.model)));
   const vegetation = new Vegetation(tier, camera);
+  // groups of one kind, category and model (one per cell) share a mesh per part
+  const bySpecies = new Map<string, { parts: readonly Part[]; groups: Group[] }>();
   groups.forEach((g, i) => {
-    for (const part of all[i])
-      vegetation.addCell(instances(part, g, tier), g.kind, g.category, g.plants);
+    const key = `${g.kind}|${g.category}|${g.model}`;
+    const found = bySpecies.get(key);
+    if (found) found.groups.push(g);
+    else bySpecies.set(key, { parts: all[i] ?? [], groups: [g] });
   });
+  for (const { parts: split, groups: cells } of bySpecies.values())
+    for (const part of split) vegetation.addSpecies(speciesOf(part, cells, tier));
   vegetation.matrixAutoUpdate = false;
   parent.add(vegetation);
   if (camera) {

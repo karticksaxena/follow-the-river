@@ -6,13 +6,9 @@ import { SUBURBS } from './areas/suburbs';
 import type { AreaDef } from './areas/types';
 import { meshY, pathX, RIVER_HALF, TERRAIN, terrainY } from './canoe-scene';
 import { canoePlants } from './canoe-vegetation';
-import { addVegetation, capacityFor, type Vegetation } from './nature';
+import { addVegetation, type Vegetation } from './nature';
 import { shackBounds } from './shack';
 import { type Plant, plantsOf, stripGrass } from './vegetation';
-
-/** A cell's shader variant: three bakes the instance capacity into the shader. */
-const variant = (m: THREE.InstancedMesh): string =>
-  `${m.material instanceof THREE.Material ? m.material.uuid : ''}:${m.instanceMatrix.count}`;
 
 /** Vegetation meshes shown per pass: every one is a draw call. */
 const MAX_MESHES = 60;
@@ -84,6 +80,10 @@ async function build(plants: Plant[], tier: Tier): Promise<THREE.InstancedMesh[]
 /** Triangles a mesh draws in one pass: instances x triangles per instance. */
 const drawn = (m: THREE.InstancedMesh): number => m.count * ((m.geometry.index?.count ?? 0) / 3);
 
+/** Instances drawn: each species mesh draws its shown cells. */
+const instancesOf = (meshes: readonly THREE.InstancedMesh[]): number =>
+  meshes.reduce((sum, m) => sum + m.count, 0);
+
 const materialName = (m: THREE.Mesh): string => (Array.isArray(m.material) ? '' : m.material.name);
 
 const area = (a: AreaDef, tier: Tier): Plant[] => [
@@ -118,7 +118,7 @@ describe('addVegetation', () => {
         }
         expect(worst, `${name} ${tier} triangles`).toBeLessThanOrEqual(TRIANGLES[tier]);
         expect(most, `${name} ${tier} meshes`).toBeLessThanOrEqual(MAX_MESHES);
-        expect(vegetation.children.length).toBeGreaterThan(10);
+        expect(vegetation.children.length).toBeGreaterThan(5); // one mesh per species part
       }
     }
   }, 120000);
@@ -134,7 +134,7 @@ describe('addVegetation', () => {
   it('never reflects or casts from grass and ferns, and bounds every mesh by its instances', async () => {
     const meshes = await build(canoe('high'), 'high');
     const small = meshes.filter((m) => /^(Grass|Leaves)$/.test(materialName(m)));
-    expect(small.length).toBeGreaterThan(3);
+    expect(small.length).toBeGreaterThan(1);
     for (const m of small) {
       expect(m.castShadow).toBe(false);
     }
@@ -160,42 +160,53 @@ describe('Vegetation.setTier (Auto or the pause menu changes the tier mid-chapte
   it('narrows the cull reach live after a step-down', async () => {
     const vegetation = await built(canoe('high'), 'high');
     const [x, z] = SPOTS.canoe[2];
-    const high = vegetation.cull(x, z, 100).length;
+    const high = instancesOf(vegetation.cull(x, z, 100));
     vegetation.setTier('low');
-    expect(vegetation.cull(x, z, 100).length).toBeLessThan(high);
+    expect(instancesOf(vegetation.cull(x, z, 100))).toBeLessThan(high);
   }, 60000);
 
   it('showAll shows every cell wherever the camera is, and the undo culls again', async () => {
     const vegetation = await built(canoe('high'), 'high');
     const [x, z] = SPOTS.canoe[2];
-    const near = vegetation.cull(x, z, 100).length;
+    const near = instancesOf(vegetation.cull(x, z, 100));
     const undo = vegetation.showAll();
-    const all = vegetation.cull(x, z, 100).length;
+    const all = instancesOf(vegetation.cull(x, z, 100));
     expect(all).toBeGreaterThan(near);
-    expect(vegetation.cull(x + 500, z, 100).length).toBe(all); // the cull stands still
+    expect(instancesOf(vegetation.cull(x + 500, z, 100))).toBe(all); // the cull stands still
     undo();
-    expect(vegetation.cull(x, z, 100).length).toBe(near);
+    expect(instancesOf(vegetation.cull(x, z, 100))).toBe(near);
   }, 60000);
 
-  it('showAll(true) shows one cell per material: fewer than all, at least one of each', async () => {
+  it('showAll(true) draws every species mesh (each is one node build), with fewer instances', async () => {
     const vegetation = await built(canoe('high'), 'high');
     const [x, z] = SPOTS.canoe[2];
+    const meshes = vegetation.children.filter(
+      (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh,
+    );
     const undoAll = vegetation.showAll();
-    const all = vegetation.cull(x, z, 100);
+    const all = instancesOf(vegetation.cull(x, z, 100));
     undoAll();
     const undo = vegetation.showAll(true);
     const sample = vegetation.cull(x, z, 100);
-    expect(sample.length).toBeLessThan(all.length);
-    expect(new Set(sample.map((m) => m.material)).size).toBe(
-      new Set(all.map((m) => m.material)).size,
-    );
-    // every (material, capacity) shader variant is in the sample, so the warm-up meets them all
-    expect(new Set(sample.map(variant))).toEqual(new Set(all.map(variant)));
+    expect(sample).toHaveLength(meshes.length);
+    expect(instancesOf(sample)).toBeLessThan(all / 4);
     undo();
   }, 60000);
 
-  it('capacityFor rounds up to a few sizes (each is a shader variant); past 1024 the count is free', () => {
-    expect([1, 4, 5, 16, 17, 200, 1024].map(capacityFor)).toEqual([4, 4, 16, 16, 64, 256, 1024]);
-    expect(capacityFor(3000)).toBe(3000);
-  });
+  it('packs the shown cells to the front of a species mesh, matrices and scales in step', async () => {
+    const vegetation = await built(canoe('high'), 'high');
+    const [x, z] = SPOTS.canoe[2];
+    const shown = vegetation.cull(x, z, 100);
+    const mesh = shown.find((m) => m.count > 1);
+    expect(mesh).toBeDefined();
+    if (!mesh) return;
+    const scale = mesh.geometry.getAttribute('instScale');
+    const at = new THREE.Matrix4();
+    const s = new THREE.Vector3();
+    for (let i = 0; i < mesh.count; i++) {
+      mesh.getMatrixAt(i, at);
+      s.setFromMatrixScale(at);
+      expect(s.x).toBeCloseTo(scale.getX(i), 4); // the instance's own scale, not a neighbour's
+    }
+  }, 60000);
 });
