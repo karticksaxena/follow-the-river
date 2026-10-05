@@ -129,6 +129,7 @@ Three Sonnet reviewers by area (engine and session; story and cinematics; world 
 - Every sound by ear: Dras' blows (the source is windy), her calls and clicks, splashes, paddle strokes, birds, shotgun, rifle and pistol.
 - Pointer lock and Esc: the harness used `?nolock`. Check click to lock, Esc to pause, Resume relocks, and the cutscene Esc path.
 - Safari (WebGPU or WebGL fallback, audio start, full screen).
+- Not run in Chrome (the browser extension disconnected at the end of the night): `?webgl` for the intro and the farewell, and Story and Hard on Night 1 wave 1 (stun length, damage, supplies, zombie speed). The difficulty table itself is unit-tested.
 - Real frame rate on an integrated-GPU laptop. The harness overestimates; check Low, Medium and High, and that Auto settles sensibly.
 - One full play-through with mouse and keyboard, on the difficulty you choose: intro, Day 1 to Night 3, the farewell, the canoe ride and credits, then "Watch the ending again".
 - Merge: this session is sandboxed to the plan-9 worktree, so it cannot move `main` (checked out in `~/Code/Games`). Fast-forward it with `cd ~/Code/Games && git merge --ff-only plan-9`, then reload the :5173 tab. Nothing has been pushed.
