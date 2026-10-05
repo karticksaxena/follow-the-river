@@ -3,7 +3,7 @@ import type { App } from '../app';
 import { DREAMS } from '../dreams/registry';
 import type { DreamInfo } from '../dreams/types';
 import { disposeScene } from '../engine/dispose';
-import { frames } from '../engine/frames';
+import { frames, gpuIdle } from '../engine/frames';
 import { enterFullscreen, toggleFullscreen } from '../engine/fullscreen';
 import { button, el } from '../engine/ui';
 import { buildBedroom } from './bedroom';
@@ -36,6 +36,7 @@ async function warmRoom(stage: App['stage'], scene: THREE.Scene): Promise<void> 
   }
   stage.warming = true; // real frames build what compileAsync cannot (shadows, the post graph)
   await frames(stage, WARM_FRAMES);
+  await gpuIdle(stage.renderer);
   stage.warming = false;
 }
 

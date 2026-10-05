@@ -1,5 +1,5 @@
 import type * as THREE from 'three/webgpu';
-import { frames } from '../../engine/frames';
+import { frames, gpuIdle } from '../../engine/frames';
 import type { Stage } from '../../engine/stage';
 import { VOLUME_LAYER } from '../../engine/volume';
 import type { DreamContext } from '../types';
@@ -297,6 +297,7 @@ export async function warmArea(
     sys.horde.reset(); // park the bodies so the play starts clean
     stage.hold = false;
     await frames(stage, VIEW_FRAMES); // still behind black: the restored view compiles too
+    await gpuIdle(stage.renderer);
     stage.warming = false;
     mark(times, 'total', t0);
     logWarm('area', times);

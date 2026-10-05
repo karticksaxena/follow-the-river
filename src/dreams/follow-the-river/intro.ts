@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { disposeScene } from '../../engine/dispose';
+import { drawBehind } from '../../engine/frames';
 import type { DreamContext } from '../types';
 import { createHud, type Hud } from './hud';
 import {
@@ -449,6 +450,7 @@ export async function runIntro(
   ctx.player.teleport(AT.spawnRoom.x, AT.spawnRoom.z, YAW_TO_TV);
   ctx.stage.scene = sc.scene;
   ctx.grade('dusk');
+  await drawBehind(ctx.stage); // the transition is still black: the first frames build here
 
   return {
     dispose() {

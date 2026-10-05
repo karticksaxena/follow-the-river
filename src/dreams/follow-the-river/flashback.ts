@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { drawBehind } from '../../engine/frames';
 import type { PageHooks } from '../../engine/menus';
 import type { DreamContext } from '../types';
 import { buildFlashback, type Flashback, type Tape } from './flashback-scene';
@@ -56,6 +57,8 @@ async function run(
     return done();
   }
   const restore = flashback ? show(ctx, flashback, previous) : (): void => undefined;
+  // still black: the first frames build the post chain's own pipelines (compileAsync can't reach them)
+  if (flashback) await drawBehind(stage).catch(() => undefined);
   void overlay.fade(false, FLASHBACK_FADE_MS);
   // Restore synchronously when the pages close: the gate unfreezes the chapter right then, and
   // its logic must never see the flashback camera's pose. A hard cut back, like the pager closing.

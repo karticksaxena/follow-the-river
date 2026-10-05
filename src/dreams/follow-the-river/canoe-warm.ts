@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { frames } from '../../engine/frames';
+import { frames, gpuIdle } from '../../engine/frames';
 import type { Pose, Ride } from './canoe-ride';
 import { Vegetation } from './nature';
 import { logWarm, mark, unculled, type WarmTimes } from './warm';
@@ -89,6 +89,7 @@ export async function warmRide(
     for (const u of undo.toReversed()) u();
     stage.scene = previous;
     stage.hold = false;
+    await gpuIdle(stage.renderer);
     stage.warming = false;
     mark(times, 'total', t0);
     logWarm('ride', times);

@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { drawBehind } from '../../engine/frames';
 import type { DreamContext } from '../types';
 import { gripPaddle, type Arm } from './canoe-paddle';
 import { makeRide } from './canoe-ride-setup';
@@ -456,11 +457,11 @@ function stageRide(
       throw error;
     }
   });
-  begin(r);
+  void begin(r);
 }
 
 /** Puts the world on stage, faces the camera down the river and shows the opening page. */
-function begin(r: Ride): void {
+async function begin(r: Ride): Promise<void> {
   const { ctx, cs } = r;
   const { camera } = ctx.stage;
   canoePose(0, r.pose);
@@ -468,6 +469,8 @@ function begin(r: Ride): void {
   camera.rotation.set(0, r.pose.yaw + Math.PI, 0, 'YXZ');
   ctx.stage.scene = cs.scene;
   ctx.overlay.root.classList.add(CINEMATIC);
+  await drawBehind(ctx.stage).catch(() => undefined); // still black: the first frames build here
+  if (r.over) return; // torn down while drawing
   void ctx.overlay.fade(false, RIDE.fadeMs);
   ctx.read(OPENING_PAGES, () => {
     r.started = true;

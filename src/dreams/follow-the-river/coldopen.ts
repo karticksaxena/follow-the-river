@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { drawBehind } from '../../engine/frames';
 import type { DreamContext } from '../types';
 import { buildColdOpenScene, LAMP, LAMP_LIGHT, WINDOW, type ColdOpenScene } from './coldopen-scene';
 import { TV_LIGHT } from './intro-scene';
@@ -171,6 +172,8 @@ async function runShot(
 ): Promise<void> {
   st.shot = shot;
   st.elapsed = 0;
+  await drawBehind(ctx.stage); // the cut is still black: the shot's first frames build here
+  if (st.cancelled) return;
   await ctx.overlay.fade(false, CUT_MS);
   if (st.cancelled) return;
   if (cue) {
