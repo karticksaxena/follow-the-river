@@ -41,7 +41,13 @@ async function run(
   const previous = stage.scene;
   const stopLoading = overlay.loading();
   const [flashback] = await Promise.all([
-    buildFlashback(tape, ctx).catch(() => null), // a failed load still plays the tape as text
+    buildFlashback(tape, ctx)
+      .then(async (built) => {
+        // compiled off stage, behind the fade: the first drawn frame builds no pipeline
+        await stage.renderer.compileAsync(built.scene, stage.camera).catch(() => undefined);
+        return built;
+      })
+      .catch(() => null), // a failed load still plays the tape as text
     overlay.fade(true, FLASHBACK_FADE_MS),
   ]).finally(stopLoading);
   if (stage.scene !== previous) {

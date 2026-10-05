@@ -1,7 +1,8 @@
 import * as THREE from 'three/webgpu';
+import { frames } from '../../engine/frames';
 import type { Pose, Ride } from './canoe-ride';
 import { Vegetation } from './nature';
-import { frames, logWarm, mark, unculled, type WarmTimes } from './warm';
+import { logWarm, mark, unculled, type WarmTimes } from './warm';
 
 /** The ride's warm-up: frames drawn per spot along the river, and where the splash shows ahead of the camera (m). Tuning knobs. */
 const SPOT_FRAMES = 2;

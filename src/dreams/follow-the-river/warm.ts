@@ -1,4 +1,5 @@
 import type * as THREE from 'three/webgpu';
+import { frames } from '../../engine/frames';
 import type { Stage } from '../../engine/stage';
 import { VOLUME_LAYER } from '../../engine/volume';
 import type { DreamContext } from '../types';
@@ -71,18 +72,6 @@ export function logWarm(kind: string, times: WarmTimes): void {
   const list = Array.isArray(log) ? log : [];
   list.push({ kind, ...times });
   Object.assign(window, { __kdWarm: list });
-}
-
-/** Resolves after the stage's loop has drawn `n` frames. */
-export function frames(stage: Stage, n: number): Promise<void> {
-  return new Promise((done) => {
-    let left = n;
-    const stop = stage.addUpdater(() => {
-      if (--left > 0) return;
-      stop();
-      done();
-    });
-  });
 }
 
 /** Every viewmodel (the bow and each gun, owned or not) on, so their materials compile. */
@@ -311,6 +300,30 @@ export async function warmArea(
     stage.warming = false;
     mark(times, 'total', t0);
     logWarm('area', times);
+  }
+}
+
+/**
+ * Puts `scene` on the stage held (no frame draws it), runs `prepare` (a failure is ignored), then
+ * `warm`: no frame ever draws the scene before its warm-up. The hold is always released.
+ */
+export async function enterWarm(
+  stage: Pick<Stage, 'hold' | 'scene'>,
+  scene: THREE.Scene,
+  prepare: () => Promise<void>,
+  warm: () => Promise<void>,
+): Promise<void> {
+  stage.hold = true;
+  stage.scene = scene;
+  try {
+    await prepare();
+  } catch {
+    // the area still warms; the missing part builds in play
+  }
+  try {
+    await warm();
+  } finally {
+    stage.hold = false;
   }
 }
 

@@ -398,6 +398,12 @@ export async function runIntro(
     freeIntroScene(sc);
     return NO_INTRO;
   }
+  // Compiled off stage, behind the loader: its first drawn frame builds no pipeline.
+  await ctx.stage.renderer.compileAsync(sc.scene, ctx.stage.camera).catch(() => undefined);
+  if (isCancelled()) {
+    freeIntroScene(sc);
+    return NO_INTRO;
+  }
   const hud = createHud(ctx.overlay.root);
   const cam = ctx.stage.camera.position;
   const st: State = {

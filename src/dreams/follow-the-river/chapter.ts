@@ -22,7 +22,7 @@ import { createPlay } from './play';
 import type { Events, Run, Systems } from './run';
 import { completePhase, restartPhase, type RunSave, type StoredRun } from './state';
 import { stopVoice } from './voice';
-import { warmArea } from './warm';
+import { enterWarm, warmArea } from './warm';
 import { newWaveState } from './waves';
 
 export interface Chapter {
@@ -152,7 +152,6 @@ export async function startChapter(
     play.reset();
   };
   beginPhase(f);
-  ctx.stage.scene = sys.world.scene;
   const { camera } = ctx.stage;
   const checkpointOf = (): { phase: RunSave['phase']; wave: number } => f.save;
   const again = (): void => restart(f);
@@ -167,12 +166,17 @@ export async function startChapter(
     }
   });
   // Behind the loading screen: everything the area will draw compiles now (the ending's Mom and lights are built first, so the light set never changes in play); then the phase starts again, clean.
-  await ending.prepare().catch(() => undefined);
-  await warmArea(sys, run, {
-    battery: run.live.supplies.battery,
-    full: true,
-    extras: [() => ending.warmShow()],
-  });
+  await enterWarm(
+    ctx.stage,
+    sys.world.scene,
+    () => ending.prepare(),
+    () =>
+      warmArea(sys, run, {
+        battery: run.live.supplies.battery,
+        full: true,
+        extras: [() => ending.warmShow()],
+      }),
+  );
   beginPhase(f);
   return {
     announce: (title) => announce(f, title),

@@ -3,6 +3,7 @@ import type { App } from '../app';
 import { DREAMS } from '../dreams/registry';
 import type { DreamInfo } from '../dreams/types';
 import { disposeScene } from '../engine/dispose';
+import { frames } from '../engine/frames';
 import { enterFullscreen, toggleFullscreen } from '../engine/fullscreen';
 import { button, el } from '../engine/ui';
 import { buildBedroom } from './bedroom';
@@ -12,6 +13,9 @@ import { spunAngle } from './fan';
 import { nextHomeState, type HomeEvent, type HomeState } from './flow';
 import { createZzz } from './zzzSprites';
 
+/** Real frames drawn behind black before the title shows. */
+const WARM_FRAMES = 3;
+
 export interface HomeHandle {
   dispose(): void;
 }
@@ -19,13 +23,29 @@ export interface HomeHandle {
 /** Starts a dream; resolves to an error message, or null once the dream is running. */
 export type Play = (info: DreamInfo) => Promise<string | null>;
 
+/** The room's shaders build behind the black the title opens from, so its first visible frame does not hitch. */
+async function warmRoom(stage: App['stage'], scene: THREE.Scene): Promise<void> {
+  stage.hold = true;
+  try {
+    stage.scene = scene;
+    await stage.renderer.compileAsync(scene, stage.camera);
+  } catch {
+    // the first frames compile what is missing
+  } finally {
+    stage.hold = false;
+  }
+  stage.warming = true; // real frames build what compileAsync cannot (shadows, the post graph)
+  await frames(stage, WARM_FRAMES);
+  stage.warming = false;
+}
+
 export async function startHome(app: App, play: Play): Promise<HomeHandle> {
   const { stage, overlay, audio } = app;
   const room = await buildBedroom();
-  stage.scene = room.scene;
   stage.grade('night');
   stage.camera.position.copy(room.view.position);
   stage.camera.lookAt(room.view.target);
+  await warmRoom(stage, room.scene);
   const zzz = createZzz(room.scene, room.head);
   const stopZzz = stage.addUpdater((dt) => {
     zzz.update(dt);

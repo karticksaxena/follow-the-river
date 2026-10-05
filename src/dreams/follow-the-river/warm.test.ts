@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import type { Overlay } from '../../engine/ui';
 import type { Run, Systems } from './run';
-import { readWhileWarming, unculled, warmArea } from './warm';
+import { enterWarm, readWhileWarming, unculled, warmArea } from './warm';
 
 const bow = { visible: false };
 const gunA = { visible: true };
@@ -219,5 +219,55 @@ describe('readWhileWarming', () => {
     const overlay = { loading: () => () => undefined } as unknown as Overlay;
     await readWhileWarming({ read, overlay }, [], Promise.resolve());
     expect(read).not.toHaveBeenCalled();
+  });
+});
+
+const boom = (): Promise<void> => Promise.reject(new Error('y'));
+
+describe('enterWarm', () => {
+  const world = new THREE.Scene();
+  const stageOf = (log: string[]): { hold: boolean; scene: THREE.Scene } =>
+    new Proxy(
+      { hold: false, scene: new THREE.Scene() },
+      {
+        set(t, k: 'hold' | 'scene', v: never) {
+          log.push(`${k}=${k === 'scene' ? String(v === world) : String(v)}`);
+          return Reflect.set(t, k, v);
+        },
+      },
+    );
+
+  it('holds from the swap until the warm-up has run, then releases', async () => {
+    const log: string[] = [];
+    const stage = stageOf(log);
+    await enterWarm(
+      stage,
+      world,
+      () => {
+        log.push(`prepare hold=${String(stage.hold)}`);
+        return Promise.resolve();
+      },
+      () => {
+        log.push(`warm hold=${String(stage.hold)}`);
+        return Promise.resolve();
+      },
+    );
+    expect(log).toEqual([
+      'hold=true',
+      'scene=true',
+      'prepare hold=true',
+      'warm hold=true',
+      'hold=false',
+    ]);
+  });
+
+  it('still warms, and releases the hold, when prepare rejects or warm throws', async () => {
+    const stage = stageOf([]);
+    const warm = vi.fn(() => Promise.resolve());
+    await enterWarm(stage, world, () => Promise.reject(new Error('x')), warm);
+    expect(warm).toHaveBeenCalled();
+    expect(stage.hold).toBe(false);
+    await expect(enterWarm(stage, world, () => Promise.resolve(), boom)).rejects.toThrow('y');
+    expect(stage.hold).toBe(false);
   });
 });
