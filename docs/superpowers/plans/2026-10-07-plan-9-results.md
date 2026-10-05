@@ -107,7 +107,7 @@ Three Sonnet reviewers by area (engine and session; story and cinematics; world 
 - Frame cap setting (default 90) after the controller's uncapped loop pinned the GPU.
 - Paddle strokes re-cut from EpicWizard (CC0) instead of the hissy kayak take.
 - The dispose-crash task was filed as "B1" by mistake; read it as D1.
-- B4 (first-person arms on weapons) is optional and was skipped.
+- B4 (first-person arms on weapons) was built in the last polish round, then removed at Kartik's request (2026-10-05).
 - Small, test-backed diffs were accepted by controller reading instead of a separate re-review.
 
 ## Last polish (Kartik: "whatever is not perfect, fix it; whatever is not completed, complete it")
