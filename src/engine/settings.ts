@@ -14,7 +14,7 @@ export interface Settings {
   difficulty: Difficulty;
   /** Image quality: a fixed tier, or `auto` (starts from the GPU, steps down when slow). */
   graphics: Graphics;
-  /** Frame cap: 90 (default), 60, or the display's own rate. */
+  /** Frame cap: 60 (default), 90, or the display's own rate. */
   maxFps: MaxFps;
 }
 
@@ -30,7 +30,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   volume: 0.8,
   difficulty: 'normal',
   graphics: 'auto',
-  maxFps: '90',
+  maxFps: '60',
 };
 export const SENSITIVITY_RANGE = { min: 0.2, max: 3 } as const;
 

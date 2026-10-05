@@ -88,7 +88,7 @@ interface Graph {
   viewZ: THREE.Node<'float'>;
   /** The pre-pass depth (Medium and High): the mist reads it. */
   depth?: THREE.TextureNode;
-  /** Low has no TRAA, so SMAA runs on the tone-mapped picture. */
+  /** Without TRAA (Low, Medium) SMAA runs on the tone-mapped picture. */
   smaa: boolean;
   owned: Disposable[];
 }
@@ -117,14 +117,25 @@ function lowGraph(camera: THREE.PerspectiveCamera): Graph {
   };
 }
 
-/** GTAO from a normal/velocity pre-pass feeds the scene's ambient term; TRAA resolves it. */
+/**
+ * GTAO from a normal pre-pass feeds the scene's ambient term. With `useTraa` the pre-pass also writes
+ * velocity and TRAA resolves the picture (High); without it SMAA runs after the tone map and the
+ * pre-pass is normals only (Medium).
+ */
 function aoGraph(
   camera: THREE.PerspectiveCamera,
   knobs: { scale: number; samples: number },
+  useTraa: boolean,
 ): Graph {
   const prePass = pass(new THREE.Scene(), camera);
   prePass.transparent = false; // mist, glow discs and sprites never write normals or velocity
-  prePass.setMRT(mrt({ output: packNormalToRGB(normalView), velocity }));
+  prePass.setMRT(
+    mrt(
+      useTraa
+        ? { output: packNormalToRGB(normalView), velocity }
+        : { output: packNormalToRGB(normalView) },
+    ),
+  );
   asByte(prePass, 'output');
   const normal = sample((uv) => unpackRGBToNormal(prePass.getTextureNode().sample(uv)));
   const depth = prePass.getTextureNode('depth');
@@ -136,15 +147,21 @@ function aoGraph(
   scenePass.contextNode = builtinAOContext(
     occlusion.getTextureNode().sample(screenUV).r.mul(outdoors()),
   );
-  const resolved = traa(scenePass, depth, prePass.getTextureNode('velocity'), camera);
-  resolved.useSubpixelCorrection = false;
+  const owned: Disposable[] = [prePass, scenePass, occlusion];
+  let color: THREE.Node<'vec4'> = scenePass.getTextureNode('output');
+  if (useTraa) {
+    const resolved = traa(scenePass, depth, prePass.getTextureNode('velocity'), camera);
+    resolved.useSubpixelCorrection = false;
+    owned.push(resolved);
+    color = resolved;
+  }
   return {
     passes: [prePass, scenePass],
-    color: resolved,
+    color,
     viewZ: scenePass.getViewZNode(),
     depth,
-    smaa: false,
-    owned: [prePass, scenePass, occlusion, resolved],
+    smaa: !useTraa,
+    owned,
   };
 }
 
@@ -156,8 +173,8 @@ function aoKnobs(tier: Tier): { scale: number; samples: number } {
 
 const BUILD: Record<Tier, (camera: THREE.PerspectiveCamera) => Graph> = {
   low: lowGraph,
-  medium: (camera) => aoGraph(camera, aoKnobs('medium')),
-  high: (camera) => aoGraph(camera, aoKnobs('high')),
+  medium: (camera) => aoGraph(camera, aoKnobs('medium'), TIERS.medium.traa),
+  high: (camera) => aoGraph(camera, aoKnobs('high'), TIERS.high.traa),
 };
 
 /** DEV only: `?gpuload=N` makes the final pass do N loops of per-pixel busywork (simulates a slower GPU). */

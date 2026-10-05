@@ -94,6 +94,7 @@ describe('TIERS (what each graphics tier turns on)', () => {
       keyShadow: null,
       torchShadowMap: 512,
       ao: null,
+      traa: false,
       bloom: true,
       mistSteps: 0,
       maxPixelRatio: 1,
@@ -101,25 +102,27 @@ describe('TIERS (what each graphics tier turns on)', () => {
     });
   });
 
-  it('Medium: quarter-ish reflection, one 1024 cascade, half-res 10-sample AO, 512 torch', () => {
+  it('Medium: quarter-ish reflection, one 1024 cascade, half-res 10-sample AO, SMAA, 6 mist steps, 512 torch', () => {
     expect(TIERS.medium).toEqual({
       reflectionScale: 0.2,
       keyShadow: { cascades: 1, mapSize: 1024 },
       torchShadowMap: 512,
       ao: { scale: 0.5, samples: 10 },
+      traa: false,
       bloom: true,
-      mistSteps: 8,
+      mistSteps: 6,
       maxPixelRatio: 1,
       dropStep: 1,
     });
   });
 
-  it('High: the full look', () => {
+  it('High: 2 x 1536 cascades, half-res 16-sample AO, TRAA', () => {
     expect(TIERS.high).toEqual({
       reflectionScale: 0.35,
-      keyShadow: { cascades: 3, mapSize: 2048 },
+      keyShadow: { cascades: 2, mapSize: 1536 },
       torchShadowMap: 1024,
-      ao: { scale: 0.75, samples: 24 },
+      ao: { scale: 0.5, samples: 16 },
+      traa: true,
       bloom: true,
       mistSteps: 12,
       maxPixelRatio: 1.5,

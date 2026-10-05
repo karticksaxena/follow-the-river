@@ -290,12 +290,20 @@ function newReflection(materials: ReadonlySet<THREE.Material>): THREE.ReflectorN
   // It also skips frames it need not draw (`reflectionDue`).
   let frameNo = 0;
   let stale = false;
+  // The two closures are made once, not per frame (the frame goes through `pending`).
+  let pending: Parameters<typeof updateBefore>[0] | undefined;
+  const draw = (): void => {
+    if (pending) updateBefore(pending);
+  };
+  const drawHidden = (): void => withHidden(materials, draw);
   base.updateBefore = (frame) => {
     const inView = !frame.camera || waterInView(materials, frame.camera);
     const halfRate = waterTier === 'medium' && !reflectionSharp;
     const due = reflectionDue(inView, stale, halfRate, frameNo++);
     stale = !inView; // a frame with no water in view leaves an old texture: redraw at once when it returns
-    if (due) withoutShadowUpdates(() => withHidden(materials, () => updateBefore(frame)));
+    pending = frame;
+    if (due) withoutShadowUpdates(drawHidden);
+    pending = undefined;
   };
   return reflection;
 }

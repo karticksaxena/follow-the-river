@@ -25,13 +25,13 @@ describe('settings', () => {
       volume: 0,
       difficulty: 'normal',
       graphics: 'auto',
-      maxFps: '90',
+      maxFps: '60',
     });
   });
 
-  it('old settings without a frame cap load at 90; bad values fall back', () => {
-    expect(clampSettings({ sensitivity: 1, volume: 0.5 }).maxFps).toBe('90');
-    expect(clampSettings({ sensitivity: 1, volume: 0.5, maxFps: 144 }).maxFps).toBe('90');
+  it('old settings without a frame cap load at 60; bad values fall back', () => {
+    expect(clampSettings({ sensitivity: 1, volume: 0.5 }).maxFps).toBe('60');
+    expect(clampSettings({ sensitivity: 1, volume: 0.5, maxFps: 144 }).maxFps).toBe('60');
     expect(clampSettings({ sensitivity: 1, volume: 0.5, maxFps: '60' }).maxFps).toBe('60');
     expect(clampSettings({ sensitivity: 1, volume: 0.5, maxFps: 'display' }).maxFps).toBe(
       'display',

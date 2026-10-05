@@ -48,8 +48,10 @@ export interface TierSettings {
   keyShadow: { cascades: number; mapSize: number } | null;
   /** The torch's spot-shadow map size (px). */
   torchShadowMap: number;
-  /** GTAO (with its normal pre-pass and TRAA); null = none. */
+  /** GTAO (with its normal pre-pass); null = none. */
   ao: { scale: number; samples: number } | null;
+  /** TRAA (adds velocity to the pre-pass); false = SMAA on the tone-mapped picture. */
+  traa: boolean;
   /** Bloom glow (lamps, windows, the moon). */
   bloom: boolean;
   /** Raymarch steps of the mist (0 = no pass; WebGL 2 never has it). */
@@ -71,6 +73,7 @@ export const TIERS: Readonly<Record<Tier, TierSettings>> = {
     keyShadow: null,
     torchShadowMap: 512,
     ao: null,
+    traa: false,
     bloom: true,
     mistSteps: 0,
     dropStep: 3,
@@ -81,16 +84,18 @@ export const TIERS: Readonly<Record<Tier, TierSettings>> = {
     keyShadow: { cascades: 1, mapSize: 1024 },
     torchShadowMap: 512,
     ao: { scale: 0.5, samples: 10 },
+    traa: false,
     bloom: true,
-    mistSteps: 8,
+    mistSteps: 6,
     dropStep: 1,
   },
   high: {
     maxPixelRatio: 1.5,
     reflectionScale: 0.35,
-    keyShadow: { cascades: 3, mapSize: 2048 },
+    keyShadow: { cascades: 2, mapSize: 1536 },
     torchShadowMap: 1024,
-    ao: { scale: 0.75, samples: 24 },
+    ao: { scale: 0.5, samples: 16 },
+    traa: true,
     bloom: true,
     mistSteps: 12,
     dropStep: 0,

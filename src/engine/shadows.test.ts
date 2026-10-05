@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   attachKeyShadows,
   detachKeyShadows,
+  farCascadeDue,
   KEY_SHADOWS,
   needsShadowChange,
   syncKeyShadows,
@@ -33,8 +34,8 @@ describe('needsShadowChange', () => {
     expect(needsShadowChange(null, 'low')).toBe(false);
   });
 
-  it('gives High 3 cascades at 2048, Medium 1 at 1024, Low none', () => {
-    expect(KEY_SHADOWS.high).toEqual({ cascades: 3, mapSize: 2048 });
+  it('gives High 2 cascades at 1536, Medium 1 at 1024, Low none', () => {
+    expect(KEY_SHADOWS.high).toEqual({ cascades: 2, mapSize: 1536 });
     expect(KEY_SHADOWS.medium).toEqual({ cascades: 1, mapSize: 1024 });
     expect(KEY_SHADOWS.low).toBeNull();
   });
@@ -68,7 +69,7 @@ describe('syncKeyShadows', () => {
   it('rebuilds the cascades when the tier changes, and drops them on Low', () => {
     const light = new THREE.DirectionalLight();
     attachKeyShadows(light, 'high');
-    expect([cascades(light), light.shadow.mapSize.x]).toEqual([3, 2048]);
+    expect([cascades(light), light.shadow.mapSize.x]).toEqual([2, 1536]);
     syncKeyShadows(light, 'medium');
     expect([cascades(light), light.shadow.mapSize.x]).toEqual([1, 1024]);
     expect(remove).toHaveBeenCalledTimes(1); // the High one's listener went
@@ -113,5 +114,11 @@ describe('withoutShadowUpdates', () => {
     ).toThrow('x');
     run(3);
     expect(draw).toHaveBeenCalledTimes(2); // restored even after a throw
+  });
+});
+
+describe('farCascadeDue', () => {
+  it('is every 2nd frame', () => {
+    expect([0, 1, 2, 3].map(farCascadeDue)).toEqual([true, false, true, false]);
   });
 });

@@ -58,6 +58,7 @@ export function attachKeyShadows(light: THREE.DirectionalLight, tier: Tier): voi
   light.shadow.camera.far = SHADOW_DEPTH;
   light.shadow.bias = -0.0004;
   light.shadow.radius = 3; // soft edges for the moon
+  patchShadowNode();
   const csm = new CSMShadowNode(light, {
     cascades: setup.cascades,
     maxFar: MAX_FAR,
@@ -99,6 +100,10 @@ export function syncKeyShadows(light: THREE.DirectionalLight, tier: Tier): void 
   }
   if (current && !current.synced && current.csm.lights.length > 0) {
     current.synced = true;
+    for (let i = 1; i < current.csm.lights.length; i++) {
+      const far = current.csm.lights[i]?.shadow;
+      if (far) farShadows.add(far);
+    }
     setShadowStrength(light, light.shadow.intensity);
   }
 }
@@ -106,7 +111,13 @@ export function syncKeyShadows(light: THREE.DirectionalLight, tier: Tier): void 
 let shadowsPaused = false;
 let patched = false;
 
-/** Once: shadow nodes skip their map pass while `shadowsPaused` (three has no per-pass switch). */
+/** The far cascades' shadows (index 1 and up): they redraw every 2nd frame. */
+const farShadows = new WeakSet<object>();
+
+/** The far cascades redraw on even frames only (their map and matrix stay a consistent pair). Pure. */
+export const farCascadeDue = (frameId: number): boolean => frameId % 2 === 0;
+
+/** Once: shadow nodes skip their map pass while `shadowsPaused` (three has no per-pass switch) or when a far cascade is off its frame. */
 function patchShadowNode(): void {
   if (patched) return;
   patched = true;
@@ -114,7 +125,11 @@ function patchShadowNode(): void {
   // oxlint-disable-next-line typescript/unbound-method
   const original = proto.updateBefore;
   proto.updateBefore = function (frame) {
-    if (!shadowsPaused) original.call(this, frame);
+    if (shadowsPaused) return;
+    const own: unknown = Reflect.get(this, 'shadow');
+    if (typeof own === 'object' && own && farShadows.has(own) && !farCascadeDue(frame.frameId))
+      return;
+    original.call(this, frame);
   };
 }
 

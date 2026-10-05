@@ -4,7 +4,7 @@ import { VOLUME, volumeSteps } from './volume';
 describe('volumeSteps', () => {
   it('is off on Low, 8 on Medium and 12 on High (WebGPU)', () => {
     expect(volumeSteps('low', true)).toBe(0);
-    expect(volumeSteps('medium', true)).toBe(8);
+    expect(volumeSteps('medium', true)).toBe(6);
     expect(volumeSteps('high', true)).toBe(12);
   });
   it('is off everywhere on WebGL 2', () => {

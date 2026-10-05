@@ -97,7 +97,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   let auto = true;
   let setting: Graphics = 'auto';
   let tier: Tier = autoStart;
-  let cap: MaxFps = '90';
+  let cap: MaxFps = '60';
   const pacer = newPacer();
   const perf = import.meta.env.DEV ? createPerf(renderer) : undefined;
   const post = createPost(renderer, camera, tier);
