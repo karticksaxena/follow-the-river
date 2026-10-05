@@ -21,7 +21,7 @@ export type HintId =
 /** Player-paced pages, each shown once per run (ids are kept in `RunState.hints`). */
 export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   pickup: [
-    'Batteries, arrows and fish packs lie about. In the dark, your torch finds them.',
+    'Batteries, arrows and fish packs lie about. In the dark, your flashlight finds them.',
     'Walk up to one and press E to pick it up.',
     'Click to shoot your bow. F turns your flashlight on and off.',
   ],
@@ -30,7 +30,7 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
     'Press F for your flashlight. It drains while it is on - watch the meter in the corner.',
     'Switched off, it slowly charges back up.',
   ],
-  battery: ['A spare battery. When the torch runs low, press R to put it in.'],
+  battery: ['A spare battery. When the flashlight runs low, press R to put it in.'],
   bow: ['Click to shoot your bow. It is silent.', 'Walk over your arrows to pick them back up.'],
   fish: [
     "Stand at the water's edge and press E to throw a fish pack in.",
@@ -49,13 +49,13 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   ],
   wave: ['They are coming, and they will keep coming. Find the crate.'],
   waveHouse: [
-    'They are coming, and they will keep coming. The crate is in one of the houses here: take your torch.',
+    'They are coming, and they will keep coming. The crate is in one of the houses here: take your flashlight.',
   ],
   clear: ['The barricade is down. Keep going downstream.'],
   hurt: ['You are hurt. Three hits and you are dead.'],
   tape: ["A video tape. Mom's handwriting on the label."],
   night1: [
-    "Ammo is scarce. Search the dark houses along the road with your torch: ammo, arrows and each wave's crate are inside. Mind the corners.",
+    "Ammo is scarce. Search the dark houses along the road with your flashlight: ammo, arrows and each wave's crate are inside. Mind the corners.",
   ],
   night2: ['Corn hides them. Listen.'],
   night3: ['The lake. Mom is waiting at the lake.'],

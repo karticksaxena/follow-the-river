@@ -243,7 +243,7 @@ function tickWorld(p: State, dt: number): void {
   if (recovered > 0) run.live.supplies = addSupply(run.live.supplies, 'arrows', recovered);
   sys.fish.update(dt, sense, night ? sys.horde : null, night);
   sys.world.railing?.update(dt);
-  sys.pickups.update(dt);
+  sys.pickups.update(dt, sense);
 }
 
 /** Shack darkness: eases toward 1 inside, 0 outside; lights are touched only when it moved. */

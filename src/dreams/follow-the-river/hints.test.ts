@@ -14,7 +14,7 @@ describe('hints', () => {
   });
 
   it('tells Night 1 where the ammo is', () => {
-    expect(HINTS.night1.join(' ')).toMatch(/dark houses.*torch.*ammo.*crate/);
+    expect(HINTS.night1.join(' ')).toMatch(/dark houses.*flashlight.*ammo.*crate/);
     expect(HINTS.waveHouse.join(' ')).toMatch(/crate is in one of the houses/);
   });
 });

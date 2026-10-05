@@ -142,7 +142,8 @@ export function promptFor(pickup: PickupDef, supplies: Supplies, guns: readonly 
 export interface PickupMeshes {
   place(list: readonly PickupDef[], taken: ReadonlySet<string>): void;
   remove(id: string): void;
-  update(dt: number): void;
+  /** Spin and bob; only pickups within SHOW_RANGE of `eye` are drawn. */
+  update(dt: number, eye: { x: number; z: number }): void;
   dispose(): void;
 }
 
@@ -161,13 +162,17 @@ const HOVER = 0.5;
 const BOB = 0.04;
 const BOB_SPEED = 2;
 const SPIN_SPEED = 0.8;
+/** Pickups further than this (m) are not drawn: the night fog hides them anyway, and each one is
+ * several draws (Night 1's houses doubled their count). Tuning knob. */
+export const SHOW_RANGE = 40;
 
 interface PickupState {
   readonly templates: ReadonlyMap<string, THREE.Object3D>;
   readonly group: THREE.Group;
   readonly meshes: Map<string, THREE.Object3D>;
-  // Mirror of meshes' values, so update() walks an array without allocating an iterator.
+  // Mirrors of meshes' values, so update() walks arrays without allocating an iterator.
   active: THREE.Object3D[];
+  all: THREE.Object3D[];
   time: number;
 }
 
@@ -175,10 +180,16 @@ async function loadTemplates(): Promise<Map<string, THREE.Object3D>> {
   const templates = new Map<string, THREE.Object3D>();
   await Promise.all(
     [...new Set(Object.values(MODEL))].map(async (url) =>
-      templates.set(url, mergeParts(await loadModel(url))),
+      templates.set(url, noShadows(mergeParts(await loadModel(url)))),
     ),
   );
   return templates;
+}
+
+/** Small things: their shadows cost a draw per shadow pass and are never seen. */
+function noShadows(root: THREE.Object3D): THREE.Object3D {
+  root.traverse((n) => (n.castShadow = false));
+  return root;
 }
 
 /** The meshes that hover and spin (not the grounded crates). */
@@ -191,6 +202,7 @@ function removePickup(s: PickupState, id: string): void {
   mesh.removeFromParent();
   s.meshes.delete(id);
   s.active = spinning(s.meshes);
+  s.all = [...s.meshes.values()];
 }
 
 function placePickups(
@@ -214,9 +226,18 @@ function placePickups(
     s.meshes.set(p.id, mesh);
   }
   s.active = spinning(s.meshes);
+  s.all = [...s.meshes.values()];
 }
 
-function updatePickups(s: PickupState, dt: number): void {
+/** Pure: is a pickup at (x, z) close enough to `eye` to draw? */
+export const inShowRange = (x: number, z: number, eye: { x: number; z: number }): boolean =>
+  (x - eye.x) ** 2 + (z - eye.z) ** 2 < SHOW_RANGE * SHOW_RANGE;
+
+function updatePickups(s: PickupState, dt: number, eye: { x: number; z: number }): void {
+  for (let i = 0; i < s.all.length; i++) {
+    const mesh = s.all[i];
+    if (mesh) mesh.visible = inShowRange(mesh.position.x, mesh.position.z, eye);
+  }
   s.time += dt;
   const y = HOVER + Math.sin(s.time * BOB_SPEED) * BOB;
   for (let i = 0; i < s.active.length; i++) {
@@ -234,17 +255,19 @@ export async function createPickupMeshes(scene: THREE.Scene): Promise<PickupMesh
     group,
     meshes: new Map(),
     active: [],
+    all: [],
     time: 0,
   };
   scene.add(group);
   return {
     place: (list, taken) => placePickups(s, list, taken),
     remove: (id) => removePickup(s, id),
-    update: (dt) => updatePickups(s, dt),
+    update: (dt, eye) => updatePickups(s, dt, eye),
     dispose() {
       group.removeFromParent();
       s.meshes.clear();
       s.active = [];
+      s.all = [];
     },
   };
 }

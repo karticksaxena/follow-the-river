@@ -4,10 +4,12 @@ import {
   AMMO_BOX,
   collect,
   CRATE,
+  inShowRange,
   isFull,
   nearestPickup,
   PICKUP_RADIUS,
   promptFor,
+  SHOW_RANGE,
 } from './pickups';
 import { freshRun, restartPhase, SUPPLY_LIMITS, type GunKind } from './state';
 
@@ -102,5 +104,14 @@ describe('pickups', () => {
     expect(isFull(box, all, live.guns)).toBe(true);
     expect(isFull(box, { ...all, ammo: 0 }, [])).toBe(false);
     expect(isFull(box, all, [])).toBe(true);
+  });
+});
+
+describe('inShowRange', () => {
+  it('draws pickups near the player and skips those beyond the range', () => {
+    const eye = { x: 0, z: -100 };
+    expect(inShowRange(-14, -110, eye)).toBe(true);
+    expect(inShowRange(0, -100 - SHOW_RANGE - 1, eye)).toBe(false);
+    expect(SHOW_RANGE).toBeLessThan(55); // inside the night fog's far end
   });
 });
