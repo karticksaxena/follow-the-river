@@ -36,11 +36,11 @@ const WARM_ORCA_OUT = 3;
 const HEADINGS = [-Math.PI / 2, 0, Math.PI / 2, Math.PI] as const;
 const WARM_PITCH = -0.2;
 /** Real loop frames drawn behind black per pose: the torch, motion, shadows and the water reflection all run. */
-const POSE_FRAMES = 3;
+const POSE_FRAMES = 2;
 /** Then a few more in the player's own view (what faces downstream: lamp glows, sky discs, the AO pass). */
 const VIEW_FRAMES = 4;
-/** The warm-up stops posing after this long (ms): the whole load has `LOAD_TIMEOUT_MS`, and a slow machine must still get in. */
-const BUDGET_MS = 40_000;
+/** The warm-up stops posing this long (ms) after it began: a slow machine must still get in quickly, and the loader must not look frozen. */
+const BUDGET_MS = 4000;
 /** The pickups, the arrow and the splash show this far (m) ahead of the camera. */
 const SHOW_AHEAD = 3;
 
@@ -55,6 +55,23 @@ const PICKUP_KINDS: readonly PickupKind[] = [
 ];
 
 type Undo = () => void;
+
+/** Phase times (ms) of one warm-up. */
+export type WarmTimes = Record<string, number>;
+
+/** Records `name`: ms since `t0`. */
+export function mark(times: WarmTimes, name: string, t0: number): void {
+  times[name] = Math.round(performance.now() - t0);
+}
+
+/** DEV: `window.__kdWarm` lists every warm-up's phase times (ms), newest last: [{ kind, compile, frames, total }]. */
+export function logWarm(kind: string, times: WarmTimes): void {
+  if (!import.meta.env.DEV || typeof window === 'undefined') return;
+  const log: unknown = Reflect.get(window, '__kdWarm');
+  const list = Array.isArray(log) ? log : [];
+  list.push({ kind, ...times });
+  Object.assign(window, { __kdWarm: list });
+}
 
 /** Resolves after the stage's loop has drawn `n` frames. */
 export function frames(stage: Stage, n: number): Promise<void> {
@@ -226,9 +243,8 @@ export interface WarmOptions {
 }
 
 /** Draws the poses (the first also casts every outfit's shadow); stops when the budget is spent. */
-async function drawPoses(sys: Systems, x: number, opts: WarmOptions): Promise<void> {
+async function drawPoses(sys: Systems, x: number, opts: WarmOptions, t0: number): Promise<void> {
   const { stage } = sys.ctx;
-  const t0 = performance.now();
   const headings = opts.full ? HEADINGS : HEADINGS.slice(0, 1);
   let first = true;
   for (const z of vantages(sys, opts.full, stage.camera.position.z)) {
@@ -259,6 +275,8 @@ export async function warmArea(
   const { stage } = sys.ctx;
   const { camera } = stage;
   const undo: Undo[] = [];
+  const t0 = performance.now();
+  const times: WarmTimes = {};
   stage.hold = true;
   stage.warming = true;
   try {
@@ -267,16 +285,21 @@ export async function warmArea(
     pose(camera, water - WARM_STAND_OFF, camera.position.z, HEADINGS[0]);
     spawnOutfits(sys.horde, camera.position);
     undo.push(sys.fish.warmShow(water + WARM_ORCA_OUT, camera.position.z));
-    undo.push(torchOn(sys, opts.battery), sys.world.showAllPlants(), showSky(sys));
+    const allPlants = sys.world.showAllPlants(); // every cell, for the compile only
+    undo.push(torchOn(sys, opts.battery), showSky(sys));
     undo.push(showPickups(sys, run, camera.position), showEffects(sys, camera.position));
     for (const show of opts.extras ?? []) undo.push(show());
     undo.push(unculled(stage.scene));
     await stage.renderer.compileAsync(stage.scene, camera);
     await compileMist(stage.renderer, stage.scene, camera);
     stage.hold = false;
+    mark(times, 'compile', t0);
+    allPlants();
+    undo.push(sys.world.showAllPlants(true)); // real frames: one cell per material, not the whole route
     stage.warmFocus(); // the depth-of-field graph builds here, not at the first cutscene
     await frames(stage, 3);
-    await drawPoses(sys, camera.position.x, opts);
+    await drawPoses(sys, camera.position.x, opts, t0);
+    mark(times, 'frames', t0);
   } catch {
     // keep going: the first frames will compile what is missing
   } finally {
@@ -286,6 +309,8 @@ export async function warmArea(
     stage.hold = false;
     await frames(stage, VIEW_FRAMES); // still behind black: the restored view compiles too
     stage.warming = false;
+    mark(times, 'total', t0);
+    logWarm('area', times);
   }
 }
 

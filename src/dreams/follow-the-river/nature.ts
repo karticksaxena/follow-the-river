@@ -384,12 +384,20 @@ export class Vegetation extends THREE.Group {
   }
 
   /**
-   * Warm-up: every cell on show (the cull stands still) so each material compiles in every pass;
-   * returns the undo, after which the next frame culls again.
+   * Warm-up: the cull stands still, with every cell on show (`sample` false: so each material
+   * compiles) or only the smallest cell of each material (`sample` true: enough for the shadow,
+   * prepass and reflection pipelines, which are keyed per material, at a fraction of the draw cost).
+   * Returns the undo, after which the next frame culls again.
    */
-  showAll(): () => void {
+  showAll(sample = false): () => void {
     this.forced = true;
-    for (const c of this.cells) c.mesh.visible = true;
+    const pick = new Map<THREE.Material | THREE.Material[], Cell>();
+    for (const c of this.cells) {
+      const best = pick.get(c.mesh.material);
+      if (!best || c.mesh.count < best.mesh.count) pick.set(c.mesh.material, c);
+    }
+    const shown = new Set(pick.values());
+    for (const c of this.cells) c.mesh.visible = !sample || shown.has(c);
     return () => {
       this.forced = false;
       this.lastX = NaN;

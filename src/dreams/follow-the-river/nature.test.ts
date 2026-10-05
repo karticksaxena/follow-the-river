@@ -172,4 +172,19 @@ describe('Vegetation.setTier (Auto or the pause menu changes the tier mid-chapte
     undo();
     expect(vegetation.cull(x, z, 100).length).toBe(near);
   }, 60000);
+
+  it('showAll(true) shows one cell per material: fewer than all, at least one of each', async () => {
+    const vegetation = await built(canoe('high'), 'high');
+    const [x, z] = SPOTS.canoe[2];
+    const undoAll = vegetation.showAll();
+    const all = vegetation.cull(x, z, 100);
+    undoAll();
+    const undo = vegetation.showAll(true);
+    const sample = vegetation.cull(x, z, 100);
+    expect(sample.length).toBeLessThan(all.length);
+    expect(new Set(sample.map((m) => m.material)).size).toBe(
+      new Set(all.map((m) => m.material)).size,
+    );
+    undo();
+  }, 60000);
 });

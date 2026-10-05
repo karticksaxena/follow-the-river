@@ -1,20 +1,22 @@
 import * as THREE from 'three/webgpu';
 import type { Pose, Ride } from './canoe-ride';
 import { Vegetation } from './nature';
-import { frames, unculled } from './warm';
+import { frames, logWarm, mark, unculled, type WarmTimes } from './warm';
 
 /** The ride's warm-up: frames drawn per spot along the river, and where the splash shows ahead of the camera (m). Tuning knobs. */
 const SPOT_FRAMES = 2;
 const EYE_HEIGHT = 1.5;
 const SPLASH_AHEAD = 3;
+/** Stop moving down the river this long (ms) after the warm began: the loader must not look frozen. */
+const BUDGET_MS = 3000;
 
 type Undo = () => void;
 
-/** Every plant cell on show (the cull follows the camera as the canoe moves); returns the undo. */
-function showPlants(scene: THREE.Scene): Undo {
+/** Every plant cell on show, or `sample`: one per material (the cull follows the camera as the canoe moves); returns the undo. */
+function showPlants(scene: THREE.Scene, sample: boolean): Undo {
   const undo: Undo[] = [];
   scene.traverse((o) => {
-    if (o instanceof Vegetation) undo.push(o.showAll());
+    if (o instanceof Vegetation) undo.push(o.showAll(sample));
   });
   return () => undo.forEach((u) => u());
 }
@@ -54,16 +56,23 @@ export async function warmRide(
   const { camera, renderer } = stage;
   const { cs } = r;
   const undo: Undo[] = [keepCamera(camera)];
+  const t0 = performance.now();
+  const times: WarmTimes = {};
   stage.hold = true;
   stage.warming = true;
   try {
     stage.scene = cs.scene;
-    undo.push(showPlants(cs.scene), showActors(r), unculled(cs.scene));
+    const allPlants = showPlants(cs.scene, false); // every cell, for the compile only
+    undo.push(showActors(r), unculled(cs.scene));
     r.motion.env.tier = stage.tier;
     r.motion.burst(0, 0.3, 0, 40, 4.5);
     await renderer.compileAsync(cs.scene, camera);
     stage.hold = false;
+    mark(times, 'compile', t0);
+    allPlants();
+    undo.push(showPlants(cs.scene, true)); // real frames: one cell per material, not the whole route
     for (const at of spots) {
+      if (performance.now() - t0 > BUDGET_MS) break;
       camera.position.set(at.x, at.y + EYE_HEIGHT, at.z);
       camera.rotation.set(0, at.yaw + Math.PI, 0, 'YXZ');
       cs.sky.position.copy(camera.position);
@@ -79,5 +88,7 @@ export async function warmRide(
     stage.scene = previous;
     stage.hold = false;
     stage.warming = false;
+    mark(times, 'total', t0);
+    logWarm('ride', times);
   }
 }
