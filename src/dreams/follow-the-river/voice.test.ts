@@ -1,5 +1,15 @@
-import { describe, expect, it } from 'vitest';
-import { babbleSamples, contourScale, introVoice, voiceFor } from './voice';
+/* oxlint-disable vitest/require-mock-type-parameters, typescript/no-unsafe-type-assertion -- a partial fake of the audio bus */
+import { describe, expect, it, vi } from 'vitest';
+import type { AudioBus } from '../../engine/audio';
+import {
+  babbleSamples,
+  contourScale,
+  introVoice,
+  prepareVoices,
+  stopVoice,
+  voiceFor,
+  voiceHooks,
+} from './voice';
 
 const RATE = 8000;
 const peak = (a: Float32Array): number => a.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
@@ -51,5 +61,34 @@ describe('voiceFor', () => {
     expect(introVoice('"Stay inside."')).toBe('anchor');
     expect(introVoice('Mom: "Come here."')).toBe('mom');
     expect(introVoice('Night falls.')).toBeNull();
+  });
+});
+
+describe('prepareVoices (lines are synthesized behind black, not as their page opens)', () => {
+  it('builds each voiced line once, skips narration, and the page then plays the cached line', () => {
+    const context = {
+      sampleRate: RATE,
+      currentTime: 0,
+      createBuffer: vi.fn((_channels: number, length: number) => ({
+        length,
+        copyToChannel: vi.fn(),
+      })),
+    };
+    const once = vi.fn(() => ({
+      isPlaying: false,
+      gain: { context },
+      source: null,
+      stop: vi.fn(),
+    }));
+    const audio = { listener: { context }, once } as unknown as AudioBus;
+    const pages = ['Mom: "Come with me."', 'An hour later.', '"Breaking: the river."'];
+    prepareVoices(audio, pages, introVoice);
+    expect(context.createBuffer).toHaveBeenCalledTimes(2); // narration has no voice
+    prepareVoices(audio, pages, introVoice);
+    expect(context.createBuffer).toHaveBeenCalledTimes(2); // cached
+    voiceHooks(audio, introVoice).onPage(pages[0] ?? '', 0);
+    expect(context.createBuffer).toHaveBeenCalledTimes(2); // the page synthesized nothing
+    expect(once).toHaveBeenCalledTimes(1);
+    stopVoice();
   });
 });
