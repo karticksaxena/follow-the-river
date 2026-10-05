@@ -83,6 +83,12 @@ Download the kits from kenney.nl (City Kit Commercial, City Kit Roads, Car Kit, 
 listed `Models/GLB format/*.glb` into `public/assets/kits/<kit>/` together with that kit's own `Textures/colormap.png`
 (each kit has a different `colormap.png`, so kits never share a folder).
 
+### Intro living room furniture
+
+`home/{rugRectangle,tableCoffee,sideTable,bookcaseOpen,loungeChair,pottedPlant}.glb` are the Kenney Furniture Kit's own `Models/GLTF format/*.glb`,
+copied unchanged (6-20 KB each; no compression needed). Placement lives in `src/dreams/follow-the-river/intro-room.ts`; preview it with
+`Blender --background --factory-startup --python tools/blender/intro_room_preview.py -- <out dir>` (keep its table in step).
+
 ## Sounds
 
 macOS `afconvert` to AAC in `.m4a` (plays in Chrome, Safari and Firefox):
@@ -167,6 +173,18 @@ No CC0 bow, shotgun-pump or dry-fire clip was found (OpenGameArt bow sounds are 
 ```
 
 Compress both with the meshopt command above (with `--resample false`).
+
+`tools/blender/fp_arms.py` poses both of his arms for each weapon (bow, pistol, shotgun, rifle) and bakes them to static, single-material meshes
+(vertex colours) in each weapon's own frame, one node `arms_<weapon>` each, so the viewmodel just adds the node. Poses are the `POSES` table
+(palm position, finger direction, back of hand, elbow pole, finger curls); with a preview directory it renders first-person, side, top, front and
+close-up PNGs per weapon with the prop. Input is the compressed or raw `kartik.glb`:
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python tools/blender/fp_arms.py -- \
+  public/assets/characters/kartik.glb public/assets/props /tmp/arms-raw.glb /tmp/arms-preview
+pnpm dlx @gltf-transform/cli@latest optimize /tmp/arms-raw.glb public/assets/characters/kartik-arms.glb --compress meshopt \
+  --join false --flatten false --palette false --instance false --simplify false --texture-compress auto --resample false
+```
 
 ## Textures (`public/assets/textures/`)
 
