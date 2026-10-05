@@ -15,6 +15,7 @@ import {
   YAW_TO_TV,
   type IntroScene,
 } from './intro-scene';
+import { warmIntro } from './intro-warm';
 import { applyDim, LIGHTING } from './lighting';
 import { createMomActor, TURN_RATE, wrapAngle, type MomActor } from './mom-actor';
 import { createFilmRoll, rollStep } from './phone';
@@ -102,6 +103,7 @@ const TV_EYE = new THREE.Vector3(AT.tv.x, 1, AT.tv.z);
 const TURN_WAIT = 0.4; // Mom turns to face you before she speaks (~90% of the turn at TURN_RATE)
 const LOOK_TIME = 1.2; // the camera eases toward the water this long when the pack is thrown
 const WATER_VOLUME = 0.4;
+const OUTSIDE_FRAMES = 2; // real frames drawn behind the fade before the bank shows
 const HAND_REACH = 0.4;
 const HAND_HEIGHT = 1.2;
 const WATER_GLANCE = { x: AT.momRiver.x + 3, z: 0 }; // out over the river
@@ -292,6 +294,8 @@ function riverActions(
       goOutside(ctx, sc, st);
       actor.faceTo(AT.momRiver.x, AT.momRiver.z);
       actor.idleTense([WATER_GLANCE, cam]); // first beat lands well after the fade
+      await drawBehind(ctx.stage, OUTSIDE_FRAMES); // safety: the bank draws behind black first
+      if (st.disposed) return;
       await fade(false);
       if (st.disposed) return;
       await read(INTRO_PAGES.outside);
@@ -450,7 +454,7 @@ export async function runIntro(
   ctx.player.teleport(AT.spawnRoom.x, AT.spawnRoom.z, YAW_TO_TV);
   ctx.stage.scene = sc.scene;
   ctx.grade('dusk');
-  await drawBehind(ctx.stage); // the transition is still black: the first frames build here
+  await warmIntro(ctx, sc); // the transition is still black: every spot's first frames build here
 
   return {
     dispose() {
