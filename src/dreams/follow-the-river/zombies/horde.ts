@@ -16,7 +16,7 @@ import {
   throwByFish as throwMind,
   type Tuning,
 } from './brain';
-import { bodyHit, CLIP_FOR, timeScaleFor } from './look';
+import { bodyHit, CLIP_FOR, headCentre, timeScaleFor, type Point } from './look';
 import { THROWN, thrownTilt } from './thrown';
 import { createVoices, type Voices } from './voices';
 
@@ -236,6 +236,8 @@ function updateHorde(
   }
 }
 
+const headScratch: Point = { x: 0, y: 0, z: 0 };
+
 function rayHitHorde(
   bodies: readonly Body[],
   origin: Vec3,
@@ -246,7 +248,8 @@ function rayHitHorde(
   for (let id = 0; id < bodies.length; id++) {
     const b = bodies[id];
     if (!b.active || !isAlive(b.mind)) continue;
-    const d = bodyHit(origin, dir, b.x, b.y, b.z, b.mind.state === 'lying');
+    const h = headCentre(b.head, b.x, b.y, b.z, headScratch);
+    const d = bodyHit(origin, dir, b.x, b.y, b.z, b.mind.state === 'lying', h);
     if (d !== null && d.distance <= maxDistance && (!best || d.distance < best.distance)) {
       best = { id, distance: d.distance, head: d.head };
     }

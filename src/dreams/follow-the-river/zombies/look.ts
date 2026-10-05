@@ -61,9 +61,56 @@ export function timeScaleFor(clip: string, speed: number): number {
   return 1;
 }
 
-const HEAD = { y: 1.6, r: 0.2 } as const;
-const CHEST = { y: 1.15, r: 0.38 } as const;
+/** Tuning knobs (metres). The head sphere sits on the real `Head` bone, raised to cover the skull. */
+const HEAD_UP = 0.1;
+const HEAD_R = 0.2;
+/** Fallback head height above the root for a model with no head bone. */
+const HEAD_FALLBACK_Y = 1.6;
+const CHEST_R = 0.35;
+/** The chest sits this far below the head, halfway between the root and the head sideways. */
+const CHEST_BELOW_HEAD = 0.45;
 const LYING = { y: 0.25, r: 0.5 } as const;
+
+export interface Point {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** The bone named `Head` (not the head-end/top helpers) of a skinned model, or null. */
+export function findHeadBone(root: THREE.Object3D): THREE.Bone | null {
+  let found: THREE.Bone | null = null;
+  root.traverse((n) => {
+    if (!found && n instanceof THREE.Bone && /head/i.test(n.name) && !/end|top/i.test(n.name)) {
+      found = n;
+    }
+  });
+  return found;
+}
+
+/**
+ * Writes the head-sphere centre into `out`: the bone's world position (last render's, one frame
+ * stale) raised by HEAD_UP; with no bone, straight above the root at (x, y, z). No allocation.
+ */
+export function headCentre(
+  bone: THREE.Object3D | null,
+  x: number,
+  y: number,
+  z: number,
+  out: Point,
+): Point {
+  if (bone) {
+    const e = bone.matrixWorld.elements;
+    out.x = e[12];
+    out.y = e[13] + HEAD_UP;
+    out.z = e[14];
+  } else {
+    out.x = x;
+    out.y = y + HEAD_FALLBACK_Y;
+    out.z = z;
+  }
+  return out;
+}
 
 /** Where a ray struck: how far along it, and whether it was the head. */
 export interface Strike {
@@ -71,7 +118,10 @@ export interface Strike {
   head: boolean;
 }
 
-/** Distance along a unit ray to a zombie standing at (x, y, z) (head and chest spheres; one sphere when lying), or null. */
+/**
+ * Distance along a unit ray to a zombie rooted at (x, y, z) whose head centre is `h` (head and
+ * chest spheres; head sphere plus one body sphere when lying), or null. Pure.
+ */
 export function bodyHit(
   origin: Vec3,
   dir: Vec3,
@@ -79,17 +129,16 @@ export function bodyHit(
   y: number,
   z: number,
   lying: boolean,
+  h: Point,
 ): Strike | null {
-  const sphere = (s: { readonly y: number; readonly r: number }): number | null =>
-    raySphere(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, x, y + s.y, z, s.r);
-  if (lying) {
-    const d = sphere(LYING);
-    return d === null ? null : { distance: d, head: false };
-  }
-  const head = sphere(HEAD);
-  const chest = sphere(CHEST);
-  if (head !== null && (chest === null || head <= chest)) return { distance: head, head: true };
-  return chest === null ? null : { distance: chest, head: false };
+  const sphere = (cx: number, cy: number, cz: number, r: number): number | null =>
+    raySphere(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, cx, cy, cz, r);
+  const head = sphere(h.x, h.y, h.z, HEAD_R);
+  const body = lying
+    ? sphere(x, y + LYING.y, z, LYING.r)
+    : sphere((x + h.x) / 2, h.y - CHEST_BELOW_HEAD, (z + h.z) / 2, CHEST_R);
+  if (head !== null && (body === null || head <= body)) return { distance: head, head: true };
+  return body === null ? null : { distance: body, head: false };
 }
 
 /**

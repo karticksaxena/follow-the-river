@@ -13,7 +13,7 @@ import {
   type Thought,
   type Tuning,
 } from './brain';
-import { addRim, CLIP_FOR, LOOPING, pickOutfit } from './look';
+import { addRim, CLIP_FOR, findHeadBone, LOOPING, pickOutfit } from './look';
 import { steer } from './steer';
 import { THROWN, thrownPose } from './thrown';
 
@@ -28,6 +28,8 @@ const PARK_Y = -50;
 export interface Body {
   root: THREE.Object3D;
   mesh: THREE.Object3D | null;
+  /** The skeleton's `Head` bone (null: the model has none), found once at build. */
+  head: THREE.Object3D | null;
   mixer: THREE.AnimationMixer;
   actions: Map<string, THREE.AnimationAction>;
   action: THREE.AnimationAction | null;
@@ -100,6 +102,7 @@ export function createBody(i: number, assets: Record<'m' | 'f', SkinnedAsset>): 
   return {
     root,
     mesh: kept,
+    head: findHeadBone(root),
     mixer,
     actions,
     action: null,

@@ -4,6 +4,7 @@ import {
   addRim,
   bodyHit,
   CLIP_FOR,
+  headCentre,
   OUTFITS,
   pickOutfit,
   RIM,
@@ -37,10 +38,21 @@ describe('zombie looks', () => {
 
   it('says whether a ray struck the head or the body', () => {
     const dir = { x: 0, y: 0, z: -1 };
-    expect(bodyHit({ x: 0, y: 1.6, z: 5 }, dir, 0, 0, 0, false)?.head).toBe(true);
-    expect(bodyHit({ x: 0, y: 1.0, z: 5 }, dir, 0, 0, 0, false)?.head).toBe(false);
-    expect(bodyHit({ x: 0, y: 0.25, z: 5 }, dir, 0, 0, 0, true)?.head).toBe(false);
-    expect(bodyHit({ x: 3, y: 1.6, z: 5 }, dir, 0, 0, 0, false)).toBeNull();
+    const hunched = { x: 0, y: 1.33, z: 0.3 }; // bone 1.23 m up, 0.3 m forward, raised 0.1
+    const hit = (y: number, z = 5): ReturnType<typeof bodyHit> =>
+      bodyHit({ x: 0, y, z }, dir, 0, 0, 0, false, hunched);
+    expect(hit(1.33)?.head).toBe(true);
+    expect(hit(0.8)?.head).toBe(false);
+    expect(hit(1.7)).toBeNull();
+    const lie = { x: 0, y: 0.25, z: 1.1 };
+    expect(bodyHit({ x: 0, y: 0.25, z: 5 }, dir, 0, 0, 0, true, lie)?.head).toBe(true);
+  });
+
+  it('headCentre follows the bone, or falls back above the root', () => {
+    const bone = new THREE.Object3D();
+    bone.matrixWorld.setPosition(1, 1.2, 2);
+    expect(headCentre(bone, 0, 0, 0, { x: 0, y: 0, z: 0 })).toEqual({ x: 1, y: 1.3, z: 2 });
+    expect(headCentre(null, 4, 1, 5, { x: 0, y: 0, z: 0 })).toEqual({ x: 4, y: 2.6, z: 5 });
   });
 });
 
