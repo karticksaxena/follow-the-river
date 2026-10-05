@@ -34,6 +34,7 @@ Plan: `2026-10-05-plan-10-night1-feedback.md`. Branch `plan-9` (local only, neve
   - Medium 9.7;
   - High 9.9.
   - With no zombies: Low 4.0, Medium 7.1, High 7.9.
+- Nights 2 and 3 smoke (1ed1fb2, Normal, wave 1): no errors; the orca armed 3 (Night 2) and 4 (Night 3) = 30% of the wave, seized zombies 2.9-4.9 m from the player; zombies chase normally.
 - Full check: 112 files, 838 tests.
 
 ## Balance (Normal, pure test `balance.test.ts`)
@@ -42,6 +43,8 @@ Shots supplied ÷ shots needed (the player's kills × 1.6):
 - Nights 2 and 3 have no houses and are reported only: 2.5 to 4.4. They are more generous on paper, but the orca now takes a smaller share there too. Kartik plays them next.
 
 ## Known gaps and deferred items
+- The houses reuse the shed builder (plank walls, a door, no windows): they read more like garages or stores than homes. Windows, a porch or a second wall colour are a quick upgrade if wanted.
+- Pickups beyond 40 m are not drawn (Day 1 street pickups pop in at 40 m; one knob, `SHOW_RANGE`).
 - Multi-story buildings (deferred, Kartik's call).
 - Nights 2 and 3 keep their wave sizes. The new orca rules apply there, so they will feel harder. Tune after Kartik's play-test.
 - Since Night 1 now shows its own crate hint, the "Find the crate" hint appears at Night 2's first wave.
