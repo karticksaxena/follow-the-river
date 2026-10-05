@@ -107,7 +107,8 @@ export const LIGHTING: Readonly<Record<LightingName, LightPreset>> = {
     environment: SUNRISE_CAPS.environment,
     shadow: 1,
     clouds: 0,
-    sky: { turbidity: 3, rayleigh: 1.9, mie: 0.0012, mieG: 0.7 },
+    // Thin and clear (a thick sky washed the frame to white at the end of the dawn: 40% of it clipped).
+    sky: { turbidity: 2, rayleigh: 1, mie: 0.0004, mieG: 0.7 },
   },
 };
 

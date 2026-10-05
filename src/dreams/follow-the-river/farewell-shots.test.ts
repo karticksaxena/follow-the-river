@@ -145,7 +145,7 @@ describe('the farewell shots', () => {
     expect(fy).toBeGreaterThan(WATER_Y);
     expect(fz).toBeLessThan(LAKE_Z);
     const [cx, , cz] = shots.packCam.at;
-    expect(Math.hypot(fx - cx, fz - cz)).toBeLessThan(1.2);
+    expect(Math.hypot(fx - cx, fz - cz)).toBeLessThan(1.5);
   });
 
   it('orbits at the radius round the centre, climbing, and ends on a different side', () => {
@@ -158,5 +158,29 @@ describe('the farewell shots', () => {
     expect(Math.abs(last.at[0] - first.at[0]) + Math.abs(last.at[2] - first.at[2])).toBeGreaterThan(
       4,
     );
+  });
+
+  it('turns on the spot to look at Mom, the short way round by the east, never past her', () => {
+    const cam = new THREE.PerspectiveCamera();
+    const to = { x: -2, z: LAKE_Z + 4 };
+    const rail = rails.turn(shots.stand, to);
+    rail.pose(0, cam);
+    const [sx, sy, sz] = shots.stand.at;
+    for (let i = 0; i <= 50; i++) {
+      rail.pose((i / 50) * rail.seconds, cam);
+      expect(cam.position.distanceTo(new THREE.Vector3(sx, sy, sz))).toBeLessThan(1e-6);
+    }
+    const dir = cam.getWorldDirection(new THREE.Vector3());
+    const want = new THREE.Vector3(to.x - sx, SHOTS.turnToMom.height - sy, to.z - sz).normalize();
+    expect(dir.dot(want)).toBeGreaterThan(0.999);
+  });
+
+  it('keeps the dawn look off the sun: out over the lake to the east of the south-west sun', () => {
+    const [sx, , sz] = shots.stand.at;
+    const [lx, , lz] = shots.stand.look;
+    const az = Math.atan2(lx - sx, lz - sz); // 0 is +z, toward +x
+    const sun = Math.atan2(-0.675, -0.737); // dawn.ts: the sun's azimuth (about 222 degrees)
+    const gap = Math.abs(Math.atan2(Math.sin(az - sun), Math.cos(az - sun)));
+    expect(gap).toBeGreaterThan((95 * Math.PI) / 180); // beyond the frame's half width and its glow
   });
 });

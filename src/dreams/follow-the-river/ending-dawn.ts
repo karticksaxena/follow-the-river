@@ -3,7 +3,7 @@ import { precompileSky } from '../../engine/sky';
 import type { AreaDef } from './areas/types';
 import { createDawn, DAWN } from './dawn';
 import type { Bed } from './ending-farewell';
-import { SHORE, stopShort, type EndingScene } from './ending-scene';
+import { meetPoint, type EndingScene } from './ending-scene';
 import { LIGHTING, type LightPreset } from './lighting';
 import type { Systems } from './run';
 
@@ -58,7 +58,7 @@ export async function comeToPlayer(d: Dawning, cancelled: () => boolean): Promis
   const actor = d.scene?.actor;
   if (!actor || !d.scene) return;
   const cam = d.sys.ctx.stage.camera.position;
-  const at = stopShort(d.scene.mom.group.position, cam, SHORE.meet);
+  const at = meetPoint(d.scene.mom.group.position, cam);
   d.scene.mom.rest = 'Idle_Neutral'; // up off her knees, and she stands with you
   await actor.walkTo([at]);
   if (!cancelled()) actor.faceTo(cam.x, cam.z);

@@ -1,14 +1,14 @@
 import * as THREE from 'three/webgpu';
 import { loadSkinned } from '../../engine/models';
 import { loadArm } from './farewell-arm';
-import { TORCH_EXPOSURE, WATCH } from './flashlight';
+import { TORCH_EXPOSURE, torchScale, WATCH } from './flashlight';
 import { createCharacter, type Character } from './intro-scene';
 import { characterUrl } from './kits';
 import { createMomActor, type MomActor, type Pt } from './mom-actor';
 import { lookAt, reach } from './rig';
 import { EDGE_X, shoreY } from './river';
 import type { Systems } from './run';
-import { setWaterReflectionCeiling } from './water';
+import { setWaterReflectionCeiling, setWaterReflectionSharp } from './water';
 
 /** Tuning knobs. Mom's lantern is the chapter's lantern, beside her on the pebbles. */
 export const MOM_LANTERN = { intensity: 1.6, distance: 14, height: 1.3 } as const;
@@ -18,6 +18,7 @@ const LANTERN_GLOW_UP = 0.05;
 /** The light hangs this far (m) out from the lantern toward the camera: a point light right against her arm, hand and dress is a 1/d² hot spot that blooms. */
 export const LANTERN_OUT = 0.45;
 const lamp = new THREE.Vector3();
+const chest = new THREE.Vector3();
 
 /**
  * Pure: where the lantern's light goes, `LANTERN_OUT` m from `hand`. Outward from her body axis
@@ -69,6 +70,9 @@ export function stopShort(from: Pt, to: Pt, gap: number): Pt {
   const k = (d - gap) / d;
   return { x: from.x + dx * k, z: from.z + dz * k };
 }
+
+/** Pure: where Mom stops when she comes to you: `SHORE.meet` m short of `cam`, on her way from `mom`. */
+export const meetPoint = (mom: Pt, cam: Pt): Pt => stopShort(mom, cam, SHORE.meet);
 
 /** What the farewell has people reach for and look at (live references, read each frame; null: nothing). */
 export interface Aim {
@@ -137,7 +141,8 @@ export interface EndingScene {
  * fill from the near side lights her flank. Tuning knobs.
  */
 export const FAREWELL_LIGHT = {
-  lantern: { intensity: 10, distance: 12, lift: 0.9 },
+  /** `cap`: the most (candela) the key may light Mom at, like the torch's eye adjustment; her skin at 1 m with the full 10 clipped to white. */
+  lantern: { intensity: 10, distance: 12, lift: 0.9, cap: 3 },
   /** The rim from the far side (+x, behind her back), and a softer cool fill on the near side so her black flank and your hands read. */
   moon: { color: 0x8fa8d0, intensity: 2.5, offset: [8, 6, 3] },
   fill: { color: 0x9db4dc, intensity: 1.3, offset: [-7.5, 4.8, -3] },
@@ -207,6 +212,7 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
     lightFarewell(on, at) {
       farewell = on;
       setWaterReflectionCeiling(on ? FAREWELL_LIGHT.waterCeiling : 1e3); // the lake stays dark (see water.ts)
+      setWaterReflectionSharp(on);
       moon.intensity = on ? FAREWELL_LIGHT.moon.intensity : 0;
       fill.intensity = on ? FAREWELL_LIGHT.fill.intensity : 0;
       if (!on || !at) return;
@@ -234,7 +240,12 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
         const key = farewell && down; // only once it is on the pebbles: in her hand it would glare on her dress
         held.intensity = key ? FAREWELL_LIGHT.lantern.intensity : MOM_LANTERN.intensity;
         held.distance = key ? FAREWELL_LIGHT.lantern.distance : MOM_LANTERN.distance;
-        if (key) held.position.y += FAREWELL_LIGHT.lantern.lift;
+        if (key) {
+          held.position.y += FAREWELL_LIGHT.lantern.lift;
+          mom.bone('Chest').getWorldPosition(chest);
+          const d = held.position.distanceTo(chest); // the key never lights her closer than the cap allows
+          held.intensity *= torchScale(d, held.intensity, 2, FAREWELL_LIGHT.lantern.cap);
+        }
       }
       sys.flashlight.clearWatch(WATCH.mom);
       if (mom.group.visible) {
@@ -274,6 +285,7 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
       lantern.distance = MOM_LANTERN.distance;
       farewell = down = false;
       setWaterReflectionCeiling(1e3);
+      setWaterReflectionSharp(false);
       moon.intensity = fill.intensity = 0;
     },
     dispose() {

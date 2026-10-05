@@ -15,6 +15,7 @@ import {
   song,
   standUp,
   swim,
+  turnToMom,
   type Bed,
   type Script,
   type Shore,
@@ -322,7 +323,11 @@ async function dawnAndHome(h: EndingHost, st: State, s: Script): Promise<void> {
     if (!standing) standing = stand(dt);
   });
   if (st.cancelled) return;
-  await comeToPlayer(d, () => st.cancelled);
+  const turning = turnToMom(s);
+  await Promise.all([
+    comeToPlayer(d, () => st.cancelled),
+    until(st, turning), // the camera turns from the lake to her as she walks up
+  ]);
   if (!st.cancelled) {
     st.scene?.mom.play('Talk'); // she talks while you read
     await read(h, st, ENDING_PAGES.home);

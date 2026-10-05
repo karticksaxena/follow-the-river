@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu';
 import { loadModel } from '../../engine/models';
 import type { Rail } from './camera-rail';
 import type { EndingScene } from './ending-scene';
-import { facing } from './ending-scene';
+import { facing, meetPoint } from './ending-scene';
 import type { Cast } from './farewell-cast';
 import { keyFrom, rails, SHOTS, type Shots, type V3 } from './farewell-shots';
 import { propUrl } from './kits';
@@ -379,6 +379,20 @@ export function standUp(s: Script): (dt: number) => boolean {
   s.scene.aim.momGaze = null;
   mom.rest = 'Idle_Neutral';
   mom.play('StandUp', true);
+  let t = 0;
+  return (dt) => {
+    t += dt;
+    rail.pose(t, camera);
+    if (t < rail.seconds) return false;
+    s.cast.hold = rail;
+    return true;
+  };
+}
+
+/** The camera turns from the lake to Mom as she walks up to you; true once it has (it then holds). */
+export function turnToMom(s: Script): (dt: number) => boolean {
+  const camera = s.sys.ctx.stage.camera;
+  const rail = rails.turn(keyFrom(camera), meetPoint(s.scene.mom.group.position, camera.position));
   let t = 0;
   return (dt) => {
     t += dt;

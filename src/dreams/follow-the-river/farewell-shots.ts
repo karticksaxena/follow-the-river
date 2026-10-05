@@ -40,29 +40,32 @@ export const SHOTS = {
     seconds: 12,
   },
   /**
-   * The last pack: you kneel at the water's edge `out` m west of her centre line, looking east along
-   * the shore: the water and your arm on the left, her head and Mom on the right. The pack floats
+   * The last pack: you kneel at the water's edge `out` m west of her centre line (far enough that the
+   * steep river bank which starts at x -3 is a small edge, not a plank filling the frame), `edge` m up
+   * the shore, looking east along it: the water and your arm on the left, her head and Mom on the right. The pack floats
    * `floatInto` m ahead of you and `floatOut` m into the lake; the camera looks at a point `lookX`
    * m from her centre line and `lookAhead` m up the shore from the water line. `lean`: as you
    * lower the pack the camera dips this far toward it (m) and `leanDown` lower; seconds.
    */
   pack: {
-    out: 3.2,
-    edge: 0.2,
+    out: 7.3,
+    edge: 0.7,
     floatOut: 0.2,
-    floatInto: 0.9,
+    floatInto: 0.8,
     seconds: 3.5,
-    eye: 1.3,
+    eye: 1.65,
     lower: 0.8,
-    lookX: -0.6,
-    lookAhead: 1.4,
+    lookX: 0,
+    lookAhead: 1.6,
     lean: 0.35,
     leanDown: 0.2,
   },
   /** The camera swings over the lake on its way from the orbit to the water's edge. */
   swing: { out: 2.2, up: 2.6, into: 2 },
-  /** Standing again for the dawn. */
-  stand: { eye: 1.6, seconds: 3, look: 40 },
+  /** Standing again for the dawn: `out` m west of her centre line, looking at a point `look.x` m east and `look.ahead` m out over the lake, `look.y` high: the lake and the far shore with the sun off to the left, out of frame (it glared). */
+  stand: { eye: 1.6, out: 9, seconds: 3, look: { x: 34, y: 0.6, ahead: 22 } },
+  /** Then she turns to Mom coming up the shore: the look point's height (m) and how long the turn takes (s). */
+  turnToMom: { height: 1.2, seconds: 2.5 },
   /** Where Mom sets her lantern down: beside her knees on the camera's side, so its light stays off her dress. */
   lantern: { side: 0.95, beyond: 0.45, up: 0.12 },
 } as const;
@@ -162,6 +165,7 @@ function packOf(
   const p = SHOTS.pack;
   const x = at.noseX - p.out;
   const z = at.lakeZ + p.edge;
+  const sx = at.noseX - SHOTS.stand.out;
   const float: V3 = [x + p.floatInto, WATER_Y + 0.05, at.lakeZ - p.floatOut];
   const y = f.ground(z) + p.eye;
   const look: V3 = [at.noseX + p.lookX, y - 0.35, at.lakeZ + p.lookAhead];
@@ -182,8 +186,8 @@ function packOf(
       look: centre,
     },
     stand: {
-      at: [x, f.ground(z) + SHOTS.stand.eye, z],
-      look: [x + 6, 2.2, at.lakeZ - SHOTS.stand.look],
+      at: [sx, f.ground(z) + SHOTS.stand.eye, z],
+      look: [sx + SHOTS.stand.look.x, SHOTS.stand.look.y, at.lakeZ - SHOTS.stand.look.ahead],
     },
   };
 }
@@ -253,4 +257,13 @@ export const rails = {
   lean: (s: Shots): Rail => createRail([s.packCam, s.lean], SHOTS.pack.lower),
   /** Up to standing, turning to the lake. */
   stand: (from: RailKey, s: Shots): Rail => createRail([from, s.stand], SHOTS.stand.seconds),
+  /** Turning on the spot (the camera stays put) to look at `to`, at Mom's height, the short way round by the east. */
+  turn: (from: RailKey, to: { x: number; z: number }): Rail => {
+    const [x, , z] = from.at;
+    const h = SHOTS.turnToMom.height;
+    return createRail(
+      [from, { at: from.at, look: [x + 6, h, z - 2] }, { at: from.at, look: [to.x, h, to.z] }],
+      SHOTS.turnToMom.seconds,
+    );
+  },
 };

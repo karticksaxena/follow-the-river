@@ -21,13 +21,17 @@ import {
 import { FAREWELL, FAREWELL_PAGES, FAREWELL_PROMPTS, shoreFor, type Bed } from './ending-farewell';
 import {
   facing,
+  FAREWELL_LIGHT,
   LANTERN_OUT,
   lanternSpot,
+  meetPoint,
   MOM_LANTERN,
   retreatPoint,
+  SHORE,
   stopShort,
 } from './ending-scene';
 import { shotsFor } from './farewell-shots';
+import { torchScale } from './flashlight';
 import { EDGE_X } from './river';
 import { freshRun, restartPhase, SUPPLY_LIMITS, type GunKind } from './state';
 
@@ -264,6 +268,28 @@ describe("Mom's lantern light", () => {
   it('lights her softly from outside, and is nearly out by sunrise', () => {
     expect(LANTERN_OUT).toBeGreaterThanOrEqual(0.3);
     expect(MOM_LANTERN.intensity).toBeLessThanOrEqual(2);
+  });
+});
+
+/** The candela the farewell key puts on Mom `d` m from it. */
+const lit = (d: number): number =>
+  (FAREWELL_LIGHT.lantern.intensity *
+    torchScale(d, FAREWELL_LIGHT.lantern.intensity, 2, FAREWELL_LIGHT.lantern.cap)) /
+  d ** 2;
+
+describe('the farewell key at close range', () => {
+  it('never lights Mom with more than the cap (her skin clipped to white at 10 cd and 1 m)', () => {
+    for (const d of [0.3, 0.6, 1, 1.5, 3])
+      expect(lit(d)).toBeLessThanOrEqual(FAREWELL_LIGHT.lantern.cap + 1e-9);
+  });
+
+  it('keeps the full key for Dras when Mom is far from it', () => {
+    expect(torchScale(20, FAREWELL_LIGHT.lantern.intensity, 2, FAREWELL_LIGHT.lantern.cap)).toBe(1);
+  });
+
+  it('has her stop SHORE.meet short of the camera on her way, where the camera turns to look', () => {
+    const at = meetPoint({ x: 1, z: -388 }, { x: -7.5, z: -391 });
+    expect(Math.hypot(at.x + 7.5, at.z + 391)).toBeCloseTo(SHORE.meet);
   });
 });
 

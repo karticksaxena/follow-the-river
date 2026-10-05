@@ -24,7 +24,7 @@ export interface GradeParams {
 export type GradePreset = 'night' | 'day' | 'dusk' | 'flashback' | 'sunrise';
 
 /** The sunrise's bloom share: the sun behind the dam must not haze a quarter of the screen. */
-export const SUNRISE_BLOOM = 0.45;
+export const SUNRISE_BLOOM = 0.3;
 
 /** Per-scene looks. Tuning knobs. */
 export const GRADES: Readonly<Record<GradePreset, Readonly<GradeParams>>> = {

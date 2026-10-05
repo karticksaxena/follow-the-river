@@ -55,6 +55,8 @@ export const REFLECTION = {
   stillCap: 0.5,
   /** Screen-space UV wobble of the reflection per unit of ripple slope. */
   distortion: 0.03,
+  /** The farewell renders the mirror this large (share of the frame) at least: seen low and close, the tier's 0.2 to 0.35 shows stair-stepped edges. */
+  sharp: 0.8,
 } as const;
 
 /** Ripple slope amplitude; still water only shivers. */
@@ -292,7 +294,18 @@ function acquireReflection(
 
 /** The reflector's resolution share for a tier (Low never renders it: any value, kept above 0). */
 function reflectionScale(tier: Tier): number {
-  return Math.max(0.1, TIERS[tier].reflectionScale);
+  const sharp = reflectionSharp && tier !== 'low' ? REFLECTION.sharp : 0;
+  return Math.max(0.1, TIERS[tier].reflectionScale, sharp);
+}
+
+let reflectionSharp = false;
+
+/** On for the farewell: the mirror renders at least `REFLECTION.sharp`; off: the tier's own size. */
+export function setWaterReflectionSharp(on: boolean): void {
+  if (on === reflectionSharp) return;
+  reflectionSharp = on;
+  for (const m of live.keys())
+    waterReflection(m).reflector.resolutionScale = reflectionScale(waterTier);
 }
 
 /** Water materials alive now, so a tier change can rebuild their shaders. */
