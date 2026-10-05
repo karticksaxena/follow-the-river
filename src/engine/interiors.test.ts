@@ -18,10 +18,15 @@ describe('outdoorsAt', () => {
   });
   it('is nearly black at the back, brighter at the door, 1 above the roof', () => {
     const back = outdoorsAt([shed], -2, 1, 0);
-    expect(back).toBeLessThanOrEqual(0.05);
-    expect(outdoorsAt([shed], 2.5, 1, 0)).toBeGreaterThan(back * 3);
+    expect(back).toBeCloseTo(INTERIOR.floor, 3);
+    expect(outdoorsAt([shed], 2.5, 1, 0)).toBeGreaterThan(back); // a little daylight at the doorway
     expect(outdoorsAt([shed], 2.5, 1, 0)).toBeLessThanOrEqual(INTERIOR.doorLight);
     expect(outdoorsAt([shed], -2, 4, 0)).toBe(1);
+  });
+  it('darkens the inner wall faces as much as the middle (shack.ts slabs span 0.17-0.37 m in)', () => {
+    // Kartik: "the zombie is black, but the room walls are still visible" - the old feather left them at 40%.
+    expect(outdoorsAt([shed], -3 + 0.37, 1, 0)).toBeCloseTo(INTERIOR.floor, 3);
+    expect(outdoorsAt([shed], -3 + 0.17, 1, 0)).toBeGreaterThan(0.95);
   });
 });
 

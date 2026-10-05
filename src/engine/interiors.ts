@@ -15,13 +15,13 @@ export interface Interior {
 /** How dark interiors get. Tuning knobs. */
 export const INTERIOR = {
   /** Share of the outdoor ambient and key light left deep inside. */
-  floor: 0.015,
+  floor: 0.15,
   /** Walls: the mask starts this far inside the footprint edge (the outer wall face stays lit)... */
-  edge: 0.15,
-  /** ...and reaches full darkness this much further in. */
-  feather: 0.35,
+  edge: 0.18,
+  /** ...and reaches full darkness this much further in. shack.ts wall slabs span 0.17-0.37 m in, so the inner face is fully dark (a wider feather left inner walls at 40% daylight). */
+  feather: 0.15,
   /** Light left at the doorway, and how far (m) it spills before falling to 1/e. */
-  doorLight: 0.12,
+  doorLight: 0.35,
   doorReach: 0.7,
   /** The mask fades out over this much below `top` (the roof underside stays dark). */
   roofFade: 0.1,
