@@ -3,18 +3,35 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Systems } from './run';
 import { readWhileWarming, warmNight } from './warm';
 
+const bow = { visible: false };
+const gunA = { visible: true };
+const gunB = { visible: false };
+
 const fakeSys = (compile: () => Promise<void>, log: string[]): Systems => {
   const stage = {
     hold: false,
     scene: { name: 'scene' },
     camera: { rotation: { y: 0 }, position: { x: 0, z: 0 }, layers: { mask: 1, set: vi.fn() } },
     renderer: { compileAsync: vi.fn(compile) },
-    renderOnce: vi.fn(() => log.push(`render hold=${String(stage.hold)}`)),
+    renderOnce: vi.fn(() =>
+      log.push(
+        `render hold=${String(stage.hold)}`,
+        `views ${[bow, gunA, gunB].map((v) => v.visible).join()}`,
+      ),
+    ),
   };
   return {
     ctx: { stage },
     horde: { spawn: vi.fn(() => log.push('spawn')), reset: vi.fn(() => log.push('reset')) },
     flashlight: { apply: vi.fn() },
+    fish: {
+      warmShow: vi.fn(() => {
+        log.push('orca on');
+        return () => log.push('orca off');
+      }),
+    },
+    bow: { view: bow },
+    armory: { guns: { a: { view: gunA }, b: { view: gunB } } },
   } as unknown as Systems;
 };
 
@@ -23,7 +40,15 @@ describe('warmNight', () => {
     const log: string[] = [];
     const sys = fakeSys(() => Promise.resolve(), log);
     await warmNight(sys, 100);
-    expect(log).toEqual(['spawn', 'spawn', 'render hold=true', 'render hold=true', 'reset']);
+    expect(log.filter((l) => l === 'spawn')).toHaveLength(13); // one per outfit
+    expect(log.filter((l) => l.startsWith('render '))).toEqual([
+      'render hold=true',
+      'render hold=true',
+    ]);
+    expect(log.indexOf('orca on')).toBeLessThan(log.indexOf('render hold=true'));
+    expect(log.slice(-2)).toEqual(['orca off', 'reset']);
+    expect(log).toContain('views true,true,true'); // all viewmodels shown while drawing
+    expect([bow.visible, gunA.visible, gunB.visible]).toEqual([false, true, false]); // and restored
     expect(sys.ctx.stage.hold).toBe(false);
   });
 

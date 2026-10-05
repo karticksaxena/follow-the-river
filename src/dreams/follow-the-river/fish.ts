@@ -92,6 +92,8 @@ export interface Fish {
   feed(from: Vec3): void;
   /** Swims alongside the player (fin just breaking the surface); strikes zombies at night. */
   update(dt: number, player: { x: number; z: number }, horde: Horde | null, night: boolean): void;
+  /** Shows her at (x, z), just above the water, so a compile or warm-up draw sees her; returns what puts her back exactly. */
+  warmShow(x: number, z: number): () => void;
   reset(): void;
   dispose(): void;
 }
@@ -455,6 +457,18 @@ export async function createFish(
     },
     get onEat() {
       return f.onEat;
+    },
+    warmShow(x, z) {
+      const { visible } = f.root;
+      const { x: px, y: py, z: pz } = f.root.position;
+      const ry = f.root.rotation.y;
+      f.root.visible = true;
+      f.root.position.set(x, 1, z);
+      return () => {
+        f.root.visible = visible;
+        f.root.position.set(px, py, pz);
+        f.root.rotation.y = ry;
+      };
     },
     head: (out) =>
       f.placed
