@@ -119,9 +119,7 @@ All checked in Chrome on frozen builds:
   - She now lies flat, the tail-lift is capped, and a real-clip test covers it.
 - **Lake beach:** pebbles blend into the grass along a ragged, soft edge instead of a straight seam.
 - **Torch:** a ground-exposure term keeps pale paving readable under the torch at any pitch (it used to clip to white).
-- **First-person arms:** Kartik's arms now hold the bow, pistol, shotgun and rifle.
-  - Each is a posed static mesh from kartik.glb, with curled fingers.
-  - The viewmodel is lit by the scene's lights minus your own torch, so the arms are never blown out. It casts no shadows.
+- **First-person arms:** removed at Kartik's request on 2026-10-05 (weapons on the right, no hands, as before).
 - **Intro living room:** rug, coffee table, side table, two bookcases full of books, lounge chair, plant, a lamp with a warm light, two framed pictures and a clock, in worn walnut tones.
 - **Load timeout:** 20 s to 90 s, so slow WebGL first starts do not falsely fail.
 - **Verified in game:**
@@ -131,8 +129,7 @@ All checked in Chrome on frozen builds:
 
 ## Known gaps and deferred items
 
-- Plan B4 (arms on the weapons) not done.
-- The long guns' left sleeve ends in a small dark cuff near the bottom of the frame (it reads as part of the arm at night, slightly visible by day).
+- Plan B4 (arms on the weapons): built, then removed at Kartik's request (2026-10-05).
 - One of the two framed pictures in the intro room (the west wall, above the armchair) was not visible from the views checked.
 - Canoe and flashback water are not tier-seeded (one recompile on first use).
 - Distant zombie shadows are limited to the nearest 4 within 15 m every 0.5 s.

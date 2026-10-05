@@ -174,18 +174,6 @@ No CC0 bow, shotgun-pump or dry-fire clip was found (OpenGameArt bow sounds are 
 
 Compress both with the meshopt command above (with `--resample false`).
 
-`tools/blender/fp_arms.py` poses both of his arms for each weapon (bow, pistol, shotgun, rifle) and bakes them to static, single-material meshes
-(vertex colours) in each weapon's own frame, one node `arms_<weapon>` each, so the viewmodel just adds the node. Poses are the `POSES` table
-(palm position, finger direction, back of hand, elbow pole, finger curls); with a preview directory it renders first-person, side, top, front and
-close-up PNGs per weapon with the prop. Input is the compressed or raw `kartik.glb`:
-
-```bash
-/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python tools/blender/fp_arms.py -- \
-  public/assets/characters/kartik.glb public/assets/props /tmp/arms-raw.glb /tmp/arms-preview
-pnpm dlx @gltf-transform/cli@latest optimize /tmp/arms-raw.glb public/assets/characters/kartik-arms.glb --compress meshopt \
-  --join false --flatten false --palette false --instance false --simplify false --texture-compress auto --resample false
-```
-
 ## Textures (`public/assets/textures/`)
 
 No script: seven Poly Haven CC0 sets (`asphalt_02`, `concrete_pavement`, `mud_forest`, `sparse_grass`, `forest_leaves_02`, `river_small_rocks`,

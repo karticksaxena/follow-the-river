@@ -26,7 +26,7 @@ export interface GunSpec {
 export const GUNS: Readonly<Record<GunKind, GunSpec>> = {
   pistol: {
     model: 'pistol',
-    view: { x: 0.26, y: -0.2, z: -0.52 },
+    view: { x: 0.26, y: -0.26, z: -0.5 },
     range: 40,
     cooldown: 0.35,
     pellets: 1,

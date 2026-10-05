@@ -4,10 +4,8 @@ import { segmentHitsBox } from '../../engine/collide';
 import type { BoxGrid } from '../../engine/grid';
 import { loadModel } from '../../engine/models';
 import type { Vec3 } from '../../engine/ray';
-import { giveArms, loadArms } from './fp-arms';
 import { propUrl } from './kits';
 import type { Sounds } from './sounds';
-import { lightViewmodel, viewLightsFor } from './view-light';
 import type { Horde } from './zombies/horde';
 
 /** Arrow speed (m/s), gravity (m/s², gentle on purpose), reload (s), flight time (s), arrows in the pool. */
@@ -216,17 +214,13 @@ function createBowState(
   keepHit: () => boolean,
   bowModel: THREE.Object3D,
   arrowModel: THREE.Object3D,
-  arms: THREE.Object3D,
 ): BowState {
   const view = new THREE.Group();
-  // On the left: the bow hand is the left, the right draws the string (the guns are held on the right).
-  view.position.set(-0.32, -0.15, -0.55);
-  view.rotation.set(0, -0.1, 0.15);
+  view.position.set(0.32, -0.32, -0.55);
+  view.rotation.set(0, 0.1, -0.15);
   const nocked = arrowModel.clone(true);
   nocked.position.set(0, 0, -0.25);
   view.add(bowModel, nocked);
-  giveArms(view, arms, 'bow');
-  lightViewmodel(view, viewLightsFor(camera).node); // lit by the world, never by the torch
   camera.add(view);
   const arrows = Array.from({ length: BOW.pool }, newArrow);
   const meshes = arrows.map(() => {
@@ -245,22 +239,18 @@ export async function createBow(
   sounds: Sounds,
   keepHit: () => boolean,
 ): Promise<Bow> {
-  const [bowModel, arrowModel, arms] = await Promise.all([
+  const [bowModel, arrowModel] = await Promise.all([
     loadModel(propUrl('bow')),
     loadModel(propUrl('arrow')),
-    loadArms(),
   ]);
-  const s = createBowState(camera, scene, audio, sounds, keepHit, bowModel, arrowModel, arms);
+  const s = createBowState(camera, scene, audio, sounds, keepHit, bowModel, arrowModel);
   return {
     get ready() {
       return s.cooldown <= 0;
     },
     view: s.view,
     fire: (eye, look) => fireArrow(s, eye, look),
-    update(dt, horde, grid, player) {
-      viewLightsFor(camera).update(dt);
-      return updateBow(s, dt, horde, grid, player);
-    },
+    update: (dt, horde, grid, player) => updateBow(s, dt, horde, grid, player),
     reset: () => resetBow(s),
     dispose() {
       camera.remove(s.view);

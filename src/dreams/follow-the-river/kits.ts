@@ -29,7 +29,7 @@ export function propUrl(name: string): string {
 }
 
 export function characterUrl(
-  name: 'mom' | 'kartik' | 'kartik-arm' | 'kartik-arms' | 'zombie-m' | 'zombie-f' | 'orca',
+  name: 'mom' | 'kartik' | 'kartik-arm' | 'zombie-m' | 'zombie-f' | 'orca',
 ): string {
   return assetUrl(`characters/${name}.glb`);
 }
