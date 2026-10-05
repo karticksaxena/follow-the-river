@@ -24,6 +24,7 @@ const sceneStub = (): Record<string, Mock<() => void>> => ({
   update: vi.fn<() => void>(),
   remove: vi.fn<() => void>(),
   lightFarewell: vi.fn<() => void>(),
+  releaseReflection: vi.fn<() => void>(),
 });
 
 function host(): {

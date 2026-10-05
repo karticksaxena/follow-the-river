@@ -352,6 +352,7 @@ async function runStep(h: EndingHost, st: State, step: EndingStep, at: Shore): P
   else if (step === 'dawn') await dawnAndHome(h, st, s);
   else if (step === 'ride') {
     h.run.frozen = true; // the chapter stops: the ride is its own scene
+    st.scene?.releaseReflection(); // the dawn's sharp mirror is done
     st.cast?.release(); // and its camera is the ride's, not the farewell's
     h.sys.ctx.cinematic(false); // and your mouse look is the ride's too (it brings its own end shot)
     await playCanoeRide(h.sys.ctx, h.sys.sounds);
@@ -434,6 +435,7 @@ function endCinema(h: EndingHost, st: State): void {
     st.pack.visible = false;
   }
   st.scene?.lightFarewell(false);
+  st.scene?.releaseReflection();
 }
 
 export function createEnding(h: EndingHost): Ending {

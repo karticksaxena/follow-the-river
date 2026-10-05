@@ -335,7 +335,7 @@ export async function lastPack(s: Script, pack: THREE.Object3D): Promise<void> {
   await playRail(s, rails.toPack(keyFrom(ctx.stage.camera), s.shots), focusOn(s, v3(s.shots.eye)));
   if (s.cancelled) return;
   const held = holdPack(s, pack);
-  ctx.focus(true, ctx.stage.camera.position.distanceTo(v3(float))); // the water and the pack sharp, the lake soft
+  ctx.focus(false); // Dras and the pack both sharp: a focus on the water blurred him
   await s.until(() => held.job.rise >= 1);
   const spot = { x: packCam.at[0], z: packCam.at[2] };
   await waitForE(s, spot, FAREWELL.packRadius, FAREWELL_PROMPTS.pack);

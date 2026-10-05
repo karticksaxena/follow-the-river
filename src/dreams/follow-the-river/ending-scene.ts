@@ -125,6 +125,8 @@ export interface EndingScene {
   setDown(at: { x: number; y: number; z: number }): void;
   /** The farewell's light (on) while she dies, aimed at `at` (her head): the lantern a real warm key, a cool moon from the far side. */
   lightFarewell(on: boolean, at?: { x: number; y: number; z: number }): void;
+  /** Back to the tier's reflection size (the farewell and the dawn keep it sharp; the ride releases it). */
+  releaseReflection(): void;
   /** Per frame: Mom's walk/idle, her animation, and the lantern in her hand. */
   update(dt: number): void;
   /** Puts Mom on the shore facing `(toX, toZ)` and lights the lantern in her hand. */
@@ -212,7 +214,7 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
     lightFarewell(on, at) {
       farewell = on;
       setWaterReflectionCeiling(on ? FAREWELL_LIGHT.waterCeiling : 1e3); // the lake stays dark (see water.ts)
-      setWaterReflectionSharp(on);
+      if (on) setWaterReflectionSharp(true); // off keeps it through the dawn: `releaseReflection`
       moon.intensity = on ? FAREWELL_LIGHT.moon.intensity : 0;
       fill.intensity = on ? FAREWELL_LIGHT.fill.intensity : 0;
       if (!on || !at) return;
@@ -223,6 +225,9 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
         light.target.position.set(at.x, at.y, at.z);
         light.position.set(at.x + o[0], at.y + o[1], at.z + o[2]);
       }
+    },
+    releaseReflection() {
+      setWaterReflectionSharp(false);
     },
     update(dt) {
       actor.update(dt);
