@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   holdStep,
   LAB_LIGHT,
+  LAB_MOM,
   lampPulse,
   shotProgress,
   SHOTS,
@@ -131,6 +132,15 @@ describe('tank swim hold', () => {
   it('tape 1 is the tank, tape 2 the lab', () => {
     expect(SHOTS[1].from[2]).toBeGreaterThan(4);
     expect(SHOTS[2].from[2]).toBeLessThan(2);
+  });
+});
+
+describe('lab', () => {
+  it('has a monitor directly in front of Mom', () => {
+    const { x, z, yaw, screenX, screenZ } = LAB_MOM;
+    const toScreen = Math.atan2(screenX - x, screenZ - z); // same convention as yaw: 0 faces +Z
+    const diff = Math.atan2(Math.sin(toScreen - yaw), Math.cos(toScreen - yaw));
+    expect(Math.abs(diff)).toBeLessThan(0.2);
   });
 });
 

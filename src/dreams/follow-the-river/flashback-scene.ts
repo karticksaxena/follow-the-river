@@ -6,6 +6,7 @@ import type { DreamContext } from '../types';
 import { findClip, smooth } from './fish-parts';
 import { createCharacter, type Character } from './intro-scene';
 import { characterUrl, propUrl } from './kits';
+import { makeMic, makeMonitor } from './lab-props';
 import { applyLighting, createWorldLights, LIGHTING } from './lighting';
 import { createWaterMesh, RIVER_FLOW } from './water';
 
@@ -24,8 +25,8 @@ export interface Shot {
 export const SHOTS: Readonly<Record<Tape, Shot>> = {
   // Tank (tape 1): three-quarter view past Mom's shoulder into the glass; a slow push-in.
   1: { from: [3.4, 1.7, 4.6], to: [2.6, 1.55, 3.6], look: [-0.3, 1.3, -0.2], seconds: 40 },
-  // Lab (tape 2): Mom's back at the bench, the cage and the red lamp over her shoulder.
-  2: { from: [2.6, 1.75, 1.6], to: [2.0, 1.65, 1.0], look: [0.2, 1.1, -2.5], seconds: 40 },
+  // Lab (tape 2): Mom's back at the bench, her screen glowing in front of her, the cage and the red lamp beside it.
+  2: { from: [3.4, 1.75, 1.2], to: [2.8, 1.65, 0.7], look: [0.9, 1.2, -2.5], seconds: 40 },
   // Spillway: behind Mom on the bank, looking out over the river.
   3: { from: [4.5, 1.9, 1.5], to: [4.0, 1.8, 1.0], look: [-6, 0.4, -4], seconds: 45 },
 };
@@ -34,7 +35,7 @@ export const SHOTS: Readonly<Record<Tape, Shot>> = {
 export const LAB_LIGHT = {
   ambient: { sky: 0x364652, ground: 0x08080a, intensity: 4 },
   fog: { color: 0x1a222c, near: 3, far: 22 },
-  monitors: { color: 0x3a5a86, intensity: 3.5, distance: 5, at: [-0.5, 1.5, -2.2] as Vec },
+  monitors: { color: 0x4a6a96, intensity: 5, distance: 5, at: [0.9, 1.4, -2.2] as Vec },
   /** A soft cold work light from the camera's side, so the room and Mom read (Kartik: every tape was "dark as hell"). */
   fill: { color: 0xa6b8c9, intensity: 13, distance: 11, at: [2.4, 2.8, 2.2] as Vec },
   lamp: { color: 0xff2010, distance: 7, at: [2.6, 2.4, -2.7] as Vec },
@@ -42,6 +43,9 @@ export const LAB_LIGHT = {
   pulse: { min: 0.15, max: 1.3, period: 2.4 },
   screenGlow: 0.5,
 } as const;
+
+/** Mom records at the bench facing the lab GLB's right-hand monitor (x 0.6..1.2 on the wall at z -2.55); yaw π faces −Z (Kartik: "she's talking to the wall"). */
+export const LAB_MOM = { x: 0.9, z: -1.75, yaw: Math.PI, screenX: 0.9, screenZ: -2.55 } as const;
 
 export const TANK_LIGHT = {
   ambient: { sky: 0x31414e, ground: 0x08080a, intensity: 3 },
@@ -57,10 +61,12 @@ export const TANK_LIGHT = {
 export const SPILLWAY = {
   fogFar: 90,
   /** The night preset's sky and moon, lifted so Mom and the bank read (Kartik: every tape was "dark as hell"). */
-  hemi: 1.1,
-  moon: 0.9,
-  lantern: { color: 0xffb060, intensity: 6, distance: 16 },
-  bank: 0x3a352e,
+  hemi: 2.8,
+  moon: 2.2,
+  lantern: { color: 0xffb060, intensity: 14, distance: 36 },
+  bank: 0x5a5348,
+  /** Deep navy, a little lifted so the bank and the sky both read (stars still show). */
+  sky: { top: 0x141c2e, horizon: 0x3a4660, fog: 0x1c2430 },
   waterY: -0.3,
   dam: { at: [-26, -0.3, 22] as Vec, yaw: Math.PI },
   /** The orca slips downstream (−Z) from `from` to `to` over `seconds`, fin just showing. */
@@ -283,8 +289,8 @@ async function buildLab(): Promise<Flashback> {
   restyle(lab, 'Screen', (m) => (m.emissiveIntensity = LAB_LIGHT.screenGlow));
   cage.position.set(1.8, 0.94, -2.45);
   const mom = createCharacter(momAsset, new THREE.Group());
-  placeMom(mom, -0.6, -1.75, Math.PI, 'Idle_Neutral');
-  scene.add(lab, cage, mom.group);
+  placeMom(mom, LAB_MOM.x, LAB_MOM.z, LAB_MOM.yaw, 'Idle_Neutral');
+  scene.add(lab, cage, mom.group, makeMic(), makeMonitor());
   const { camera, move } = makeCamera(SHOTS[2]);
   let t = 0;
   let nextGesture = LAB_INTERACT_EVERY;
@@ -394,7 +400,9 @@ async function buildSpillway(): Promise<Flashback> {
   const { night } = LIGHTING;
   applyLighting(lights, {
     ...night,
-    fog: { ...night.fog, far: SPILLWAY.fogFar },
+    skyTop: SPILLWAY.sky.top,
+    skyHorizon: SPILLWAY.sky.horizon,
+    fog: { ...night.fog, color: SPILLWAY.sky.fog, far: SPILLWAY.fogFar },
     hemi: { ...night.hemi, intensity: SPILLWAY.hemi },
     key: { ...night.key, intensity: SPILLWAY.moon },
   });
