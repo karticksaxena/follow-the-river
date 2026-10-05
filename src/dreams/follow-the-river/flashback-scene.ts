@@ -32,9 +32,11 @@ export const SHOTS: Readonly<Record<Tape, Shot>> = {
 
 /** Never bright: dim cold ambience, one warm or red practical per shot. */
 export const LAB_LIGHT = {
-  ambient: { sky: 0x202c34, ground: 0x08080a, intensity: 0.4 },
-  fog: { color: 0x05060a, near: 2, far: 16 },
-  monitors: { color: 0x3a5a86, intensity: 0.9, distance: 5, at: [-0.5, 1.5, -2.2] as Vec },
+  ambient: { sky: 0x364652, ground: 0x08080a, intensity: 4 },
+  fog: { color: 0x1a222c, near: 3, far: 22 },
+  monitors: { color: 0x3a5a86, intensity: 3.5, distance: 5, at: [-0.5, 1.5, -2.2] as Vec },
+  /** A soft cold work light from the camera's side, so the room and Mom read (Kartik: every tape was "dark as hell"). */
+  fill: { color: 0xa6b8c9, intensity: 13, distance: 11, at: [2.4, 2.8, 2.2] as Vec },
   lamp: { color: 0xff2010, distance: 7, at: [2.6, 2.4, -2.7] as Vec },
   /** Red lamp pulse: emissive intensity swings between `min` and `max` every `period` seconds. */
   pulse: { min: 0.15, max: 1.3, period: 2.4 },
@@ -54,7 +56,10 @@ export const TANK_LIGHT = {
 
 export const SPILLWAY = {
   fogFar: 90,
-  lantern: { color: 0xffb060, intensity: 2.5, distance: 10 },
+  /** The night preset's sky and moon, lifted so Mom and the bank read (Kartik: every tape was "dark as hell"). */
+  hemi: 1.1,
+  moon: 0.9,
+  lantern: { color: 0xffb060, intensity: 6, distance: 16 },
   bank: 0x3a352e,
   waterY: -0.3,
   dam: { at: [-26, -0.3, 22] as Vec, yaw: Math.PI },
@@ -272,6 +277,7 @@ async function buildLab(): Promise<Flashback> {
   darkRoom(scene, LAB_LIGHT.fog);
   hemi(scene, LAB_LIGHT.ambient);
   point(scene, LAB_LIGHT.monitors);
+  point(scene, LAB_LIGHT.fill);
   const lampLight = point(scene, LAB_LIGHT.lamp);
   const lamp = restyle(lab, 'Lamp', (m) => (m.emissiveIntensity = LAB_LIGHT.pulse.min));
   restyle(lab, 'Screen', (m) => (m.emissiveIntensity = LAB_LIGHT.screenGlow));
@@ -386,7 +392,12 @@ async function buildSpillway(): Promise<Flashback> {
   const scene = new THREE.Scene();
   const lights = createWorldLights(scene);
   const { night } = LIGHTING;
-  applyLighting(lights, { ...night, fog: { ...night.fog, far: SPILLWAY.fogFar } });
+  applyLighting(lights, {
+    ...night,
+    fog: { ...night.fog, far: SPILLWAY.fogFar },
+    hemi: { ...night.hemi, intensity: SPILLWAY.hemi },
+    key: { ...night.key, intensity: SPILLWAY.moon },
+  });
   addSpillwayGround(scene);
   dam.position.set(...SPILLWAY.dam.at);
   dam.rotation.y = SPILLWAY.dam.yaw;
