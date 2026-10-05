@@ -6,6 +6,7 @@ import type { AreaDef } from './areas/types';
 import { assemble } from './assemble';
 import { createDeath } from './death';
 import { createEnding, NO_ENDING } from './ending';
+import { freeHeldFlashback } from './flashback';
 import { MAX_HEALTH } from './flow';
 import {
   announce,
@@ -76,6 +77,7 @@ function teardown(sys: Systems, stop: () => void): void {
   sys.ambience.dispose();
   sys.horde.dispose();
   sys.scares.dispose();
+  freeHeldFlashback(); // the last tape's scene, kept off stage until now
   stopVoice(); // a tape line may still be playing
   sys.bow.dispose();
   sys.armory.dispose();

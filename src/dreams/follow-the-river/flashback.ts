@@ -8,6 +8,21 @@ import { buildFlashback, type Flashback, type Tape } from './flashback-scene';
 export const FLASHBACK_FADE_MS = 500;
 
 /**
+ * The last finished flashback, kept alive (off stage) after the cut back: freeing its models and
+ * textures drops ~160 MB at once, and the garbage collection that followed hitched the first
+ * gameplay frame. It is freed where the player can't see: when the next tape fades to black, or
+ * when the chapter is disposed. At most one is ever held.
+ */
+let held: Flashback | null = null;
+
+/** Frees the held flashback, if any (call only behind black or a loading screen). */
+export function freeHeldFlashback(): void {
+  const old = held;
+  held = null;
+  old?.dispose();
+}
+
+/**
  * Plays a tape as a flashback: the stage shows the tape's scene behind its pages and the
  * chapter is frozen (ctx.hold / ctx.read keep the gate on the reader screen) until they close.
  *
@@ -51,6 +66,7 @@ async function run(
       .catch(() => null), // a failed load still plays the tape as text
     overlay.fade(true, FLASHBACK_FADE_MS),
   ]).finally(stopLoading);
+  freeHeldFlashback(); // black now: the last tape's buffers go here, not on the cut back
   if (stage.scene !== previous) {
     // The dream was quit or swapped scenes while we loaded.
     flashback?.dispose();
@@ -65,7 +81,7 @@ async function run(
   ctx.read(
     pages,
     () => {
-      restore();
+      restore(true);
       done();
     },
     {
@@ -81,15 +97,22 @@ async function run(
 /** Overlay class that hides the HUD while a cutscene owns the screen (see style.css). */
 export const CINEMATIC = 'cinematic';
 
-/** Puts the flashback on stage; returns the (idempotent) teardown that restores what was there. */
-function show(ctx: DreamContext, flashback: Flashback, previous: THREE.Scene): () => void {
+/**
+ * Puts the flashback on stage; returns the (idempotent) teardown that restores what was there.
+ * `keep` (the pages closed) holds the flashback instead of freeing it, see `held`.
+ */
+function show(
+  ctx: DreamContext,
+  flashback: Flashback,
+  previous: THREE.Scene,
+): (keep?: boolean) => void {
   const { stage } = ctx;
   const { camera } = stage;
   const savedPosition = new THREE.Vector3().copy(camera.position);
   const savedQuaternion = new THREE.Quaternion().copy(camera.quaternion);
   let live = true;
   const graded = ctx.grade('flashback');
-  const teardown = (): void => {
+  const teardown = (keep = false): void => {
     if (!live) return;
     live = false;
     stop();
@@ -101,7 +124,8 @@ function show(ctx: DreamContext, flashback: Flashback, previous: THREE.Scene): (
       camera.position.copy(savedPosition);
       camera.quaternion.copy(savedQuaternion);
     }
-    flashback.dispose();
+    if (keep && stage.scene === previous) held = flashback;
+    else flashback.dispose();
   };
   const stop = stage.addUpdater((dt) => {
     if (stage.scene !== flashback.scene) return teardown(); // someone else took the stage
