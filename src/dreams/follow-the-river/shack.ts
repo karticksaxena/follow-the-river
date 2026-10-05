@@ -1,6 +1,7 @@
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as THREE from 'three/webgpu';
 import { boxAt, type Box } from '../../engine/collide';
+import type { Interior } from '../../engine/interiors';
 import type { ShackDef } from './areas/types';
 import { KIT_SCALE } from './kits';
 
@@ -40,6 +41,12 @@ function doorZ(def: ShackDef): number {
 /** Footprint (for "am I inside?" checks). Depth runs along x, width along z. */
 export function shackBounds(def: ShackDef): Box {
   return boxAt(def.x, def.z, def.depth * SHACK_TILE, def.width * SHACK_TILE);
+}
+
+/** What the lighting needs: the footprint, the wall height and the doorway point on the +X wall. */
+export function shackInterior(def: ShackDef): Interior {
+  const b = shackBounds(def);
+  return { ...b, top: WALL_HEIGHT + ROOF_THICKNESS, doorX: b.maxX, doorZ: doorZ(def) };
 }
 
 function wall(minX: number, maxX: number, minZ: number, maxZ: number): Box {

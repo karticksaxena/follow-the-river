@@ -1,4 +1,5 @@
 import { disposeScene } from '../../engine/dispose';
+import { setInteriors } from '../../engine/interiors';
 import type { SaveStore } from '../../engine/save';
 import type { DreamContext } from '../types';
 import type { AreaDef } from './areas/types';
@@ -64,6 +65,7 @@ function teardown(sys: Systems, stop: () => void): void {
   sys.ctx.stage.mist(null);
   // Free the scene first: the systems below remove their own nodes (alarm box, fish shadow plane).
   disposeScene(sys.world.scene);
+  setInteriors([]); // other scenes are fully lit again
   if (import.meta.env.DEV) {
     Reflect.deleteProperty(window, 'kdRiver');
     Reflect.deleteProperty(window, 'kdRun');

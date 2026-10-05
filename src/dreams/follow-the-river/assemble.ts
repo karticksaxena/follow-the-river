@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { disposeScene } from '../../engine/dispose';
 import { createBoxGrid } from '../../engine/grid';
+import { setInteriors } from '../../engine/interiors';
 import { loadModel } from '../../engine/models';
 import { attachKeyShadows } from '../../engine/shadows';
 import { VOLUME_LAYER } from '../../engine/volume';
@@ -101,6 +102,7 @@ async function compileMist(
 function free(scene: THREE.Scene, camera: THREE.Camera, parts?: Partial<Systems>): void {
   // Scene first (as in the chapter teardown), while the viewmodels still hang off the camera.
   disposeScene(scene);
+  setInteriors([]);
   parts?.horde?.dispose();
   parts?.bow?.dispose();
   parts?.armory?.dispose();

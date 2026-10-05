@@ -27,6 +27,7 @@ import {
 } from 'three/tsl';
 import * as THREE from 'three/webgpu';
 import { createGrading, type GradePreset } from './grade';
+import { outdoors } from './interiors';
 import { TIERS, type Tier } from './quality';
 import { VOLUME, VOLUME_LAYER, volumeSteps } from './volume';
 
@@ -106,6 +107,7 @@ const asByte = (p: ReturnType<typeof pass>, name: string): void => {
 
 function lowGraph(camera: THREE.PerspectiveCamera): Graph {
   const scenePass = pass(new THREE.Scene(), camera);
+  scenePass.contextNode = builtinAOContext(outdoors()); // dark interiors, every tier
   return {
     passes: [scenePass],
     color: scenePass.getTextureNode('output'),
@@ -131,7 +133,9 @@ function aoGraph(
   occlusion.samples.value = knobs.samples;
   occlusion.radius.value = POST.aoRadius;
   const scenePass = pass(new THREE.Scene(), camera);
-  scenePass.contextNode = builtinAOContext(occlusion.getTextureNode().sample(screenUV).r);
+  scenePass.contextNode = builtinAOContext(
+    occlusion.getTextureNode().sample(screenUV).r.mul(outdoors()),
+  );
   const resolved = traa(scenePass, depth, prePass.getTextureNode('velocity'), camera);
   resolved.useSubpixelCorrection = false;
   return {

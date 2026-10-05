@@ -1,6 +1,8 @@
 import type { SkyMesh } from 'three/addons/objects/SkyMesh.js';
+import { uniform } from 'three/tsl';
 import * as THREE from 'three/webgpu';
 import { refreshEnvironment } from '../../engine/environment';
+import { outdoors } from '../../engine/interiors';
 import { setShadowStrength } from '../../engine/shadows';
 import {
   createHalo,
@@ -89,12 +91,24 @@ export function skyDirection(
 }
 
 /**
+ * The key light does not shine into interiors (`outdoors()`). A custom `colorNode` replaces the
+ * `color × intensity` uniform three keeps, so this one copies them every frame (blends and `applyDim` keep working).
+ */
+function keyIndoors(key: THREE.DirectionalLight): void {
+  const lit = uniform(new THREE.Color()).onFrameUpdate(() => {
+    lit.value.copy(key.color).multiplyScalar(key.intensity);
+  });
+  Object.assign(key, { colorNode: lit.mul(outdoors()) });
+}
+
+/**
  * One hemisphere light, one key light, the sky dome and the sun/moon (children of the dome, so they
  * follow the camera with it). The key light stays put (only its direction matters).
  */
 export function createWorldLights(scene: THREE.Scene): WorldLights {
   const hemi = new THREE.HemisphereLight();
   const key = new THREE.DirectionalLight();
+  keyIndoors(key);
   const sky = createSkyDome(0, 0, SKY_RADIUS);
   sky.name = SKY_NAME;
   const disc = new THREE.Mesh(

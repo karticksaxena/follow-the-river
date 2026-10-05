@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { addBatched } from '../../engine/batch';
 import { boxAt, type Box } from '../../engine/collide';
+import { setInteriors } from '../../engine/interiors';
 import { loadModel } from '../../engine/models';
 import type { Tier } from '../../engine/quality';
 import { surfaceMaterial, texturesReady } from '../../engine/surfaces';
@@ -15,7 +16,7 @@ import { createWorldLights, type WorldLights } from './lighting';
 import { addVegetation, type Vegetation } from './nature';
 import type { Railing } from './railing';
 import { addRiver, bentPlane, EDGE_X, LAKE, OVERRUN, RIVER_WIDTH } from './river';
-import { addShack, shackBounds, shackColliders } from './shack';
+import { addShack, shackBounds, shackColliders, shackInterior } from './shack';
 import { bendFor, type Bend } from './shore-shape';
 import { addSkyline, setSkylineTier } from './skyline';
 import { plantsOf, stripGrass } from './vegetation';
@@ -203,6 +204,7 @@ export async function buildWorld(
     props.map((p) => p.model),
   );
   for (const shack of area.shacks) colliders.push(...shackColliders(shack));
+  setInteriors(area.shacks.map(shackInterior)); // the lights leave their insides dark
   let live = tier;
   const bounds = area.shacks.map(shackBounds);
   const { railing, skyline } = waters;

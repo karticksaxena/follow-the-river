@@ -1,7 +1,15 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import { resolveCircle } from '../../engine/collide';
-import { addShack, DOOR_HEIGHT, SHACK_TILE, shackBounds, shackColliders } from './shack';
+import { CITY } from './areas/city';
+import {
+  addShack,
+  DOOR_HEIGHT,
+  SHACK_TILE,
+  shackBounds,
+  shackColliders,
+  shackInterior,
+} from './shack';
 
 const def = { id: 's1', x: -14, z: -20, width: 3, depth: 2 };
 
@@ -41,5 +49,23 @@ describe('shack', () => {
     const meshes = scene.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh);
     expect(meshes.length).toBeGreaterThanOrEqual(3);
     for (const m of meshes) expect(m.material).toBeInstanceOf(THREE.MeshStandardMaterial);
+  });
+});
+
+describe('shackInterior', () => {
+  it('covers the footprint, with the door point on the +X wall', () => {
+    const first = CITY.shacks[0];
+    if (!first) throw new Error('no shack');
+    const interior = shackInterior(first);
+    const b = shackBounds(first);
+    expect([interior.minX, interior.maxX, interior.minZ, interior.maxZ]).toEqual([
+      b.minX,
+      b.maxX,
+      b.minZ,
+      b.maxZ,
+    ]);
+    expect(interior.doorX).toBe(b.maxX);
+    expect(interior.doorZ).toBeGreaterThan(b.minZ);
+    expect(interior.doorZ).toBeLessThan(b.maxZ);
   });
 });
