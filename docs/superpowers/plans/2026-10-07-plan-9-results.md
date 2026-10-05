@@ -1,6 +1,6 @@
 # Plan 9 results
 
-Status: every task is done and checked in Chrome; the final whole-branch review ran (three reviewers by area) and its Critical/Important findings are fixed with tests. `pnpm run check` is green (105 files, 781 tests). Branch `plan-9` is ready to fast-forward local `main` (not pushed).
+Status: every task is done and checked in Chrome; the final whole-branch review ran (three reviewers by area) and its Critical/Important findings are fixed with tests; the last polish round (below) is done. `pnpm run check` is green (109 files, 808 tests). Branch `plan-9` is ready to fast-forward local `main` (not pushed).
 
 Plan: `docs/superpowers/plans/2026-10-07-plan-9-flawless.md`. Branch `plan-9`. Record of every task, review and Chrome check: `.superpowers/sdd/2026-10-07-plan-9-flawless/progress.md`.
 
@@ -110,13 +110,30 @@ Three Sonnet reviewers by area (engine and session; story and cinematics; world 
 - B4 (first-person arms on weapons) is optional and was skipped.
 - Small, test-backed diffs were accepted by controller reading instead of a separate re-review.
 
+## Last polish (Kartik: "whatever is not perfect, fix it; whatever is not completed, complete it")
+
+All checked in Chrome on frozen builds:
+- **Mom's farewell kneel:** an authored double-knee kneel, head bowed and breathing, replaces the UAL "Fixing_Kneeling" lunge.
+- **Dras on the shore:** the root cause of her curling, swinging tail was found.
+  - The spine sag was multiplied onto bones after the mixer every frame, and three's PropertyMixer never rewrites bones a clip holds still, so it piled up (a 6.65 m Tail2 swing on the real clips).
+  - She now lies flat, the tail-lift is capped, and a real-clip test covers it.
+- **Lake beach:** pebbles blend into the grass along a ragged, soft edge instead of a straight seam.
+- **Torch:** a ground-exposure term keeps pale paving readable under the torch at any pitch (it used to clip to white).
+- **First-person arms:** Kartik's arms now hold the bow, pistol, shotgun and rifle.
+  - Each is a posed static mesh from kartik.glb, with curled fingers.
+  - The viewmodel is lit by the scene's lights minus your own torch, so the arms are never blown out. It casts no shadows.
+- **Intro living room:** rug, coffee table, side table, two bookcases full of books, lounge chair, plant, a lamp with a warm light, two framed pictures and a clock, in worn walnut tones.
+- **Load timeout:** 20 s to 90 s, so slow WebGL first starts do not falsely fail.
+- **Verified in game:**
+  - Hard: 2 hearts, wave-1 zombies at 4.1 m/s.
+  - Story: 4 hearts, 3.3 m/s.
+  - `?webgl`: the intro, Night 1, the farewell and the canoe render.
+
 ## Known gaps and deferred items
 
 - Plan B4 (arms on the weapons) not done.
-- Mom's one-knee kneel at the farewell still reads a little like a lunge (a better clip would need a new mocap pass).
-- Dras's tail lift on the shore peaks about 1.4 m over rest (reads as a weak lift; capping it needs a new Blender clip).
-- A straight seam where the lake's pebble beach meets the grass is visible from the farewell's wider shots.
-- The Night 1 promenade walkway under the torch reads smooth grey.
+- The long guns' left sleeve ends in a small dark cuff near the bottom of the frame (it reads as part of the arm at night, slightly visible by day).
+- One of the two framed pictures in the intro room (the west wall, above the armchair) was not visible from the views checked.
 - Canoe and flashback water are not tier-seeded (one recompile on first use).
 - Distant zombie shadows are limited to the nearest 4 within 15 m every 0.5 s.
 - No up-to-1.2 m beach curve (pinned zones cover the beach); bent water uses 10 m rows; props in the overrun are not bent.
@@ -129,7 +146,6 @@ Three Sonnet reviewers by area (engine and session; story and cinematics; world 
 - Every sound by ear: Dras' blows (the source is windy), her calls and clicks, splashes, paddle strokes, birds, shotgun, rifle and pistol.
 - Pointer lock and Esc: the harness used `?nolock`. Check click to lock, Esc to pause, Resume relocks, and the cutscene Esc path.
 - Safari (WebGPU or WebGL fallback, audio start, full screen).
-- Not run in Chrome (the browser extension disconnected at the end of the night): `?webgl` for the intro and the farewell, and Story and Hard on Night 1 wave 1 (stun length, damage, supplies, zombie speed). The difficulty table itself is unit-tested.
 - Real frame rate on an integrated-GPU laptop. The harness overestimates; check Low, Medium and High, and that Auto settles sensibly.
 - One full play-through with mouse and keyboard, on the difficulty you choose: intro, Day 1 to Night 3, the farewell, the canoe ride and credits, then "Watch the ending again".
 - Merge: this session is sandboxed to the plan-9 worktree, so it cannot move `main` (checked out in `~/Code/Games`). Fast-forward it with `cd ~/Code/Games && git merge --ff-only plan-9`, then reload the :5173 tab. Nothing has been pushed.
