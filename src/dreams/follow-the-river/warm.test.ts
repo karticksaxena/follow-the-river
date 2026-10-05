@@ -14,10 +14,14 @@ const camera = {
   layers: { mask: 1, set: vi.fn() },
 };
 
+/** The `castShadow` values the skinned body had on drawn frames. */
+const castsSeen = new Set<boolean>();
+
 function fakeSys(compile: () => Promise<void>, log: string[]): Systems {
   const scene = new THREE.Scene();
   const mesh = new THREE.Mesh();
-  scene.add(mesh);
+  const skinned = Object.assign(new THREE.Object3D(), { isSkinnedMesh: true });
+  scene.add(mesh, skinned);
   const stage = {
     hold: false,
     warming: false,
@@ -29,6 +33,7 @@ function fakeSys(compile: () => Promise<void>, log: string[]): Systems {
     addUpdater: vi.fn((fn: (dt: number) => void) => {
       queueMicrotask(() => {
         for (let i = 0; i < 80; i++) {
+          if (stage.warming) castsSeen.add(skinned.castShadow);
           log.push(
             `frame hold=${String(stage.hold)} warming=${String(stage.warming)} culled=${String(mesh.frustumCulled)} views=${String(bow.visible)}`,
           );
@@ -124,7 +129,9 @@ describe('warmArea', () => {
       log.push('extra on');
       return () => log.push('extra off');
     });
+    castsSeen.clear();
     await warmArea(sys, r, { battery: 100, full: true, extras: [extra] });
+    expect([castsSeen.has(false), castsSeen.has(true)]).toEqual([true, true]); // both pipeline variants were drawn
     expect(log.filter((l) => l === 'spawn').length % 13).toBe(0); // 13 outfits, again every shadow round
     expect(log.filter((l) => l === 'spawn').length).toBeGreaterThanOrEqual(13);
     expect(log.filter((l) => l === 'cast').length).toBeGreaterThanOrEqual(4); // every outfit casts in turn
