@@ -1,6 +1,8 @@
 import type * as THREE from 'three/webgpu';
+import type { Stage } from '../../engine/stage';
 import { VOLUME_LAYER } from '../../engine/volume';
 import type { DreamContext } from '../types';
+import { waterlineX } from './banks';
 import type { Systems } from './run';
 import { DAY_TUNING } from './zombies/brain';
 
@@ -19,22 +21,31 @@ export async function compileMist(
   }
 }
 
-/** The warm-up's zombies: one per outfit (the pool's first 13 bodies), in rows 3-8 m ahead. Tuning knobs. */
+/** The warm-up's zombies: one per outfit (the pool's first 13 bodies), in rows on the bank. Tuning knobs. */
 const WARM_BODIES = 13;
 const WARM_ROW = 5;
-const WARM_NEAR = 3;
-const WARM_ROW_GAP = 1.8;
+const WARM_NEAR = 2;
+const WARM_ROW_GAP = 1.2;
 const WARM_SPREAD = 1.4;
-/** The orca stands this far ahead and this far to the side of the camera while it compiles. */
-const WARM_ORCA = { ahead: 6, side: 3 };
+/** The camera stands this far from the waterline; the orca this far out in the water. */
+const WARM_STAND_OFF = 7;
+const WARM_ORCA_OUT = 3;
+/** Looking toward the river (+x), a little down so the water fills the view. */
+const WARM_YAW = -Math.PI / 2;
+const WARM_PITCH = -0.2;
+/** Real loop frames drawn behind black: the torch, motion, shadows and the water reflection all run. */
+const WARM_FRAMES = 25;
 
-/** Metres `ahead` and `side` of the camera on the ground plane (camera looks down -z at yaw 0). */
-function ahead(camera: THREE.Camera, d: number, side: number, out: { x: number; z: number }): void {
-  const yaw = camera.rotation.y;
-  const sin = Math.sin(yaw);
-  const cos = Math.cos(yaw);
-  out.x = camera.position.x - sin * d + cos * side;
-  out.z = camera.position.z - cos * d - sin * side;
+/** Resolves after the stage's loop has run `n` frames. */
+function frames(stage: Stage, n: number): Promise<void> {
+  return new Promise((done) => {
+    let left = n;
+    const stop = stage.addUpdater(() => {
+      if (--left > 0) return;
+      stop();
+      done();
+    });
+  });
 }
 
 /** Every viewmodel (the bow and each gun, owned or not) on, so their materials compile; returns the undo. */
@@ -45,39 +56,57 @@ function showViewmodels(sys: Systems): () => void {
   return () => views.forEach((v, i) => (v.visible = before[i]));
 }
 
+/** Stands the camera on the bank facing the river; returns the undo (exact position and rotation). */
+function faceRiver(camera: THREE.PerspectiveCamera, waterline: number): () => void {
+  const { x, y, z } = camera.position;
+  const { x: rx, y: ry, z: rz } = camera.rotation;
+  camera.position.set(waterline - WARM_STAND_OFF, y, z);
+  camera.rotation.set(WARM_PITCH, WARM_YAW, 0, 'YXZ');
+  return () => {
+    camera.position.set(x, y, z);
+    camera.rotation.set(rx, ry, rz, 'YXZ');
+  };
+}
+
 /**
- * Compiles the night's shaders and shadow passes while the screen is black: every zombie outfit,
- * the orca and the viewmodels in view under the night light, the torch on, then two real frames.
- * The stage skips its own frames throughout (`hold`), so the page stays responsive while the GPU
- * compiles. Never throws: a failed warm-up only means a hitch later.
+ * Compiles the night's shaders and shadow passes while the screen is black. Every zombie outfit on
+ * the bank, the orca at the water's edge and the viewmodels are in view under the night light with
+ * the torch on, the camera facing the river (so the planar reflection draws them too). `compileAsync`
+ * runs with the stage held; then the real loop runs WARM_FRAMES frames (the run is frozen, but the
+ * torch, motion and shadows update), and Auto quality ignores them. Never throws: a failed warm-up
+ * only means a hitch later.
  */
 export async function warmNight(sys: Systems, battery: number): Promise<void> {
   const { stage } = sys.ctx;
   const { camera } = stage;
-  const at = { x: 0, z: 0 };
+  const water = waterlineX(sys.area.bank);
   stage.hold = true;
+  stage.warming = true;
+  const undoCamera = faceRiver(camera, water);
   const undoViews = showViewmodels(sys);
   let undoOrca: (() => void) | undefined;
   try {
     for (let i = 0; i < WARM_BODIES; i++) {
       const col = (i % WARM_ROW) - (WARM_ROW - 1) / 2;
-      ahead(camera, WARM_NEAR + Math.floor(i / WARM_ROW) * WARM_ROW_GAP, col * WARM_SPREAD, at);
-      sys.horde.spawn(at.x, at.z, camera.rotation.y, DAY_TUNING);
+      const x = camera.position.x + WARM_NEAR + Math.floor(i / WARM_ROW) * WARM_ROW_GAP;
+      sys.horde.spawn(x, camera.position.z + col * WARM_SPREAD, WARM_YAW, DAY_TUNING);
     }
-    ahead(camera, WARM_ORCA.ahead, WARM_ORCA.side, at);
-    undoOrca = sys.fish.warmShow(at.x, at.z);
-    sys.flashlight.apply(battery, 0); // the torch's intensity is set by its update, which the hold skips
+    undoOrca = sys.fish.warmShow(water + WARM_ORCA_OUT, camera.position.z);
+    sys.flashlight.apply(battery, 0);
     await stage.renderer.compileAsync(stage.scene, camera);
     await compileMist(stage.renderer, stage.scene, camera);
-    stage.renderOnce(); // the first draws build the shadow passes
-    stage.renderOnce();
+    stage.hold = false;
+    await frames(stage, WARM_FRAMES);
   } catch {
     // keep going: the first night frames will compile what is missing
   } finally {
+    stage.hold = true; // nothing draws between the undo and the return
     undoOrca?.();
     undoViews();
+    undoCamera();
     sys.horde.reset(); // park the bodies so the wave starts clean
     stage.hold = false;
+    stage.warming = false;
   }
 }
 

@@ -46,10 +46,10 @@ export interface Stage {
   focus(on: boolean, distance?: number): void;
   /** Compiles the depth-of-field graph for one frame; call behind a black fade before a cutscene. */
   warmFocus(): void;
-  /** True: the loop draws and updates nothing (the page stays responsive while `compileAsync` and `renderOnce` warm a scene behind black). */
+  /** True: the loop draws and updates nothing (the page stays responsive while `compileAsync` warms a scene behind black). */
   hold: boolean;
-  /** Draws one frame now, whatever `hold` says; Auto quality does not count it. */
-  renderOnce(): void;
+  /** True while a scene warms up behind black: the loop runs, but Auto quality ignores the (hitchy) frames. */
+  warming: boolean;
   /** The scene being drawn; home and dreams swap it. */
   scene: THREE.Scene;
   /** Run `fn(dt)` every frame; call the returned function to stop. */
@@ -105,10 +105,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
     backend: webgpu ? 'webgpu' : 'webgl2',
     scene: new THREE.Scene(),
     hold: false,
-    renderOnce() {
-      post.update(0);
-      post.render(stage.scene);
-    },
+    warming: false,
     quality,
     get tier() {
       return tier;
@@ -164,7 +161,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
     runUpdaters(updaters, dt);
     post.update(dt);
     post.render(stage.scene);
-    if (dt > 0) adapt(dt, performance.now() - start);
+    if (dt > 0 && !stage.warming) adapt(dt, performance.now() - start);
     perf?.end();
   });
   return stage;
