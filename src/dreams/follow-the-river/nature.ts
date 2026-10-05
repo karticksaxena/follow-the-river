@@ -334,6 +334,7 @@ export class Vegetation extends THREE.Group {
   private lastX = NaN;
   private lastZ = NaN;
   private lastFog = NaN;
+  private forced = false;
 
   constructor(tier: Tier, camera: THREE.Camera | null) {
     super();
@@ -382,8 +383,22 @@ export class Vegetation extends THREE.Group {
     this.add(mesh);
   }
 
+  /**
+   * Warm-up: every cell on show (the cull stands still) so each material compiles in every pass;
+   * returns the undo, after which the next frame culls again.
+   */
+  showAll(): () => void {
+    this.forced = true;
+    for (const c of this.cells) c.mesh.visible = true;
+    return () => {
+      this.forced = false;
+      this.lastX = NaN;
+    };
+  }
+
   /** Shows the cells for a camera at (x, z) under fog ending at `fogFar`. No allocation. */
   apply(x: number, z: number, fogFar: number): void {
+    if (this.forced) return;
     if (x === this.lastX && z === this.lastZ && fogFar === this.lastFog) return;
     this.lastX = x;
     this.lastZ = z;

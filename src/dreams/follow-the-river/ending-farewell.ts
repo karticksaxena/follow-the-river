@@ -6,7 +6,7 @@ import { facing, meetPoint } from './ending-scene';
 import type { Cast } from './farewell-cast';
 import { keyFrom, rails, SHOTS, type Shots, type V3 } from './farewell-shots';
 import { propUrl } from './kits';
-import { shoreY, WATER_Y } from './river';
+import { shoreY } from './river';
 import type { Run, Systems } from './run';
 import { spend } from './state';
 
@@ -34,6 +34,8 @@ export const FAREWELL = {
   answerLook: 0.8,
   /** How fast the camera turns to her at the start of the swim is `CAST.follow`; the fish pack hangs this far below the fingertips (m). */
   packHold: { x: 0.18, y: -0.32, z: -0.55 },
+  /** The swim in is given up on after this long (s): she is on the shore by then or something is wrong. */
+  swimGiveUp: 40,
 } as const;
 
 export const FAREWELL_PAGES = {
@@ -53,15 +55,35 @@ export const FAREWELL_PAGES = {
   ],
   look: ['She lifts her head a little and looks at you.'],
   pack: [
-    'You set your last fish pack on the water beside her.',
+    'You set your last fish pack down beside her.',
     'She breathes out once, long and slow. Then she is still.',
   ],
 } as const;
 
 export const FAREWELL_PROMPTS = {
   kneel: 'E: put your hand on her',
-  pack: 'E: lay your last fish pack on the water',
+  pack: 'E: lay your last fish pack beside her',
 } as const;
+
+/** The HUD's goal line for each beat of the ending: what to do or press now, or what is happening (plain words, no counts). */
+export const ENDING_GOALS = {
+  mom: 'Listen to Mom.',
+  fight: 'Kill them all. Dras fights beside you.',
+  swim: 'Dras swims in. Watch her.',
+  goTo: 'Mom walks to her side.',
+  sing: 'Mom sings to Dras.',
+  kneel: 'Go to Dras and kneel by her. E: put your hand on her.',
+  stay: 'Stay with Dras.',
+  pack: 'E: lay your last fish pack beside her.',
+  dawn: 'Mom is coming. Stay with her.',
+  home: 'Go home with Mom.',
+  ride: '',
+} as const;
+
+/** Sets the HUD's goal line for this beat. */
+export const goal = (s: Pick<Script, 'run'>, line: string): void => {
+  s.run.endingGoal = line;
+};
 
 /** What the farewell needs from the running ending. */
 export interface Script {
@@ -96,6 +118,32 @@ export interface Shore {
 export function shoreFor(mom: { x: number; z: number }, lakeZ: number): Shore {
   return { noseX: mom.x + FAREWELL.nose.fromMom, noseZ: lakeZ + FAREWELL.nose.upShore, lakeZ };
 }
+
+/** Mom's walks in the ending give up after this long (s), about twice the longest; she is then put at the end of the walk. */
+export const WALK_TIMEOUT = 12;
+
+/** Walks Mom to `to`; a walk that never arrives (a stuck path) ends after `seconds` with her snapped there, so the ending moves on. */
+export async function walkWithin(
+  scene: {
+    actor: Pick<EndingScene['actor'], 'walkTo' | 'stop'>;
+    mom: { group: { position: { x: number; z: number } } };
+  },
+  to: { x: number; z: number },
+  seconds = WALK_TIMEOUT,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(true), seconds * 1000);
+  });
+  const timedOut = await Promise.race([scene.actor.walkTo([to]).then(() => false), late]);
+  clearTimeout(timer);
+  if (!timedOut) return;
+  scene.actor.stop(); // resolves the pending walk and rests her
+  scene.mom.group.position.x = to.x;
+  scene.mom.group.position.z = to.z;
+}
+
+const SWIM_GIVE_UP = FAREWELL.swimGiveUp;
 
 const v3 = ([x, y, z]: V3): THREE.Vector3 => new THREE.Vector3(x, y, z);
 
@@ -153,6 +201,7 @@ const focusOn = (s: Script, point: THREE.Vector3) => (): void =>
 export async function swim(s: Script, at: Shore): Promise<void> {
   const { fish, horde, sounds, ctx } = s.sys;
   s.run.cutscene = true; // no HUD, bow or torch from here to the ride
+  goal(s, ENDING_GOALS.swim);
   ctx.cinematic(true);
   s.cast.follow(true);
   s.scene.lightFarewell(true, { x: s.shots.eye[0], y: s.shots.eye[1], z: s.shots.eye[2] });
@@ -161,10 +210,12 @@ export async function swim(s: Script, at: Shore): Promise<void> {
   const camera = ctx.stage.camera;
   const rail = rails.watch(keyFrom(camera), s.shots);
   let t = 0;
+  let waited = 0;
   await s.until((dt) => {
     t = Math.min(rail.seconds, t + dt);
+    waited += dt;
     rail.pose(t, camera); // its turn is overridden by the follow
-    return fish.beached;
+    return fish.beached || waited > SWIM_GIVE_UP; // never strands the player on a leap that fails
   });
   s.cast.hold = rail;
   if (s.cancelled) return;
@@ -175,9 +226,10 @@ export async function swim(s: Script, at: Shore): Promise<void> {
 export async function goToIt(s: Script): Promise<void> {
   const { actor, mom } = s.scene;
   const { mom: spot, lantern, eye } = s.shots;
+  goal(s, ENDING_GOALS.goTo);
   actor.stop(); // no more tense glances and gestures: she only has eyes for her now
   mom.rest = 'Kneel'; // she kneels where the walk ends
-  await actor.walkTo([spot]);
+  await walkWithin(s.scene, spot);
   if (s.cancelled) return;
   actor.faceTo(s.shots.eye[0], s.shots.eye[2] - 3); // down at her face, which is straight ahead of her
   s.scene.setDown({ x: lantern[0], y: lantern[1], z: lantern[2] });
@@ -188,6 +240,7 @@ export async function goToIt(s: Script): Promise<void> {
 export async function song(s: Script, at: Shore): Promise<void> {
   const { fish } = s.sys;
   const { mom } = s.shots;
+  goal(s, ENDING_GOALS.sing);
   await s.read(FAREWELL_PAGES.song);
   if (s.cancelled) return;
   fish.lookAtTarget(
@@ -257,8 +310,10 @@ type ArmJobHandle = NonNullable<Cast['arm']>;
 export async function kneel(s: Script): Promise<void> {
   const { ctx } = s.sys;
   const { kneel: at } = s.shots;
+  goal(s, ENDING_GOALS.kneel);
   await waitForE(s, { x: at.at[0], z: at.at[2] }, FAREWELL.kneelRadius, FAREWELL_PROMPTS.kneel);
   if (s.cancelled) return;
+  goal(s, ENDING_GOALS.stay);
   ctx.cinematic(true);
   momReaches(s);
   await playRail(s, rails.kneel(keyFrom(ctx.stage.camera), s.shots));
@@ -343,11 +398,13 @@ export async function lastPack(s: Script, pack: THREE.Object3D): Promise<void> {
   ctx.focus(false); // Dras and the pack both sharp: a focus on the water blurred him
   await s.until(() => held.job.rise >= 1);
   const spot = { x: packCam.at[0], z: packCam.at[2] };
+  goal(s, ENDING_GOALS.pack);
   await waitForE(s, spot, FAREWELL.packRadius, FAREWELL_PROMPTS.pack);
   if (s.cancelled) return;
+  goal(s, ENDING_GOALS.stay);
   const left = spend(s.run.live.supplies, 'fishPacks', 1);
   if (left) s.run.live.supplies = left; // with none left, it is the one Mom brought
-  const lean = rails.lean(s.shots); // you dip toward the water as the hand goes down
+  const lean = rails.lean(s.shots); // you dip toward the pack as the hand goes down
   s.cast.hold = null;
   await s.until((dt) => {
     held.lower.t = Math.min(1, held.lower.t + dt / SHOTS.pack.lower);
@@ -356,9 +413,8 @@ export async function lastPack(s: Script, pack: THREE.Object3D): Promise<void> {
   });
   s.cast.hold = lean;
   s.sys.world.scene.attach(pack); // off your hand, onto the water
-  pack.position.set(float[0], WATER_Y + 0.05, float[2]);
+  pack.position.set(float[0], float[1], float[2]); // on the pebbles by her chin
   pack.rotation.set(0, 0.6, 0);
-  s.cast.float = pack;
   held.job.goal = 0; // your arm goes
   fish.lookAtTarget(null, 0); // she lets her head down
   fish.breatheOut();

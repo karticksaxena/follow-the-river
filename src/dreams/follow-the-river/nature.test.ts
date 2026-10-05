@@ -160,4 +160,16 @@ describe('Vegetation.setTier (Auto or the pause menu changes the tier mid-chapte
     vegetation.setTier('low');
     expect(vegetation.cull(x, z, 100).length).toBeLessThan(high);
   }, 60000);
+
+  it('showAll shows every cell wherever the camera is, and the undo culls again', async () => {
+    const vegetation = await built(canoe('high'), 'high');
+    const [x, z] = SPOTS.canoe[2];
+    const near = vegetation.cull(x, z, 100).length;
+    const undo = vegetation.showAll();
+    const all = vegetation.cull(x, z, 100).length;
+    expect(all).toBeGreaterThan(near);
+    expect(vegetation.cull(x + 500, z, 100).length).toBe(all); // the cull stands still
+    undo();
+    expect(vegetation.cull(x, z, 100).length).toBe(near);
+  }, 60000);
 });

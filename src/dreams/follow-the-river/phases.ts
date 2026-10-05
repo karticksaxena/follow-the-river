@@ -21,7 +21,7 @@ import {
   type StoredRun,
 } from './state';
 import { playTape } from './tapes';
-import { readWhileWarming, warmNight } from './warm';
+import { readWhileWarming, warmArea } from './warm';
 import { edgePickups, newWaveState, waveCrates } from './waves';
 
 /** Lantern brightness at night (tuning knob); it is 0 by day. */
@@ -165,7 +165,7 @@ export async function waitForDark(f: Flow): Promise<void> {
   await readWhileWarming(
     ctx,
     announcePages(f, true),
-    warmNight(f.sys, f.run.live.supplies.battery),
+    warmArea(f.sys, f.run, { battery: f.run.live.supplies.battery, full: false }),
   );
   if (f.disposed) return;
   await ctx.overlay.fade(false);

@@ -389,6 +389,9 @@ describe('edge supplies and the objective', () => {
     expect(objective({ ...o, night: false })).toMatch(/Search the sheds.*Feed Dras/);
     expect(objective({ ...o, lake: true, wave: 3 })).toMatch(/Mom is waiting/);
     expect(objective({ ...o, ending: true })).toBe('');
+    expect(objective({ ...o, ending: true, endingGoal: 'Go home with Mom.' })).toBe(
+      'Go home with Mom.',
+    );
     expect(objective({ ...o, fighting: true, waiting: true })).toBe(
       'They are waiting further on. Keep moving downstream.',
     );

@@ -4,7 +4,9 @@ import { playCanoeRide } from './canoe-ride';
 import { DIFFICULTY, nightTuning } from './difficulty';
 import { BED_FADE, bedFade, comeToPlayer, dawn, type Dawning } from './ending-dawn';
 import {
+  ENDING_GOALS,
   FAREWELL_PAGES,
+  goal,
   goToIt,
   kneel,
   lastPack,
@@ -102,6 +104,10 @@ export interface Ending {
   update(dt: number): void;
   /** The player died mid-wave: stand everything down so the night can restart. */
   cancel(): void;
+  /** Builds Mom, her lights and the pack now (behind the loading screen), so the ending adds nothing to the scene later. */
+  prepare(): Promise<void>;
+  /** Warm-up: everything the ending shows, on; returns the undo. */
+  warmShow(): () => void;
   dispose(): void;
 }
 
@@ -113,10 +119,15 @@ export interface EndingHost {
   persist: () => void;
 }
 
+/** Seconds after her guard lifts at which the fight is over whatever is left (the wave is won). */
+const FIGHT_GIVE_UP = 90;
+
 export const NO_ENDING: Ending = {
   start: () => undefined,
   update: () => undefined,
   cancel: () => undefined,
+  prepare: () => Promise.resolve(),
+  warmShow: () => () => undefined,
   dispose: () => undefined,
 };
 
@@ -264,6 +275,7 @@ async function fight(h: EndingHost, st: State): Promise<void> {
   let t = 0;
   let left: number = WAVE.strikes;
   let lifted = false;
+  goal({ run: h.run }, ENDING_GOALS.fight);
   backOff(h, st);
   if (st.scene) {
     st.scene.mom.rest = 'Lantern'; // she stands behind you, lantern held up
@@ -284,6 +296,7 @@ async function fight(h: EndingHost, st: State): Promise<void> {
     }
     spawnWave(h, spawned, t, count);
     horde.alert(cam.x, cam.z, WAVE.hearing);
+    if (t > WAVE.safety + FIGHT_GIVE_UP) horde.reset(); // a zombie stuck far upstream must not hold the ending forever
     return spawned.n >= count && horde.aliveCount() === 0;
   });
   fish.setGuards([]);
@@ -336,6 +349,7 @@ const dawning = (h: EndingHost, st: State): Dawning => ({
 async function dawnAndHome(h: EndingHost, st: State, s: Script): Promise<void> {
   h.sys.flashlight.on = false;
   st.scene?.lightFarewell(false); // the sun is coming: the night light goes
+  goal(s, ENDING_GOALS.dawn);
   const stand = standUp(s);
   let standing = false;
   const d = dawning(h, st);
@@ -350,6 +364,7 @@ async function dawnAndHome(h: EndingHost, st: State, s: Script): Promise<void> {
   ]);
   if (!st.cancelled) {
     st.scene?.mom.play('Talk'); // she talks while you read
+    goal(s, ENDING_GOALS.home);
     await read(h, st, ENDING_PAGES.home);
   }
   if (!st.cancelled) await until(st, bedFade(st.beds, BED_FADE)); // the ride brings its own water and birds
@@ -360,6 +375,7 @@ async function runStep(h: EndingHost, st: State, step: EndingStep, at: Shore): P
   const s = scriptOf(h, st);
   if (!s) return;
   if (step === 'mom') {
+    goal(s, ENDING_GOALS.mom);
     await read(h, st, ENDING_PAGES.mom);
     armForLastStand(h.run, DIFFICULTY[h.sys.ctx.difficulty()].bag);
   } else if (step === 'fight') await fight(h, st);
@@ -371,6 +387,7 @@ async function runStep(h: EndingHost, st: State, step: EndingStep, at: Shore): P
   else if (step === 'pack' && st.pack) await lastPack(s, st.pack);
   else if (step === 'dawn') await dawnAndHome(h, st, s);
   else if (step === 'ride') {
+    goal(s, ENDING_GOALS.ride);
     h.run.frozen = true; // the chapter stops: the ride is its own scene
     st.scene?.releaseReflection(); // the dawn's sharp mirror is done
     st.cast?.release(); // and its camera is the ride's, not the farewell's
@@ -383,6 +400,7 @@ async function runStep(h: EndingHost, st: State, step: EndingStep, at: Shore): P
 async function recover(h: EndingHost, st: State): Promise<void> {
   const { ctx, fish } = h.sys;
   h.run.frozen = false;
+  h.run.endingGoal = ENDING_GOALS.ride;
   stopBeds(st);
   endCinema(h, st);
   fish.setGuards([]);
@@ -491,10 +509,25 @@ export function createEnding(h: EndingHost): Ending {
       if (!st.started) return;
       stand();
       h.run.ending = 'no';
+      h.run.endingGoal = '';
       st.scene?.remove(h.lantern);
       h.run.interact = null;
       h.sys.fish.reset(); // a death mid-farewell can't leave it on the shore
       st = freshState(st.scene, st.pack, st.cast); // Mom stays built; reaching the shore again starts over
+    },
+    async prepare() {
+      st.scene ??= await buildEndingScene(h.sys);
+      st.pack ??= await loadPackOnWater(h.sys.world.scene);
+    },
+    warmShow() {
+      const undoScene = st.scene?.warmShow();
+      const pack = st.pack;
+      const packShown = pack?.visible;
+      if (pack) pack.visible = true;
+      return () => {
+        undoScene?.();
+        if (pack) pack.visible = packShown ?? false;
+      };
     },
     dispose() {
       stand();

@@ -2,7 +2,6 @@
 export const QUALITY = {
   /** Resolution multipliers, best first. */
   steps: [1, 0.85, 0.72, 0.6, 0.5],
-  maxPixelRatio: 1.5,
   /** Smoothed frame time above this (a 60 FPS miss, with room for vsync jitter) for `slowFor` s steps quality down. */
   slowMs: 17.5,
   /** Below this for `fastFor` s steps it back up. Between the two nothing changes. */
@@ -13,7 +12,16 @@ export const QUALITY = {
   minGap: 2,
   /** Per-frame weight of the newest frame in the moving average. */
   smoothing: 0.1,
+  /** Auto climbs one tier (to at most the one the GPU class chose) after this many seconds at the best resolution step with headroom. */
+  raiseFor: 20,
+  /** A tier raise that runs slow again drops back: never raise more than this many times a session (no ping-pong rebuilds). */
+  maxRaises: 1,
+  /** A frame this long (s) is a stall (a shader compile, a tab switch), not the GPU's speed: Auto ignores it. */
+  hitch: 0.25,
 } as const;
+
+/** True for a frame too long to say anything about throughput; stepping the quality down for it would rebuild the post graph mid-play. */
+export const isHitch = (seconds: number): boolean => seconds > QUALITY.hitch;
 
 export interface Quality {
   step: number;
@@ -23,6 +31,8 @@ export interface Quality {
   /** Seconds since the last change. */
   since: number;
   ema: number;
+  /** Tier raises Auto has made (see `QUALITY.maxRaises`). */
+  raises: number;
 }
 
 export type Tier = 'low' | 'medium' | 'high';
@@ -44,6 +54,8 @@ export interface TierSettings {
   bloom: boolean;
   /** Raymarch steps of the mist (0 = no pass; WebGL 2 never has it). */
   mistSteps: number;
+  /** Device-pixel-ratio cap: integrated GPUs render 1080p at 1.0, High may go to 1.5. */
+  maxPixelRatio: number;
   /** Resolution step Auto restarts from when it drops to this tier. */
   dropStep: number;
 }
@@ -54,6 +66,7 @@ export interface TierSettings {
  */
 export const TIERS: Readonly<Record<Tier, TierSettings>> = {
   low: {
+    maxPixelRatio: 1,
     reflectionScale: 0,
     keyShadow: null,
     torchShadowMap: 512,
@@ -63,15 +76,17 @@ export const TIERS: Readonly<Record<Tier, TierSettings>> = {
     dropStep: 3,
   },
   medium: {
+    maxPixelRatio: 1,
     reflectionScale: 0.2,
     keyShadow: { cascades: 1, mapSize: 1024 },
     torchShadowMap: 512,
-    ao: { scale: 0.5, samples: 12 },
+    ao: { scale: 0.5, samples: 10 },
     bloom: true,
     mistSteps: 8,
     dropStep: 1,
   },
   high: {
+    maxPixelRatio: 1.5,
     reflectionScale: 0.35,
     keyShadow: { cascades: 3, mapSize: 2048 },
     torchShadowMap: 1024,
@@ -96,7 +111,14 @@ export function frameCost(intervalMs: number, workMs: number, capMs: number): nu
 }
 
 export function newQuality(): Quality {
-  return { step: 0, slow: 0, fast: 0, since: 0, ema: (QUALITY.slowMs + QUALITY.fastMs) / 2 };
+  return {
+    step: 0,
+    slow: 0,
+    fast: 0,
+    since: 0,
+    ema: (QUALITY.slowMs + QUALITY.fastMs) / 2,
+    raises: 0,
+  };
 }
 
 /** A change (or a shader rebuild) makes the next frames spiky: start the average from neutral. */
@@ -133,9 +155,17 @@ export function lowerTier(tier: Tier): Tier {
   return tier === 'high' ? 'medium' : 'low';
 }
 
+export function raiseTier(tier: Tier): Tier {
+  return tier === 'low' ? 'medium' : 'high';
+}
+
+const RANK: Record<Tier, number> = { low: 0, medium: 1, high: 2 };
+
 /**
  * Resolution first; in auto, once it is at its last step and still slow, the caller lowers the
- * tier (`'tier'`) and the resolution restarts higher. Auto never climbs back up (no ping-pong).
+ * tier (`'tier'`) and the resolution restarts higher. After `raiseFor` s of headroom at the best
+ * step, it climbs one tier (`'raise'`) back toward `ceiling` (the GPU class's tier), at most
+ * `maxRaises` times, so one bad moment (a load, a shader build) does not pin a player low all session.
  */
 export function adaptQuality(
   q: Quality,
@@ -143,7 +173,8 @@ export function adaptQuality(
   auto: boolean,
   frameMs: number,
   dt: number,
-): 'res' | 'tier' | null {
+  ceiling: Tier = tier,
+): 'res' | 'tier' | 'raise' | null {
   if (stepQuality(q, frameMs, dt)) return 'res';
   if (
     auto &&
@@ -155,10 +186,22 @@ export function adaptQuality(
     settle(q, TIERS[lowerTier(tier)].dropStep);
     return 'tier';
   }
+  if (
+    auto &&
+    RANK[tier] < RANK[ceiling] &&
+    q.step === 0 &&
+    q.fast >= QUALITY.raiseFor &&
+    q.raises < QUALITY.maxRaises
+  ) {
+    const raises = q.raises + 1;
+    settle(q, TIERS[raiseTier(tier)].dropStep);
+    q.raises = raises;
+    return 'raise';
+  }
   return null;
 }
 
 /** Pixel ratio for the renderer at the current step. */
-export function pixelRatio(q: Readonly<Quality>, devicePixelRatio: number): number {
-  return Math.min(devicePixelRatio, QUALITY.maxPixelRatio) * QUALITY.steps[q.step];
+export function pixelRatio(q: Readonly<Quality>, devicePixelRatio: number, tier: Tier): number {
+  return Math.min(devicePixelRatio, TIERS[tier].maxPixelRatio) * QUALITY.steps[q.step];
 }

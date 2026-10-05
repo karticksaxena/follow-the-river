@@ -22,6 +22,7 @@ import { createPlay } from './play';
 import type { Events, Run, Systems } from './run';
 import { completePhase, restartPhase, type RunSave, type StoredRun } from './state';
 import { stopVoice } from './voice';
+import { warmArea } from './warm';
 import { newWaveState } from './waves';
 
 export interface Chapter {
@@ -54,6 +55,7 @@ function newRun(save: RunSave): Run {
     dying: 'no',
     dyingTime: 0,
     ending: 'no',
+    endingGoal: '',
     cutscene: false,
   };
 }
@@ -164,6 +166,14 @@ export async function startChapter(
       death.step(dt, checkpointOf, again);
     }
   });
+  // Behind the loading screen: everything the area will draw compiles now (the ending's Mom and lights are built first, so the light set never changes in play); then the phase starts again, clean.
+  await ending.prepare().catch(() => undefined);
+  await warmArea(sys, run, {
+    battery: run.live.supplies.battery,
+    full: true,
+    extras: [() => ending.warmShow()],
+  });
+  beginPhase(f);
   return {
     announce: (title) => announce(f, title),
     freeze: () => void (run.frozen = true),

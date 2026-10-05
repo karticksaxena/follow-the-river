@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   adaptQuality,
   frameCost,
+  isHitch,
   lowerTier,
+  pixelRatio,
   QUALITY,
   stepQuality,
   TIERS,
@@ -10,7 +12,7 @@ import {
   type Tier,
 } from './quality';
 
-const fresh = (): Quality => ({ step: 0, slow: 0, fast: 0, since: 10, ema: 16 });
+const fresh = (): Quality => ({ step: 0, slow: 0, fast: 0, since: 10, ema: 16, raises: 0 });
 
 describe('stepQuality', () => {
   it('drops one step after 2 s of slow frames, never twice within the gap', () => {
@@ -94,18 +96,20 @@ describe('TIERS (what each graphics tier turns on)', () => {
       ao: null,
       bloom: true,
       mistSteps: 0,
+      maxPixelRatio: 1,
       dropStep: 3,
     });
   });
 
-  it('Medium: quarter-ish reflection, one 1024 cascade, half-res 12-sample AO, 512 torch', () => {
+  it('Medium: quarter-ish reflection, one 1024 cascade, half-res 10-sample AO, 512 torch', () => {
     expect(TIERS.medium).toEqual({
       reflectionScale: 0.2,
       keyShadow: { cascades: 1, mapSize: 1024 },
       torchShadowMap: 512,
-      ao: { scale: 0.5, samples: 12 },
+      ao: { scale: 0.5, samples: 10 },
       bloom: true,
       mistSteps: 8,
+      maxPixelRatio: 1,
       dropStep: 1,
     });
   });
@@ -118,6 +122,7 @@ describe('TIERS (what each graphics tier turns on)', () => {
       ao: { scale: 0.75, samples: 24 },
       bloom: true,
       mistSteps: 12,
+      maxPixelRatio: 1.5,
       dropStep: 0,
     });
   });
@@ -160,5 +165,49 @@ describe('frameCost (what Auto is fed)', () => {
 
   it('with no cap the interval is used', () => {
     expect(frameCost(8.3, 3, 0)).toBe(8.3);
+  });
+});
+
+describe('isHitch (a stall is not slowness)', () => {
+  it('flags only frames far longer than a slow GPU would give', () => {
+    expect(isHitch(0.033)).toBe(false);
+    expect(isHitch(0.1)).toBe(false);
+    expect(isHitch(2.4)).toBe(true); // a pipeline-compile stall must not drop the tier
+  });
+});
+
+describe('pixelRatio', () => {
+  it('caps the device ratio per tier: 1.0 on Low/Medium, 1.5 on High', () => {
+    const q = fresh();
+    expect(pixelRatio(q, 2, 'low')).toBe(1);
+    expect(pixelRatio(q, 2, 'medium')).toBe(1);
+    expect(pixelRatio(q, 2, 'high')).toBe(1.5);
+    expect(pixelRatio(q, 1, 'high')).toBe(1);
+  });
+});
+
+const run = (q: Quality, tier: Tier, ceiling: Tier, seconds: number): string | null => {
+  let last: string | null = null;
+  for (let t = 0; t < seconds; t += 1 / 60) {
+    const c = adaptQuality(q, tier, true, 8, 1 / 60, ceiling);
+    if (c) last = c;
+  }
+  return last;
+};
+
+describe('Auto raise', () => {
+  it('climbs one tier after 20 s of headroom at the best step, never above the ceiling', () => {
+    expect(run(fresh(), 'low', 'medium', 19)).toBeNull();
+    const q = fresh();
+    expect(run(q, 'low', 'medium', 21)).toBe('raise');
+    expect(q.raises).toBe(1);
+    expect(q.step).toBe(TIERS.medium.dropStep);
+    expect(run(fresh(), 'medium', 'medium', 60)).toBeNull();
+  });
+
+  it('raises only once a session, and not while at a lower resolution step', () => {
+    const q = { ...fresh(), raises: 1 };
+    expect(run(q, 'low', 'high', 60)).toBeNull();
+    expect(run({ ...fresh(), step: 2 }, 'low', 'high', 8)).toBe('res');
   });
 });

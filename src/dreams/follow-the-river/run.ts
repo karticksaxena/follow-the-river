@@ -68,6 +68,8 @@ export interface Run {
   dying: Dying;
   dyingTime: number;
   ending: EndingState;
+  /** The HUD's goal line while the ending runs (what to do or press now; '' = none). */
+  endingGoal: string;
   /** True while a cinematic plays: no weapons, no HUD, no input (set with `ctx.cinematic`). */
   cutscene: boolean;
 }

@@ -140,12 +140,18 @@ describe('the farewell shots', () => {
     expect(shots.kartik.z).toBeLessThan(shots.eye[2]);
   });
 
-  it('floats the pack on the water, within reach of the kneeling camera', () => {
+  it('lays the pack by her head, with the camera beside her (Kartik: "we are not even near our orca")', () => {
     const [fx, fy, fz] = shots.float;
-    expect(fy).toBeGreaterThan(WATER_Y);
-    expect(fz).toBeLessThan(LAKE_Z);
     const [cx, , cz] = shots.packCam.at;
-    expect(Math.hypot(fx - cx, fz - cz)).toBeLessThan(1.5);
+    const head = { x: at.noseX, z: at.noseZ };
+    expect(fy).toBeGreaterThan(shoreY(fz - LAKE_Z)); // on the pebbles
+    expect(fz).toBeGreaterThan(LAKE_Z);
+    expect(Math.hypot(fx - head.x, fz - head.z)).toBeLessThan(2.5);
+    expect(Math.hypot(cx - head.x, cz - head.z)).toBeLessThan(2.5);
+    expect(Math.hypot(fx - cx, fz - cz)).toBeLessThan(1.5); // within reach
+    expect(toCentreLine(cx, cz)).toBeGreaterThan(ANATOMY.halfWidth); // beside her, not on her
+    const look = shots.packCam.look;
+    expect(Math.hypot(look[0] - head.x, look[2] - head.z)).toBeLessThan(3); // looking at her
   });
 
   it('orbits at the radius round the centre, climbing, and ends on a different side', () => {

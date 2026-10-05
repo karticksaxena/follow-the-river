@@ -8,9 +8,11 @@ import { createPost, POST } from './post';
 import {
   adaptQuality,
   frameCost,
+  isHitch,
   lowerTier,
   newQuality,
   pixelRatio,
+  raiseTier,
   type Graphics,
   type Quality,
   type Tier,
@@ -20,6 +22,9 @@ import { setSurfaceTier } from './surfaces';
 import { clampDelta } from './time';
 import { runUpdaters, type Updater } from './updaters';
 import { NO_REFLECTION_LAYER } from './volume';
+
+/** DEV: frames longer than this (s) are logged in `window.__kdLong`. */
+const LONG_FRAME = 0.05;
 
 export type Backend = 'webgpu' | 'webgl2';
 export type { Updater } from './updaters';
@@ -57,8 +62,13 @@ export interface Stage {
   dispose(): void;
 }
 
-function fit(renderer: THREE.WebGPURenderer, camera: THREE.PerspectiveCamera, q: Quality): void {
-  renderer.setPixelRatio(pixelRatio(q, devicePixelRatio));
+function fit(
+  renderer: THREE.WebGPURenderer,
+  camera: THREE.PerspectiveCamera,
+  q: Quality,
+  tier: Tier,
+): void {
+  renderer.setPixelRatio(pixelRatio(q, devicePixelRatio, tier));
   renderer.setSize(innerWidth, innerHeight, false);
   camera.aspect = innerWidth / Math.max(1, innerHeight);
   camera.updateProjectionMatrix();
@@ -96,7 +106,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   const updaters = new Set<Updater>();
   const timer = new THREE.Timer();
   timer.connect(document);
-  const onResize = (): void => fit(renderer, camera, quality);
+  const onResize = (): void => fit(renderer, camera, quality, tier);
   addEventListener('resize', onResize);
   onResize();
   const stage: Stage = {
@@ -117,6 +127,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
       tier = post.setTier(graphics === 'auto' ? autoStart : graphics);
       setSurfaceTier(tier);
       quality.since = 0;
+      onResize(); // the tier sets the pixel-ratio cap
     },
     setMaxFps(next) {
       cap = next;
@@ -144,13 +155,20 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   /** Resolution first, then (Auto only) the tier; each at most every `QUALITY.minGap` s. */
   const adapt = (dt: number, workMs: number): void => {
     const frameMs = frameCost(dt * 1000, workMs, capPeriod(cap) * 1000);
-    const change = adaptQuality(quality, tier, auto, frameMs, dt);
+    const change = adaptQuality(quality, tier, auto, frameMs, dt, autoStart);
     if (change === 'tier') {
       tier = post.setTier(lowerTier(tier));
       setSurfaceTier(tier);
     }
+    if (change === 'raise') {
+      tier = post.setTier(raiseTier(tier));
+      setSurfaceTier(tier);
+    }
     if (change) onResize();
   };
+  // DEV: `window.__kdLong` lists every frame over LONG_FRAME as [time ms, frame ms] (hitches show up here).
+  const longFrames: number[][] = [];
+  if (import.meta.env.DEV) Object.assign(window, { __kdLong: longFrames });
   await renderer.setAnimationLoop((time) => {
     timer.update(time);
     if (!shouldRender(pacer, timer.getDelta(), cap)) return;
@@ -161,7 +179,10 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
     runUpdaters(updaters, dt);
     post.update(dt);
     post.render(stage.scene);
-    if (dt > 0 && !stage.warming) adapt(dt, performance.now() - start);
+    if (dt > 0 && !stage.warming && !isHitch(pacer.dt)) adapt(dt, performance.now() - start);
+    if (import.meta.env.DEV && pacer.dt > LONG_FRAME) {
+      longFrames.push([Math.round(time), Math.round(pacer.dt * 1000)]);
+    }
     perf?.end();
   });
   return stage;

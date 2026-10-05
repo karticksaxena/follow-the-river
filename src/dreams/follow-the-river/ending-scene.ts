@@ -127,6 +127,8 @@ export interface EndingScene {
   lightFarewell(on: boolean, at?: { x: number; y: number; z: number }): void;
   /** Back to the tier's reflection size (the farewell and the dawn keep it sharp; the ride releases it). */
   releaseReflection(): void;
+  /** Warm-up: Mom with her lantern, Kartik's body and his arm on show (so they compile under the final lights); returns the undo. */
+  warmShow(): () => void;
   /** Per frame: Mom's walk/idle, her animation, and the lantern in her hand. */
   update(dt: number): void;
   /** Puts Mom on the shore facing `(toX, toZ)` and lights the lantern in her hand. */
@@ -228,6 +230,12 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
     },
     releaseReflection() {
       setWaterReflectionSharp(false);
+    },
+    warmShow() {
+      const shown = [mom.group, kartik.group, mom.pack, arm];
+      const before = shown.map((o) => o.visible);
+      for (const o of shown) o.visible = true;
+      return () => shown.forEach((o, i) => (o.visible = before[i] ?? false));
     },
     update(dt) {
       actor.update(dt);

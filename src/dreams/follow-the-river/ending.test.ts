@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CITY } from './areas/city';
 import { FOREST } from './areas/forest';
 import { SUBURBS } from './areas/suburbs';
@@ -19,7 +19,16 @@ import {
   waveSpot,
   type EndingStep,
 } from './ending';
-import { FAREWELL, FAREWELL_PAGES, FAREWELL_PROMPTS, shoreFor, type Bed } from './ending-farewell';
+import {
+  ENDING_GOALS,
+  FAREWELL,
+  FAREWELL_PAGES,
+  FAREWELL_PROMPTS,
+  shoreFor,
+  WALK_TIMEOUT,
+  walkWithin,
+  type Bed,
+} from './ending-farewell';
 import {
   facing,
   FAREWELL_LIGHT,
@@ -331,5 +340,49 @@ describe('waitDone', () => {
     expect(waitDone(throwing, 0.016)).toBe(true);
     expect(waitDone({ pred: () => false }, 0.016)).toBe(false);
     expect(waitDone({ pred: () => true }, 0.016)).toBe(true);
+  });
+});
+
+describe('the ending goal line', () => {
+  it('says something plain for every beat but the ride, with the keys to press', () => {
+    for (const [beat, line] of Object.entries(ENDING_GOALS)) {
+      if (beat === 'ride') continue;
+      expect(line).toMatch(/^[A-Z].*\.$/);
+      expect(line).not.toMatch(/[\d\u2014]/); // no counts, no em dashes
+    }
+    expect(ENDING_GOALS.kneel).toMatch(/^Go to Dras.*E: put your hand on her/);
+    expect(ENDING_GOALS.pack).toBe(`${FAREWELL_PROMPTS.pack}.`);
+    expect(ENDING_GOALS.goTo).toBe('Mom walks to her side.');
+    expect(ENDING_GOALS.dawn).toMatch(/Mom is coming/);
+    expect(ENDING_GOALS.home).toBe('Go home with Mom.');
+  });
+});
+
+describe('walkWithin', () => {
+  it('moves on when the walk never arrives, with Mom put at the spot', async () => {
+    vi.useFakeTimers();
+    try {
+      const stop = vi.fn<() => void>();
+      const scene = {
+        actor: { walkTo: () => new Promise<void>(() => undefined), stop },
+        mom: { group: { position: { x: 0, z: 0 } } },
+      };
+      const done = walkWithin(scene, { x: 3, z: -4 });
+      await vi.advanceTimersByTimeAsync(WALK_TIMEOUT * 1000 + 1);
+      await done;
+      expect(stop).toHaveBeenCalled();
+      expect(scene.mom.group.position).toEqual({ x: 3, z: -4 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns at once when she arrives', async () => {
+    const scene = {
+      actor: { walkTo: () => Promise.resolve(), stop: vi.fn<() => void>() },
+      mom: { group: { position: { x: 0, z: 0 } } },
+    };
+    await walkWithin(scene, { x: 3, z: -4 });
+    expect(scene.actor.stop).not.toHaveBeenCalled();
   });
 });

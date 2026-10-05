@@ -30,6 +30,8 @@ export interface World {
   insideShack(x: number, z: number): boolean;
   /** The live tier changed: vegetation reach, shadows and reflections follow (no-op if unchanged). */
   setTier(tier: Tier): void;
+  /** Warm-up: every plant cell on show, wherever the camera is; returns the undo. */
+  showAllPlants(): () => void;
 }
 
 /** Colliders are the prop's footprint shrunk a little so players don't snag on corners. */
@@ -219,6 +221,7 @@ export async function buildWorld(
       vegetation.setTier(next);
       setSkylineTier(skyline, next);
     },
+    showAllPlants: () => vegetation.showAll(),
     insideShack(x, z) {
       for (const b of bounds) {
         if (x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ) return true;

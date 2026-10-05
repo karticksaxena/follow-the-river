@@ -181,8 +181,8 @@ h1.title {
 .hud[hidden] {
   display: none;
 }
-/* A cutscene hides everything but the prompt (the farewell's E actions). */
-.hud.hidden > :not(.hud-prompt) {
+/* A cutscene hides everything but the prompt (the farewell's E actions) and the goal line (the ending says what to do). */
+.hud.hidden > :not(.hud-prompt):not(.hud-goal) {
   display: none;
 }
 .hud-hurt {

@@ -337,13 +337,15 @@ export function objective(o: {
   wave: number;
   waves: number;
   ending: boolean;
+  /** The ending's own line (see `ENDING_GOALS`), shown while it runs. */
+  endingGoal?: string;
   /** Nothing of this wave is alive and only ambushes not yet sprung remain. */
   waiting?: boolean;
   lake: boolean;
   /** The night has dark houses with ammo in them. */
   houses?: boolean;
 }): string {
-  if (o.ending) return '';
+  if (o.ending) return o.endingGoal ?? '';
   if (!o.night)
     return 'Search the sheds for supplies. Feed Dras at the water. Rest by the fire when ready.';
   if (o.fighting && o.waiting) return 'They are waiting further on. Keep moving downstream.';

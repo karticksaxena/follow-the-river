@@ -3,7 +3,7 @@ import { createRail, orbitKeys, type Rail, type RailKey } from './camera-rail';
 import { ANATOMY } from './dras-anatomy';
 import type { Shore } from './ending-farewell';
 import { strandRest } from './orca-strand';
-import { shoreY, WATER_Y } from './river';
+import { shoreY } from './river';
 
 /**
  * Where everything stands for the farewell (Plan 9): she lies along +z on the shore, her nose toward
@@ -40,27 +40,25 @@ export const SHOTS = {
     seconds: 12,
   },
   /**
-   * The last pack: you kneel at the water's edge `out` m west of her centre line (far enough that the
-   * steep river bank which starts at x -3 is a small edge, not a plank filling the frame), `edge` m up
-   * the shore, looking east along it: the water and your arm on the left, her head and Mom on the right. The pack floats
-   * `floatInto` m ahead of you and `floatOut` m into the lake; the camera looks at a point `lookX`
-   * m from her centre line and `lookAhead` m up the shore from the water line. `lean`: as you
-   * lower the pack the camera dips this far toward it (m) and `leanDown` lower; seconds.
+   * The last pack: you kneel beside her head, `out` m from her skin and `ahead` of her centre (about
+   * 2 m from her nose), looking along her and toward the lake; the pack lies by her chin (`floatAhead`
+   * of her centre, `floatOut` m from her skin). The camera looks at a point `lookAhead` m behind
+   * where it kneels, on her centre line. `lean`: as you lower the pack the camera dips this far
+   * toward it (m) and `leanDown` lower; seconds.
    */
   pack: {
-    out: 7.3,
-    edge: 0.7,
-    floatOut: 0.2,
-    floatInto: 0.8,
+    out: 1.0,
+    ahead: 2.2,
+    floatAhead: 2.9,
+    floatOut: 0.35,
     seconds: 3.5,
-    eye: 1.65,
+    eye: 1.3,
     lower: 0.8,
-    lookX: 0,
-    lookAhead: 1.6,
+    lookBack: 0.8,
     lean: 0.35,
     leanDown: 0.2,
   },
-  /** The camera swings over the lake on its way from the orbit to the water's edge. */
+  /** The camera swings over the lake on its way from the orbit to kneeling beside her head. */
   swing: { out: 2.2, up: 2.6, into: 2 },
   /** Standing again for the dawn: `out` m west of her centre line, looking at a point `look.x` m east and `look.ahead` m out over the lake, `look.y` high: the lake and the far shore with the sun off to the left, out of frame (it glared). */
   stand: { eye: 1.6, out: 9, seconds: 3, look: { x: 34, y: 0.6, ahead: 22 } },
@@ -88,7 +86,7 @@ export interface Shots {
   lantern: V3;
   /** Watching her from the pebbles, just after she lands. */
   watch: RailKey;
-  /** The camera close to her eye, the orbit, the swing to the water's edge, the pack's camera and its float spot. */
+  /** The camera close to her eye, the orbit, the swing over the lake, the pack's camera and where the pack lies. */
   eyeClose: RailKey;
   orbit: RailKey[];
   swing: RailKey;
@@ -96,7 +94,7 @@ export interface Shots {
   /** Leaning toward the water as the pack goes down. */
   lean: RailKey;
   float: V3;
-  /** Standing again at the water's edge, looking out over the lake. */
+  /** Standing again beside her, looking out over the lake. */
   stand: RailKey;
   /** Orbit centre (the look point). */
   centre: V3;
@@ -156,28 +154,28 @@ function orbitOf(f: Frame, from: Spot): { keys: RailKey[]; centre: V3 } {
   return { keys: orbitKeys(c, o.radius, a, a + o.sweep, o.heights, o.keys), centre };
 }
 
-/** The pack step: kneeling at the water's edge, the float spot, the swing over the lake, standing again. */
+/** The pack step: kneeling beside her head, the spot the pack lies, the swing over the lake, standing again. */
 function packOf(
   f: Frame,
   centre: V3,
 ): Pick<Shots, 'packCam' | 'lean' | 'float' | 'swing' | 'stand'> {
   const { at } = f;
   const p = SHOTS.pack;
-  const x = at.noseX - p.out;
-  const z = at.lakeZ + p.edge;
+  const cam = spotAt(f, p.ahead, p.out);
+  const spot = spotAt(f, p.floatAhead, p.floatOut);
   const sx = at.noseX - SHOTS.stand.out;
-  const float: V3 = [x + p.floatInto, WATER_Y + 0.05, at.lakeZ - p.floatOut];
-  const y = f.ground(z) + p.eye;
-  const look: V3 = [at.noseX + p.lookX, y - 0.35, at.lakeZ + p.lookAhead];
-  const toFloat = Math.hypot(float[0] - x, float[2] - z);
+  const float: V3 = [spot.x, f.ground(spot.z) + 0.04, spot.z];
+  const y = f.ground(cam.z) + p.eye;
+  const look: V3 = [at.noseX, y - 0.45, cam.z - p.lookBack];
+  const toFloat = Math.hypot(float[0] - cam.x, float[2] - cam.z);
   return {
     float,
-    packCam: { at: [x, y, z], look },
+    packCam: { at: [cam.x, y, cam.z], look },
     lean: {
       at: [
-        x + ((float[0] - x) / toFloat) * p.lean,
+        cam.x + ((float[0] - cam.x) / toFloat) * p.lean,
         y - p.leanDown,
-        z + ((float[2] - z) / toFloat) * p.lean,
+        cam.z + ((float[2] - cam.z) / toFloat) * p.lean,
       ],
       look,
     },
@@ -186,7 +184,7 @@ function packOf(
       look: centre,
     },
     stand: {
-      at: [sx, f.ground(z) + SHOTS.stand.eye, z],
+      at: [sx, f.ground(cam.z) + SHOTS.stand.eye, cam.z],
       look: [sx + SHOTS.stand.look.x, SHOTS.stand.look.y, at.lakeZ - SHOTS.stand.look.ahead],
     },
   };
@@ -250,7 +248,7 @@ export const rails = {
     createRail([from, { at: s.orbit[0]?.at ?? from.at, look: s.centre }], SHOTS.pullBack.seconds),
   /** Round the three of them. */
   orbit: (s: Shots): Rail => createRail(s.orbit, SHOTS.orbit.seconds),
-  /** From the end of the orbit, swinging over the lake, to kneeling at the water's edge. */
+  /** From the end of the orbit, swinging over the lake, to kneeling beside her head. */
   toPack: (from: RailKey, s: Shots): Rail =>
     createRail([from, s.swing, s.packCam], SHOTS.pack.seconds),
   /** Dip toward the water as the pack is lowered. */

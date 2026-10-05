@@ -315,6 +315,7 @@ function tickView(p: State, dt: number): void {
   goalIn.wave = run.waves.cleared;
   goalIn.waves = hudState.waves;
   goalIn.ending = run.ending !== 'no';
+  goalIn.endingGoal = run.endingGoal;
   goalIn.waiting = fighting && isWaiting(p);
   goalIn.lake = sys.area.lake !== undefined;
   goalIn.houses = sys.area.housePickups !== undefined;
