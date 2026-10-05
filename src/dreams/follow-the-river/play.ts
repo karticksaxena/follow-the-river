@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import type { Box } from '../../engine/collide';
 import { updateInteriors } from '../../engine/interiors';
 import { syncKeyShadows } from '../../engine/shadows';
 import { createControls, cutsceneChange, type Controls } from './controls';
@@ -14,11 +15,13 @@ import {
   WATCH,
 } from './flashlight';
 import { nearSpot, takeDamage } from './flow';
+import { nearBox, SPAWN_CLEARANCE } from './houses';
 import { gunBits, type HudState } from './hud';
 import { applyDim, LIGHTING } from './lighting';
 import { tickWaves } from './play-waves';
 import { EDGE_X } from './river';
 import type { Events, Run, Systems } from './run';
+import { shackBounds } from './shack';
 import { addSupply, AMMO_OF, chapterOf, isNight } from './state';
 import { setWaterTier } from './water';
 import { objective, reservedFrom, type SpawnView } from './waves';
@@ -37,6 +40,8 @@ const HURT_GRACE = 1;
 const NIGHT_STRIP_MARGIN = 0.5;
 /** Most lying and cover zombies one wave puts down at its start. */
 const MAX_PENDING = 16;
+/** Most sleepers one wave lies in its houses. */
+const MAX_SLEEPERS = 8;
 
 export interface Play {
   update(dt: number): void;
@@ -65,6 +70,10 @@ export interface State {
   /** Where the lying and cover zombies put down for this wave wait: they wake when you pass or come near. */
   tracked: { x: number; z: number }[];
   trackedN: number;
+  /** Every house's footprint (no zombie spawns in or against one), and the wave's sleepers still asleep in them. */
+  houses: Box[];
+  sleepers: { x: number; z: number; box: Box | null }[];
+  sleeperN: number;
   controls: Controls;
   look: THREE.Vector3;
   /** Seconds the torch has been off (it recharges after a moment). */
@@ -124,6 +133,9 @@ function createState(sys: Systems, run: Run, events: Events): State {
     pendingN: 0,
     tracked: Array.from({ length: MAX_PENDING }, () => ({ x: 0, z: 0 })),
     trackedN: 0,
+    houses: area.shacks.map(shackBounds),
+    sleepers: Array.from({ length: MAX_SLEEPERS }, () => ({ x: 0, z: 0, box: null })),
+    sleeperN: 0,
     controls: createControls(sys, run, events, sense),
     look: new THREE.Vector3(),
     offFor: 0,
@@ -149,6 +161,7 @@ function createState(sys: Systems, run: Run, events: Events): State {
     torchBefore: false,
     wasInShack: false,
     blocked(x, z) {
+      if (nearBox(state.houses, x, z, SPAWN_CLEARANCE)) return true;
       for (const box of grid.near(x, z, 1)) {
         if (x >= box.minX && x <= box.maxX && z >= box.minZ && z <= box.maxZ) return true;
       }
@@ -301,6 +314,7 @@ function tickView(p: State, dt: number): void {
   goalIn.ending = run.ending !== 'no';
   goalIn.waiting = fighting && isWaiting(p);
   goalIn.lake = sys.area.lake !== undefined;
+  goalIn.houses = sys.area.housePickups !== undefined;
   hudState.goal = objective(goalIn);
   sys.hud.set(hudState);
   sys.hud.prompt(p.controls.prompt());
@@ -370,6 +384,7 @@ export function createPlay(sys: Systems, run: Run, events: Events): Play {
       p.sys.hud.setHidden(false);
       p.pendingN = 0;
       p.trackedN = 0;
+      p.sleeperN = 0;
       p.toldAboutWait = false;
       p.wasInShack = false;
       p.hitPause = false;

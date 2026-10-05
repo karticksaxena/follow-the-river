@@ -1,4 +1,6 @@
+import { HOUSE_CLEARANCE, houseSpot, nearBox, sleeperSpot } from '../houses';
 import { EDGE_X } from '../river';
+import { shackBounds } from '../shack';
 import { seeded } from '../skyline';
 import type { AreaDef, LurkerDef, PickupDef, PropPlacement, ScareDef, ShackDef } from './types';
 
@@ -120,7 +122,58 @@ function outskirts(): PropPlacement[] {
   ];
 }
 
-const PROPS: readonly PropPlacement[] = [
+/**
+ * Night 1's houses, two per wave zone on the land side (x centre -13.74 like the shacks): dark
+ * inside, so the torch is how you find the ammo. 8 m+ from every barricade and clear of the
+ * ambush spots; the wave's crate sits in the first one of each pair.
+ */
+const HOUSE_X = -13.74;
+const house = (id: string, z: number, width: 3 | 4): ShackDef => ({
+  id,
+  x: HOUSE_X,
+  z,
+  width,
+  depth: 2,
+  look: 'house',
+});
+const H1 = house('h1', -160, 3);
+const H2 = house('h2', -205, 4);
+const H3 = house('h3', -275, 3);
+const H4 = house('h4', -318, 4);
+const H5 = house('h5', -388, 3);
+const H6 = house('h6', -440, 4);
+const HOUSES: readonly ShackDef[] = [H1, H2, H3, H4, H5, H6];
+const HOUSE_BOXES = HOUSES.map(shackBounds);
+
+/** A sleeper lying in the dark in front of one of a house's supply spots. */
+const sleeper = (h: ShackDef, slot: -1 | 0 | 1): LurkerDef => ({
+  ...sleeperSpot(h, slot),
+  yaw: FACE_DOOR,
+  lying: true,
+});
+
+/** One ammo box (slot 1) and optionally arrows or a battery (slot -1) in a house. */
+function supplies(h: ShackDef, extra?: 'arrows' | 'battery'): PickupDef[] {
+  const box = houseSpot(h, 1);
+  const list: PickupDef[] = [{ id: `${h.id}-ammo`, kind: 'ammo', ...box }];
+  if (extra) list.push({ id: `${h.id}-${extra}`, kind: extra, ...houseSpot(h, -1) });
+  return list;
+}
+
+const HOUSE_PICKUPS: readonly PickupDef[] = [
+  ...supplies(H1, 'arrows'),
+  ...supplies(H2, 'battery'),
+  ...supplies(H3),
+  ...supplies(H4),
+  ...supplies(H5, 'arrows'),
+  ...supplies(H6),
+];
+
+/** Scenery stays 1.5 m clear of every house. */
+const clearOfHouses = (list: PropPlacement[]): PropPlacement[] =>
+  list.filter((p) => !nearBox(HOUSE_BOXES, p.x, p.z, HOUSE_CLEARANCE));
+
+const PROPS: readonly PropPlacement[] = clearOfHouses([
   ...row('roads', 'road-straight', 12, -500, 6, ROAD_X, { yaw: Math.PI / 2 }),
   ...row('roads', 'light-square', 10, -495, 18, LIGHT_X),
   ...streetProps(),
@@ -128,7 +181,7 @@ const PROPS: readonly PropPlacement[] = [
   ...barricade(),
   ...outskirts(),
   { kit: 'survival', model: 'bedroll', x: -0.9, z: -113.5, yaw: 0.5 },
-];
+]);
 
 const SHACKS: readonly ShackDef[] = [
   { id: 's1', x: -13.74, z: -14, width: 3, depth: 2 },
@@ -136,6 +189,7 @@ const SHACKS: readonly ShackDef[] = [
   { id: 's3', x: -13.74, z: -52, width: 3, depth: 2 },
   { id: 's4', x: -13.74, z: -74, width: 3, depth: 2 },
   { id: 's5', x: -13.74, z: -96, width: 3, depth: 2 },
+  ...HOUSES,
 ];
 
 const PICKUPS: readonly PickupDef[] = [
@@ -190,7 +244,8 @@ export const CITY: AreaDef = {
         { z: -160, count: 2, kind: 'lying', x: -4, at: -185 },
         { z: -205, count: 1, kind: 'behind' },
       ],
-      crate: { x: -1, gun: 'pistol' },
+      crate: { x: -1, gun: 'pistol', house: 'h1' },
+      sleepers: [sleeper(H1, 0), sleeper(H2, 0), sleeper(H2, -1)],
     },
     {
       z: -249,
@@ -204,7 +259,8 @@ export const CITY: AreaDef = {
         { z: -275, count: 2, kind: 'lying', x: -6, at: -300 },
         { z: -320, count: 2, kind: 'behind' },
       ],
-      crate: { x: -1, gun: 'shotgun' },
+      crate: { x: -1, gun: 'shotgun', house: 'h3' },
+      sleepers: [sleeper(H3, 0), sleeper(H4, 0), sleeper(H4, -1)],
     },
     {
       z: -364,
@@ -219,7 +275,8 @@ export const CITY: AreaDef = {
         { z: -420, count: 3, kind: 'lying', x: -5, at: -445 },
         { z: -440, count: 2, kind: 'behind' },
       ],
-      crate: { x: -1 },
+      crate: { x: -1, house: 'h5' },
+      sleepers: [sleeper(H5, 0), sleeper(H6, 0), sleeper(H6, -1)],
     },
   ],
   gate: {
@@ -235,6 +292,7 @@ export const CITY: AreaDef = {
   props: PROPS,
   shacks: SHACKS,
   pickups: PICKUPS,
+  housePickups: HOUSE_PICKUPS,
   lurkers: LURKERS,
   scares: SCARES,
 };

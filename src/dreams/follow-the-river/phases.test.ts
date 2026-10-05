@@ -30,7 +30,7 @@ describe('beginPhase', () => {
     const save = { ...freshRun(), phase: 'night1' as const };
     const f = {
       sys: {
-        horde: { reset: vi.fn(), spawn: vi.fn() },
+        horde: { reset: vi.fn(), spawn: vi.fn(), setHouses: vi.fn() },
         bow: { reset: vi.fn() },
         fish,
         pickups: { place: vi.fn() },
@@ -45,6 +45,7 @@ describe('beginPhase', () => {
           waves: [],
           pickups: [],
           lurkers: [],
+          shacks: [],
           nightStart: { x: 0, z: 0, yaw: 0 },
           daySpawn: { x: 0, z: 0, yaw: 0 },
         },

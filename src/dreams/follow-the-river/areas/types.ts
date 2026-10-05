@@ -24,6 +24,8 @@ export interface ShackDef {
   z: number;
   width: number;
   depth: number;
+  /** 'shack' (default): rusty corrugated metal. 'house': dull painted planks, a small house or store. */
+  look?: 'shack' | 'house';
 }
 export type PickupKind = 'battery' | 'arrows' | 'fishPack' | 'tape' | 'ammo' | 'gun' | 'crate';
 export interface PickupDef {
@@ -75,8 +77,10 @@ export interface WaveDef {
   faster: number;
   /** Ambushes set off along the zone, by trigger z (downstream order); they count toward the quota. */
   ambushes: readonly AmbushDef[];
-  /** The crate's x on the bank, and the gun inside, if any. */
-  crate: { x: number; gun?: GunKind };
+  /** The crate's x on the bank, and the gun inside, if any; `house` (a shack id) puts it inside that house instead. */
+  crate: { x: number; gun?: GunKind; house?: string };
+  /** Extras asleep (lying) in the dark when the wave starts: not part of the quota, never needed to clear it. */
+  sleepers?: readonly LurkerDef[];
 }
 
 /** A kit piece for a barricade. */
@@ -131,5 +135,7 @@ export interface AreaDef {
   shacks: readonly ShackDef[];
   pickups: readonly PickupDef[];
   lurkers: readonly LurkerDef[];
+  /** Night supplies inside the night's houses (the wave crates and edge supplies come from waves.ts). */
+  housePickups?: readonly PickupDef[];
   scares: readonly ScareDef[];
 }

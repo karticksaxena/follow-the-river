@@ -6,6 +6,7 @@ import type { WaveDef } from './areas/types';
 import { NIGHT_DIFFICULTY } from './difficulty';
 import { spawnFor } from './flow';
 import { EDGE_X } from './river';
+import { shackBounds } from './shack';
 import {
   ambushPlace,
   ambushSpot,
@@ -363,6 +364,10 @@ describe('edge supplies and the objective', () => {
     expect(objective(o)).toMatch(/Follow the river/);
     expect(objective({ ...o, fighting: true, wave: 2 })).not.toMatch(/left/);
     expect(objective({ ...o, fighting: true })).toMatch(/Kill them all/);
+    expect(objective({ ...o, fighting: true })).not.toMatch(/houses/);
+    expect(objective({ ...o, fighting: true, houses: true })).toBe(
+      'Kill them all. Search the houses for ammo. The barricade falls when the wave is dead.',
+    );
     expect(objective({ ...o, night: false })).toMatch(/Search for supplies/);
     expect(objective({ ...o, lake: true, wave: 3 })).toMatch(/Mom is waiting/);
     expect(objective({ ...o, ending: true })).toBe('');
@@ -448,6 +453,21 @@ describe('wave layout', () => {
     expect(crates.map((c) => c.gun ?? null)).toEqual(['pistol', 'shotgun', null]);
     expect(waveCrates(SUBURBS).map((c) => c.gun ?? null)).toEqual([null, 'rifle', null]);
     expect(new Set(crates.map((c) => c.id)).size).toBe(crates.length);
+  });
+
+  it('puts a wave crate inside its house when it names one, else on the road', () => {
+    const crates = waveCrates(CITY);
+    const houses = ['h1', 'h3', 'h5'].map((id) => CITY.shacks.find((h) => h.id === id));
+    crates.forEach((c, i) => {
+      const h = houses[i];
+      if (!h) throw new Error('house');
+      const b = shackBounds(h);
+      expect(c.x).toBeGreaterThan(b.minX + 1);
+      expect(c.x).toBeLessThan(b.maxX - 1);
+      expect(c.z).toBeGreaterThan(b.minZ + 1);
+      expect(c.z).toBeLessThan(b.maxZ - 1);
+    });
+    expect(waveCrates(SUBURBS).map((c) => c.x)).toEqual([-1, -1, -1]);
   });
 
   it('after a death you start just past the last barricade down', () => {

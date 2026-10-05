@@ -19,10 +19,13 @@ const ROOF_THICKNESS = 0.25;
 const ROOF_OVERHANG = 0.3;
 /** Roof tilt about z (radians): rises toward -X so rain runs off the door side. */
 const ROOF_SLOPE = 0.05;
-const WALL_COLOR = 0x6a625a;
-const STRIPE_COLOR = '#4a443e';
 /** Corrugation stripes are ~10 cm wide: the 64 px texture (8 px per stripe) covers 0.8 m. */
 const TEXTURE_METRES = 0.8;
+/** Wall paint (tuning knobs): the shack's rusty metal, the house's dull weathered planks (never bright). */
+const LOOKS = {
+  shack: { wall: 0x6a625a, stripe: '#4a443e', every: 8 },
+  house: { wall: 0x5f5f52, stripe: '#3a3b32', every: 16 },
+} as const;
 const FLOOR_COLOR = 0x2c2a26;
 // Standard (not Lambert) so the shacks receive scene.environment light like everything else.
 const SHACK_ROUGHNESS = 0.75;
@@ -74,31 +77,34 @@ export function shackColliders(def: ShackDef): Box[] {
   ];
 }
 
-let metal: THREE.MeshStandardMaterial | null = null;
+const materials: Partial<Record<keyof typeof LOOKS, THREE.MeshStandardMaterial>> = {};
 
-/** One shared dark rusty corrugated-metal material, built on first use. */
-function metalMaterial(): THREE.MeshStandardMaterial {
-  if (metal) return metal;
+/** One shared dark weathered wall material per look, built on first use. */
+function wallMaterial(look: keyof typeof LOOKS): THREE.MeshStandardMaterial {
+  const cached = materials[look];
+  if (cached) return cached;
+  const { wall: color, stripe, every } = LOOKS[look];
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
   const ctx = canvas.getContext('2d');
   if (ctx) {
-    ctx.fillStyle = `#${WALL_COLOR.toString(16)}`;
+    ctx.fillStyle = `#${color.toString(16)}`;
     ctx.fillRect(0, 0, 64, 64);
-    ctx.fillStyle = STRIPE_COLOR;
-    for (let x = 0; x < 64; x += 8) ctx.fillRect(x, 0, 2, 64);
+    ctx.fillStyle = stripe;
+    for (let x = 0; x < 64; x += every) ctx.fillRect(x, 0, 2, 64);
   }
   const map = new THREE.CanvasTexture(canvas);
   map.wrapS = THREE.RepeatWrapping;
   map.wrapT = THREE.RepeatWrapping;
   map.colorSpace = THREE.SRGBColorSpace;
-  metal = new THREE.MeshStandardMaterial({
+  const material = new THREE.MeshStandardMaterial({
     map,
     roughness: SHACK_ROUGHNESS,
-    metalness: SHACK_METALNESS,
+    metalness: look === 'house' ? 0 : SHACK_METALNESS,
   });
-  return metal;
+  materials[look] = material;
+  return material;
 }
 
 /** A slab covering `box` between heights y0 and y1; UVs are in metres so stripes stay ~10 cm. */
@@ -134,12 +140,12 @@ function solid(geometries: THREE.BufferGeometry[], material: THREE.Material): TH
  * (The Kenney metal wall pieces are open scaffolding, so they are not used.)
  */
 export function addShack(scene: THREE.Scene, def: ShackDef): Promise<void> {
-  const material = metalMaterial();
+  const material = wallMaterial(def.look ?? 'shack');
   const colliders = shackColliders(def);
-  const walls = colliders.map((box) => slab(box, 0, WALL_HEIGHT));
+  const slabs = colliders.map((box) => slab(box, 0, WALL_HEIGHT));
   const door = colliders[3];
   const above = { ...door, minZ: door.maxZ, maxZ: colliders[4].minZ };
-  walls.push(slab(above, DOOR_HEIGHT, WALL_HEIGHT));
+  slabs.push(slab(above, DOOR_HEIGHT, WALL_HEIGHT));
   const b = shackBounds(def);
   const roofGeometry = new THREE.BoxGeometry(
     b.maxX - b.minX + 2 * ROOF_OVERHANG,
@@ -159,6 +165,6 @@ export function addShack(scene: THREE.Scene, def: ShackDef): Promise<void> {
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(def.x, 0.02, def.z);
   floor.receiveShadow = true;
-  scene.add(solid(walls, material), solid([metersToUv(roofGeometry)], material), floor);
+  scene.add(solid(slabs, material), solid([metersToUv(roofGeometry)], material), floor);
   return Promise.resolve();
 }

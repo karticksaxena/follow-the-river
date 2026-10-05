@@ -12,14 +12,16 @@ export type HintId =
   | 'shotgun'
   | 'rifle'
   | 'wave'
+  | 'waveHouse'
   | 'clear'
+  | 'night1'
   | 'night2'
   | 'night3';
 
 /** Player-paced pages, each shown once per run (ids are kept in `RunState.hints`). */
 export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
   pickup: [
-    'Things you can use glow faintly in the dark: batteries, arrows, fish packs.',
+    'Batteries, arrows and fish packs lie about. In the dark, your torch finds them.',
     'Walk up to one and press E to pick it up.',
     'Click to shoot your bow. F turns your flashlight on and off.',
   ],
@@ -46,9 +48,15 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
     "Dras hunts near you: she takes some, you must kill the rest. Out of ammo? Lead them to the water's edge and keep moving.",
   ],
   wave: ['They are coming, and they will keep coming. Find the crate.'],
+  waveHouse: [
+    'They are coming, and they will keep coming. The crate is in one of the houses here: take your torch.',
+  ],
   clear: ['The barricade is down. Keep going downstream.'],
   hurt: ['You are hurt. Three hits and you are dead.'],
   tape: ["A video tape. Mom's handwriting on the label."],
+  night1: [
+    "Ammo is scarce. Search the dark houses along the road with your torch: ammo, arrows and each wave's crate are inside. Mind the corners.",
+  ],
   night2: ['Corn hides them. Listen.'],
   night3: ['The lake. Mom is waiting at the lake.'],
   pistol: [

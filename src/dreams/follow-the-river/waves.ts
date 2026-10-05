@@ -3,6 +3,7 @@ import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
 import type { AmbushDef, AreaDef, GatePiece, PickupDef, WaveDef } from './areas/types';
 import type { DifficultyTuning } from './difficulty';
+import { houseSpot } from './houses';
 import { KIT_SCALE, kitUrl } from './kits';
 import { EDGE_X } from './river';
 
@@ -288,15 +289,18 @@ export function ambushSpot(
   return { x: clampX(minX + random() * 3), z: Math.max(floor, player.z - d) };
 }
 
-/** The night's crates: one just past each wave's start (their ids are per area and wave). */
+/** The night's crates (ids are per area and wave): inside the wave's house if it has one, else just past the wave's start. */
 export function waveCrates(area: AreaDef): PickupDef[] {
-  return area.waves.map((w, i) => ({
-    id: `${area.id}-crate-${i + 1}`,
-    kind: 'crate' as const,
-    x: w.crate.x,
-    z: w.z - 2,
-    ...(w.crate.gun ? { gun: w.crate.gun } : {}),
-  }));
+  return area.waves.map((w, i) => {
+    const house = area.shacks.find((s) => s.id === w.crate.house);
+    const at = house ? houseSpot(house, 0) : { x: w.crate.x, z: w.z - 2 };
+    return {
+      id: `${area.id}-crate-${i + 1}`,
+      kind: 'crate' as const,
+      ...at,
+      ...(w.crate.gun ? { gun: w.crate.gun } : {}),
+    };
+  });
 }
 
 /** Small supplies at the water's edge, three per zone: something to run for while the wave comes. */
@@ -322,10 +326,14 @@ export function objective(o: {
   /** Nothing of this wave is alive and only ambushes not yet sprung remain. */
   waiting?: boolean;
   lake: boolean;
+  /** The night has dark houses with ammo in them. */
+  houses?: boolean;
 }): string {
   if (o.ending) return '';
   if (!o.night) return 'Search for supplies. Rest by the campfire when you are ready.';
   if (o.fighting && o.waiting) return 'They are waiting further on. Keep moving downstream.';
+  if (o.fighting && o.houses)
+    return 'Kill them all. Search the houses for ammo. The barricade falls when the wave is dead.';
   if (o.fighting) return 'Kill them all. The barricade falls when the wave is dead.';
   if (o.lake && o.wave >= o.waves) return 'Follow the river to the lake. Mom is waiting.';
   return 'Follow the river. Keep moving downstream.';

@@ -2,6 +2,7 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import * as THREE from 'three/webgpu';
 import { resolveCircle } from '../../../engine/collide';
 import type { BoxGrid } from '../../../engine/grid';
+import type { Interior } from '../../../engine/interiors';
 import type { SkinnedAsset } from '../../../engine/models';
 import { EDGE_X } from '../river';
 import {
@@ -14,6 +15,7 @@ import {
   type Tuning,
 } from './brain';
 import { addRim, CLIP_FOR, findHeadBone, LOOPING, pickOutfit } from './look';
+import { aimAt } from './route';
 import { steer } from './steer';
 import { THROWN, thrownPose } from './thrown';
 
@@ -39,6 +41,8 @@ export interface Body {
   heard: boolean;
   /** Body hits taken so far (see `hitKills`). */
   wounds: number;
+  /** An extra asleep in a house (not part of the wave): see `Horde.sleepingCount`. */
+  sleeper: boolean;
   /** Thrown by the orca (thrown.ts): seconds since, where from, the sideways push (m/s), and the splash is due. */
   fly: number;
   fromX: number;
@@ -61,6 +65,10 @@ export interface Scratch {
   dir: { x: number; z: number };
   /** Reused out parameter for `resolveCircle`. */
   pos: { x: number; z: number };
+  /** Reused out parameter for `aimAt`: where the zombie heads (the player, or a door). */
+  aim: { x: number; z: number };
+  /** The buildings whose doors zombies use (route.ts). */
+  houses: readonly Interior[];
   neighbours: Float32Array;
   count: number;
 }
@@ -111,6 +119,7 @@ export function createBody(i: number, assets: Record<'m' | 'f', SkinnedAsset>): 
     order: 0,
     heard: false,
     wounds: 0,
+    sleeper: false,
     fly: 0,
     fromX: 0,
     fromZ: 0,
@@ -197,7 +206,8 @@ export function move(
   const lunging = intent === 'strike' && b.mind.state === 'attack';
   if (intent === 'walk' || intent === 'run' || lunging) {
     const speed = b.tuning.speed * (lunging ? LUNGE : 1);
-    steer(b.x, b.z, player.x, player.z, s.neighbours, s.count, s.dir);
+    aimAt(s.houses, b.x, b.z, player.x, player.z, s.aim);
+    steer(b.x, b.z, s.aim.x, s.aim.z, s.neighbours, s.count, s.dir);
     const next = resolveCircle(
       b.x + s.dir.x * speed * dt,
       b.z + s.dir.z * speed * dt,

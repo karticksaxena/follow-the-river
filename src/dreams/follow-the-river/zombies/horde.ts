@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import type { AudioBus } from '../../../engine/audio';
 import type { BoxGrid } from '../../../engine/grid';
+import type { Interior } from '../../../engine/interiors';
 import { loadSkinned, type SkinnedAsset } from '../../../engine/models';
 import { inCone, type Vec3 } from '../../../engine/ray';
 import { characterUrl } from '../kits';
@@ -32,7 +33,16 @@ export interface PlayerSense {
 
 export interface Horde {
   /** Places a zombie from the pool (a never-used or long-dead slot). Returns its id, or −1 when full. */
-  spawn(x: number, z: number, yaw: number, tuning: Tuning, lying?: boolean): number;
+  spawn(
+    x: number,
+    z: number,
+    yaw: number,
+    tuning: Tuning,
+    lying?: boolean,
+    sleeper?: boolean,
+  ): number;
+  /** The buildings whose doors zombies walk through to reach a player on the other side of the walls. */
+  setHouses(houses: readonly Interior[]): void;
   update(dt: number, player: PlayerSense, onHit: (damage: number) => void): void;
   rayHit(
     origin: Vec3,
@@ -60,6 +70,8 @@ export interface Horde {
   aliveCount(): number;
   /** Alive and awake: not lying down and not standing idle (rising, chasing, hitting, stunned). */
   awakeCount(): number;
+  /** Alive sleepers (spawned with `sleeper`) still lying down: extras the wave does not wait for. */
+  sleepingCount(): number;
   reset(): void;
   dispose(): void;
 }
@@ -184,6 +196,7 @@ function spawnZombie(
   yaw: number,
   tuning: Tuning,
   lying: boolean,
+  sleeper: boolean,
 ): number {
   const id = freeSlot(h.bodies);
   if (id < 0) return -1;
@@ -194,6 +207,7 @@ function spawnZombie(
   b.order = ++h.seq;
   b.heard = false;
   b.wounds = 0;
+  b.sleeper = sleeper;
   b.x = x;
   b.y = 0;
   b.z = z;
@@ -326,6 +340,12 @@ function awakeCount(bodies: readonly Body[]): number {
   return n;
 }
 
+function sleepingCount(bodies: readonly Body[]): number {
+  let n = 0;
+  for (const b of bodies) if (b.sleeper && b.active && b.mind.state === 'lying') n++;
+  return n;
+}
+
 function resetHorde(h: HordeState): void {
   h.voices.stopAll();
   for (const b of h.bodies) park(b);
@@ -360,6 +380,8 @@ function createState(
       senses: { distance: 0, lit: false, heard: false },
       dir: { x: 0, z: 0 },
       pos: { x: 0, z: 0 },
+      aim: { x: 0, z: 0 },
+      houses: [],
       neighbours: new Float32Array(capacity * 2),
       count: 0,
     },
@@ -386,7 +408,11 @@ export async function createHorde(
   const h = createState(scene, audio, grid, groans, capacity, { m, f });
   const { bodies } = h;
   return {
-    spawn: (x, z, yaw, tuning, lying = false) => spawnZombie(h, x, z, yaw, tuning, lying),
+    spawn: (x, z, yaw, tuning, lying = false, sleeper = false) =>
+      spawnZombie(h, x, z, yaw, tuning, lying, sleeper),
+    setHouses(houses) {
+      h.s.houses = houses;
+    },
     update: (dt, player, onHit) => updateHorde(h, dt, player, onHit),
     rayHit: (origin, dir, maxDistance) => rayHitHorde(bodies, origin, dir, maxDistance),
     hurt: (id, head) => hurtBody(bodies[id], head),
@@ -417,6 +443,7 @@ export async function createHorde(
     },
     aliveCount: () => aliveCount(bodies),
     awakeCount: () => awakeCount(bodies),
+    sleepingCount: () => sleepingCount(bodies),
     reset: () => resetHorde(h),
     dispose: () => disposeHorde(h),
   };

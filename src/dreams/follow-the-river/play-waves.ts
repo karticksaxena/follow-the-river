@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import type { AmbushDef, WaveDef } from './areas/types';
+import type { AmbushDef, LurkerDef, WaveDef } from './areas/types';
 import { DIFFICULTY, nightTuning } from './difficulty';
 import { isDry, styleFor, waveBudget } from './fish-parts';
 import type { State } from './play';
@@ -21,6 +21,8 @@ const AMBUSH_ALERT = 6;
 const RETRY_SPAWN = 0.5;
 /** An alert this wide (m) wakes the one body at a spot. */
 const WAKE_ALERT = 1.5;
+/** A sleeper in a house wakes when you come this close (m) or step inside its house. */
+const SLEEPER_WAKE = 3;
 
 /** What the player sees now: the look direction and how far the fog lets them see. */
 function refreshView(p: State): void {
@@ -97,6 +99,38 @@ function wakeTracked(p: State): void {
   }
 }
 
+/** Lays one sleeper down in its house (an extra: the wave never waits for it). */
+function laySleeper(p: State, l: LurkerDef): void {
+  const slot = p.sleepers[p.sleeperN];
+  if (!slot || p.sys.horde.spawn(l.x, l.z, l.yaw, p.waveTuning, true, true) < 0) return;
+  slot.x = l.x;
+  slot.z = l.z;
+  slot.box =
+    p.houses.find((b) => l.x > b.minX && l.x < b.maxX && l.z > b.minZ && l.z < b.maxZ) ?? null;
+  p.sleeperN++;
+}
+
+/** The sleeper whose house you entered, or that you came within 3 m of, wakes and hunts like the rest. */
+function wakeSleepers(p: State): void {
+  const { sys, sense } = p;
+  for (let i = p.sleeperN - 1; i >= 0; i--) {
+    const q = p.sleepers[i];
+    if (!q) continue;
+    const { box } = q;
+    const entered =
+      box !== null &&
+      sense.x > box.minX &&
+      sense.x < box.maxX &&
+      sense.z > box.minZ &&
+      sense.z < box.maxZ;
+    if (!entered && Math.hypot(sense.x - q.x, sense.z - q.z) >= SLEEPER_WAKE) continue;
+    sys.horde.alert(q.x, q.z, WAKE_ALERT);
+    p.sleeperN--;
+    const last = p.sleepers[p.sleeperN];
+    if (last) Object.assign(q, last); // ponytail: swap-remove keeps the list allocation-free
+  }
+}
+
 /** A wave begins: tuning fixed for it, and its lying and cover zombies are put in place (queued while in sight). */
 function startWave(p: State, wave: number): void {
   const { sys } = p;
@@ -108,6 +142,8 @@ function startWave(p: State, wave: number): void {
   p.zone.gateZ = def.gateZ;
   p.pendingN = 0;
   p.trackedN = 0;
+  p.sleeperN = 0;
+  for (const l of def.sleepers ?? []) laySleeper(p, l);
   for (const a of def.ambushes) {
     if (!isPlaced(a)) continue;
     for (let i = 0; i < a.count && p.pendingN < p.pending.length; i++) {
@@ -123,7 +159,7 @@ function startWave(p: State, wave: number): void {
   refreshView(p);
   flushPending(p);
   armOrca(p, def);
-  p.events.hint('wave');
+  p.events.hint(def.crate.house ? 'waveHouse' : 'wave');
 }
 
 /** Dras helps for this wave: a budget of strikes (her share of the wave), near you only. */
@@ -183,12 +219,13 @@ export function tickWaves(p: State, dt: number): void {
       flushPending(p);
     }
     if (p.trackedN > 0) wakeTracked(p);
+    if (p.sleeperN > 0) wakeSleepers(p);
   }
   const event = stepWaves(
     run.waves,
     sys.area.waves,
     sense.z,
-    sys.horde.aliveCount() + p.pendingN,
+    sys.horde.aliveCount() + p.pendingN - sys.horde.sleepingCount(), // sleepers are extras
     dt,
     p.waveD,
     Math.random,

@@ -9,6 +9,7 @@ import { applyLighting, LIGHTING, setFogFar } from './lighting';
 import { sicknessAt } from './orca-sick';
 import type { Run, Systems } from './run';
 import { shackAt } from './scares';
+import { shackInterior } from './shack';
 import {
   chapterOf,
   clearWave,
@@ -99,8 +100,11 @@ export function beginPhase(f: Flow): void {
   };
   fish.setSickness(sicknessAt(save.phase, run.live.eaten));
   sys.gates.set(cleared);
-  run.pickups = night ? [...waveCrates(area), ...edgePickups(area)] : area.pickups;
+  run.pickups = night
+    ? [...waveCrates(area), ...edgePickups(area), ...(area.housePickups ?? [])]
+    : area.pickups;
   pickups.place(run.pickups, run.taken);
+  horde.setHouses(area.shacks.map(shackInterior)); // zombies leave and enter through the doors
   if (!night)
     for (const l of area.lurkers)
       horde.spawn(l.x, l.z, l.yaw, dayTuning(ctx.difficulty()), l.lying);
@@ -123,7 +127,7 @@ const DAY_CARD: Readonly<Record<string, string>> = {
 function phaseHints(f: Flow): string[] {
   const { phase } = f.save;
   if (!isNight(phase)) return [...hintPages(f, 'pickup')];
-  const own = chapterOf(phase) === 2 ? 'night2' : chapterOf(phase) === 3 ? 'night3' : null;
+  const own = (['night1', 'night2', 'night3'] as const)[chapterOf(phase) - 1];
   return [...hintPages(f, 'night'), ...(own ? hintPages(f, own) : [])];
 }
 

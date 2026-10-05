@@ -13,7 +13,21 @@ import {
 
 const def = { id: 's1', x: -14, z: -20, width: 3, depth: 2 };
 
+const wall = (s: THREE.Scene): THREE.Material | THREE.Material[] | undefined =>
+  s.children.find((c): c is THREE.Mesh => c instanceof THREE.Mesh)?.material;
+
 describe('shack', () => {
+  it('builds a house with the same walls and door as a shack, in its own wall material', async () => {
+    vi.stubGlobal('document', { createElement: () => ({ getContext: () => null }) });
+    const a = new THREE.Scene();
+    const b = new THREE.Scene();
+    await addShack(a, def);
+    await addShack(b, { ...def, look: 'house' });
+    vi.unstubAllGlobals();
+    expect(wall(a)).not.toBe(wall(b));
+    expect(shackColliders({ ...def, look: 'house' })).toEqual(shackColliders(def));
+  });
+
   it('has a footprint of width × depth tiles centred on (x, z)', () => {
     const b = shackBounds(def);
     expect(b.maxX - b.minX).toBeCloseTo(2 * SHACK_TILE); // depth runs along x (door faces +X)
