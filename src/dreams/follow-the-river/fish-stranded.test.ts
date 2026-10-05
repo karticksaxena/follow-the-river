@@ -2,10 +2,11 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { afterLift, liftTail, TAIL_LIFT_WEIGHT } from './fish-farewell';
+import { ANATOMY } from './dras-anatomy';
+import { afterLift, liftTail, TAIL_LIFT_WEIGHT, turnHead } from './fish-farewell';
 import type { FishState } from './fish-state';
-import { sag, unsag } from './fish-strand';
-import { STRAND } from './orca-strand';
+import { openJaw, sag, stepMixer } from './fish-strand';
+import { newStrand, STRAND, strandPose, strandRest } from './orca-strand';
 
 type Bytes = { buffer: ArrayBuffer; byteOffset: number; byteLength: number };
 
@@ -28,6 +29,7 @@ interface Rig {
   tail: THREE.Object3D;
   bones: THREE.Object3D[];
   scene: THREE.Object3D;
+  named: (n: string) => THREE.Object3D;
 }
 
 /** The orca as she lands: Swim -> Lunge -> Beached, the same fades as fish-strand.ts. */
@@ -68,6 +70,7 @@ async function strandedRig(): Promise<Rig> {
     tail: named('Tail2'),
     bones: STRAND.bend.bones.map(named),
     scene: gltf.scene,
+    named,
   };
 }
 
@@ -76,8 +79,12 @@ describe('Dras stranded, on the real clips', () => {
     const { mixer, actions, tail, bones, scene } = await strandedRig();
     const f = {
       ...actions,
+      mixer,
       sagBones: bones,
       sagK: 0,
+      modBones: [],
+      modQ: [],
+      modded: false,
       end: { exhaled: -1 },
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a stub with the fields these functions read
     } as unknown as FishState;
@@ -89,8 +96,7 @@ describe('Dras stranded, on the real clips', () => {
     let hi = -Infinity;
     for (let i = 0; i < 60 * 30; i++) {
       if (i % 360 === 120) liftTail(f);
-      unsag(f); // as fish.ts does before the mixer
-      mixer.update(1 / 60);
+      stepMixer(f, 1 / 60); // as fish.ts does
       sag(f, 1); // fully bent, as when she is down
       scene.updateMatrixWorld(true);
       tail.getWorldPosition(pos);
@@ -103,5 +109,65 @@ describe('Dras stranded, on the real clips', () => {
       expect(liftWeight).toBeLessThanOrEqual(TAIL_LIFT_WEIGHT);
     }
     expect(hi - lo).toBeLessThan(0.5); // before: the tail beat up and down by metres
+  });
+});
+
+describe('Dras, her jaw and head on the real clips', () => {
+  it('a jaw held open (and a head turned) never piles up, swimming or beached', async () => {
+    const rig = await strandedRig();
+    const jaw = rig.named('Jaw');
+    const head = rig.named('Head');
+    const trunk = rig.named('Spine1');
+    const trunkRest = trunk.position.clone();
+    const target = new THREE.Vector3(2, 1, 3);
+    const f = {
+      ...rig.actions,
+      mixer: rig.mixer,
+      sagBones: rig.bones,
+      sagK: 0,
+      jaw,
+      modBones: [jaw, head, trunk],
+      modQ: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()],
+      modded: false,
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a stub with the fields these functions read
+    } as unknown as FishState;
+    let worstJaw = 0;
+    let worstHead = 0;
+    for (const clip of ['swim', 'settled'] as const) {
+      if (clip === 'swim') {
+        rig.actions.swim.reset().play().setEffectiveWeight(1);
+        rig.actions.settled.stop();
+        rig.actions.lunge.stop();
+      }
+      for (let i = 0; i < 60 * 8; i++) {
+        stepMixer(f, 1 / 60);
+        const jawPosed = f.modQ[0];
+        const headPosed = f.modQ[1];
+        sag(f, clip === 'settled' ? 1 : 0);
+        turnHead(head, trunk, trunkRest, target, 1);
+        openJaw(f, 1);
+        worstJaw = Math.max(worstJaw, jaw.quaternion.angleTo(jawPosed));
+        worstHead = Math.max(worstHead, head.quaternion.angleTo(headPosed));
+      }
+    }
+    expect(worstJaw).toBeLessThanOrEqual(ANATOMY.jawOpen + 1e-4); // before: it spun on, a little more every frame
+    expect(worstHead).toBeLessThan(1);
+  });
+
+  it('lying on the shore her root never bobs', () => {
+    const s = newStrand(
+      { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 },
+      strandRest(0, 0, () => 0),
+      0,
+    );
+    const out = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+    s.t = s.ends.leap + 1;
+    const y0 = strandPose(s, out).y;
+    let drift = 0;
+    for (let t = 0; t < 10; t += 0.1) {
+      s.t = s.ends.leap + 1 + t;
+      drift = Math.max(drift, Math.abs(strandPose(s, out).y - y0));
+    }
+    expect(drift).toBeLessThan(0.03);
   });
 });

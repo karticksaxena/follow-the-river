@@ -89,7 +89,7 @@ describe('the last leap', () => {
     expect(half).toBeLessThan(CRUISE_Y);
   });
 
-  it('dips, leaps, lands on its rest pose and breathes until still', () => {
+  it('dips, leaps, lands on its rest pose and lies there', () => {
     const s = newStrand(from, rest, CRUISE_Y);
     const { dip, leap } = strandPhases(s);
     s.t = dip;
@@ -104,10 +104,9 @@ describe('the last leap', () => {
     expect([out.x, out.z]).toEqual([rest.x, rest.z]);
     expect(beached(s)).toBe(true);
     s.t += 1;
-    const breathing = strandPose(s, out).y;
+    expect(strandPose(s, out).y).toBeCloseTo(rest.y); // she lies still: no root bob
     s.still = true;
     expect(strandPose(s, out).y).toBeCloseTo(rest.y);
-    expect(breathing).not.toBeCloseTo(rest.y, 3);
   });
 
   it('faces the shore by the time she leaps', () => {

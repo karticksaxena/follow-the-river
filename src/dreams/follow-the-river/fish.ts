@@ -22,16 +22,14 @@ import {
   surfaceRoll,
   surfaceTime,
   turnToward,
-  WAKE_SIZE,
-  wakeScroll,
 } from './fish-parts';
 import { callOut, playSplash } from './fish-sound';
 import { createState, type Finale, type FishState, type Rise } from './fish-state';
-import { blowOut, openJaw, stepMist, stepStrand, unsag } from './fish-strand';
+import { blowOut, openJaw, placeWake, stepMist, stepMixer, stepStrand } from './fish-strand';
 import { characterUrl, propUrl } from './kits';
 import { jawAt, newGrab, stepGrab, type GrabHooks, type StrikeStyle } from './orca-grab';
 import { mistColor, SICK } from './orca-sick';
-import { beached, newStrand, strandRest, swimming } from './orca-strand';
+import { beached, newStrand, strandRest } from './orca-strand';
 import { EDGE_X, WATER_Y } from './river';
 import type { Sounds } from './sounds';
 import type { Horde } from './zombies/horde';
@@ -40,7 +38,6 @@ export type { Finale } from './fish-state';
 
 // Tuning knobs (metres, seconds); heights are relative to the river's WATER_Y.
 const TAKE_PEAK_Y = WATER_Y - 0.05;
-const WAKE_HIDE_Y = WATER_Y + 0.35; // the orca is airborne above this: no shadow
 const TAKE_TIME = 2.6;
 const FADE = 0.25;
 const LAG_Z = 6;
@@ -245,19 +242,6 @@ function endGrab(f: FishState): void {
   f.root.rotation.x = 0;
 }
 
-function placeWake(f: FishState): void {
-  // The V's tip sits by the fin and opens out behind the orca (its back is +z turned by yaw).
-  const behind = WAKE_SIZE.length / 2 - 1;
-  const { x, z } = f.root.position;
-  f.wake.position.set(x + Math.sin(f.yaw) * behind, WATER_Y + 0.02, z + Math.cos(f.yaw) * behind);
-  f.wake.rotation.set(-Math.PI / 2, f.yaw, 0, 'YXZ');
-  if (f.wake.material.map) f.wake.material.map.offset.y = wakeScroll(f.time);
-  // The wake shows while she swims in across the lake, never once she is leaping or lying.
-  f.wake.visible = f.strand
-    ? swimming(f.strand)
-    : f.root.position.y < WAKE_HIDE_Y && f.finale === 'no';
-}
-
 function startTake(f: FishState): void {
   f.takePending = false;
   callOut(f); // a soft one: the pack reached her
@@ -317,8 +301,7 @@ function updateFish(
   // the heading turned NaN for good and the orca was never drawn again.
   if (!(dt > 0)) return;
   f.time += dt;
-  unsag(f);
-  f.mixer.update(dt);
+  stepMixer(f, dt);
   if (horde && horde.onSplash !== f.onThrown) horde.onSplash = f.onThrown;
   if (!f.placed) {
     f.placed = true;

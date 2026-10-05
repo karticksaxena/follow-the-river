@@ -21,8 +21,6 @@ export const STRAND = {
   launchDepth: 1.8,
   /** Height of the leap above the straight line to its resting pose. */
   arc: 1.6,
-  /** Slow breaths while it lies there: height (m) and breaths per second. */
-  breath: { amp: 0.04, rate: 0.25 },
   /**
    * Once beached her spine and tail sag: each of these bones turns about its X axis by `-angle`
    * (tail down) on top of the Beached clip, so the chin, pectoral tips and tail all lie on the slope.
@@ -189,9 +187,6 @@ export function strandPose(s: Strand, out: GrabPose): GrabPose {
   out.y = lerp(launchY, rest.y, ease) + STRAND.arc * Math.sin(Math.PI * u);
   out.yaw = rest.yaw;
   out.pitch = lerp(0.6, rest.pitch, u);
-  if (u >= 1 && !s.still) {
-    out.y += STRAND.breath.amp * Math.sin(2 * Math.PI * STRAND.breath.rate * (s.t - ends.leap));
-  }
   return out;
 }
 

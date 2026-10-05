@@ -73,6 +73,10 @@ export interface FishState {
   readonly sagBones: readonly THREE.Object3D[];
   /** The sag (0..1) applied to those bones last frame (see `unsag`). */
   sagK: number;
+  /** Jaw, head and trunk bones as the mixer left them (`modQ`, taken by `keepPose`), put back by `restorePose` before the next `mixer.update`. */
+  readonly modBones: readonly THREE.Object3D[];
+  readonly modQ: readonly THREE.Quaternion[];
+  modded: boolean;
   /** Where the zombie she struck last was (read-only for the ending), or null. */
   lastStrike: { x: number; z: number } | null;
   readonly buffer: Float32Array;
@@ -231,6 +235,13 @@ export function createState(
     eye: eyeOf(body),
     sagBones: STRAND.bend.bones.flatMap((n) => body.getObjectByName(n) ?? []),
     sagK: 0,
+    modBones: [
+      body.getObjectByName('Jaw'),
+      body.getObjectByName('Head'),
+      body.getObjectByName('Spine1'),
+    ].flatMap((b) => b ?? []),
+    modQ: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()],
+    modded: false,
     lastStrike: null,
     buffer,
     packFrom: new THREE.Vector3(),
