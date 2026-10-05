@@ -24,6 +24,7 @@ import { createPickupMeshes, type PickupMeshes } from './pickups';
 import type { Systems } from './run';
 import { createScares } from './scares';
 import { loadSounds, type Sounds } from './sounds';
+import { compileMist } from './warm';
 import { setWaterTier } from './water';
 import { createGates } from './waves';
 import { buildWorld, type World } from './world';
@@ -81,21 +82,6 @@ function loadBodies(
     pickups,
     boathouse,
   }));
-}
-
-/** `compileAsync` skips objects off the camera's layers, so compile the mist box with only its layer on. */
-async function compileMist(
-  renderer: THREE.WebGPURenderer,
-  scene: THREE.Scene,
-  camera: THREE.Camera,
-): Promise<void> {
-  const mask = camera.layers.mask;
-  camera.layers.set(VOLUME_LAYER);
-  try {
-    await renderer.compileAsync(scene, camera);
-  } finally {
-    camera.layers.mask = mask;
-  }
 }
 
 /** Frees what a cancelled build made. Only touches the camera if the scene still owns it. */

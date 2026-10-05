@@ -21,6 +21,7 @@ import {
   type StoredRun,
 } from './state';
 import { playTape } from './tapes';
+import { readWhileWarming, warmNight } from './warm';
 import { edgePickups, newWaveState, waveCrates } from './waves';
 
 /** Lantern brightness at night (tuning knob); it is 0 by day. */
@@ -131,10 +132,15 @@ function phaseHints(f: Flow): string[] {
   return [...hintPages(f, 'night'), ...(own ? hintPages(f, own) : [])];
 }
 
-/** The title card (optional), then the phase's first-time hints. */
-export function announce(f: Flow, title: boolean): void {
+/** The title card (optional), then the phase's first-time hints (marks the hints seen). */
+function announcePages(f: Flow, title: boolean): string[] {
   const phase = f.save.phase;
-  const pages = [...(title ? [DAY_CARD[phase] ?? phaseTitle(phase)] : []), ...phaseHints(f)];
+  return [...(title ? [DAY_CARD[phase] ?? phaseTitle(phase)] : []), ...phaseHints(f)];
+}
+
+/** Shows the title card (optional), then the phase's first-time hints. */
+export function announce(f: Flow, title: boolean): void {
+  const pages = announcePages(f, title);
   if (pages.length > 0) f.sys.ctx.read(pages);
 }
 
@@ -152,10 +158,16 @@ export async function waitForDark(f: Flow): Promise<void> {
   if (f.disposed) return;
   beginPhase(f);
   f.run.frozen = true;
+  // On black: the title and hints are read while the night's shaders compile, so nothing hitches after.
+  await readWhileWarming(
+    ctx,
+    announcePages(f, true),
+    warmNight(f.sys, f.run.live.supplies.battery),
+  );
+  if (f.disposed) return;
   await ctx.overlay.fade(false);
   if (f.disposed) return;
   f.run.frozen = false;
-  announce(f, true);
 }
 
 /** The night is survived: save and hand over. */
