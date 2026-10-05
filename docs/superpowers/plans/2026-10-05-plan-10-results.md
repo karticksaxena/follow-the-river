@@ -54,3 +54,14 @@ Shots supplied ÷ shots needed (the player's kills × 1.6):
   - there are no unit tests for the sleeper lay/wake counts (the horde needs GLB assets);
   - a lying zombie at 40 m takes a body hit before a head hit.
 - Process note: during P4, two uncommitted controller edits vanished from disk (probably reset by the implementer). They were re-applied and committed. Commit before dispatching.
+
+## Plan 11 - Kartik's evening play-test (same day)
+| Ask | Fix | Commit |
+|---|---|---|
+| The game hangs when Night 1 starts | The night's title and hints are read on black while the night warms up: compileAsync, then real frames facing the river (every zombie outfit, the orca and the weapons on show), then a few in the player's view. Auto quality ignores those frames. Measured: worst frame from fade-in through wave 1 is 29 ms (was 880 ms, then 100-400 ms freezes) | 1788ad9, 0efc7c9, e0fb882, 5efea01 |
+| The shed still shows its walls | The interior mask now covers the inner wall faces (they were in its fade at 40% daylight); faint linings only, a little daylight at the door. From Kartik's spot: 0.023 to 0.005 | 2616dd7, 8d12d0b |
+| Torch light from the left | Held on the right; the viewmodel is lit without it and casts no shadow (view-light.ts restored) | be41bf7 |
+| The arrow hint contradicts Normal | The hint is chosen per difficulty: a hit arrow stays in the zombie on Normal/Hard, can be picked up on Story | be41bf7 |
+| Tape 1 "dark as hell" | A dim slate room, a cold work light on Mom, a stronger tank glow: mean 0.006 to 0.085 | 2616dd7 |
+| Health after a wave | A cleared wave restores full health | be41bf7 |
+| The reflection moves with the mouse | Not reproduced. Measured world-anchored when turning and strafing, with no temporal lag on any tier and no viewmodel in the mirror. Waiting on Kartik's description | - |
