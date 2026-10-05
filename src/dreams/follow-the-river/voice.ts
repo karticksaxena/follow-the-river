@@ -239,7 +239,7 @@ export function stopVoice(): void {
   if (sound.source instanceof AudioBufferSourceNode) sound.source.stop(now + STOP_AFTER);
 }
 
-function speak(audio: AudioBus, page: string, voice: VoiceName): void {
+function buffered(audio: AudioBus, page: string, voice: VoiceName): AudioBuffer {
   const context = audio.listener.context;
   const key = `${voice}|${page}`;
   let buffer = cache.get(key);
@@ -249,7 +249,23 @@ function speak(audio: AudioBus, page: string, voice: VoiceName): void {
     buffer.copyToChannel(samples, 0);
     cache.set(key, buffer);
   }
-  playing = audio.once(buffer, VOICES[voice].volume, 'voice');
+  return buffer;
+}
+
+function speak(audio: AudioBus, page: string, voice: VoiceName): void {
+  playing = audio.once(buffered(audio, page, voice), VOICES[voice].volume, 'voice');
+}
+
+/** Synthesizes the voiced lines of `pages` now (behind black / a loader) so no page pays for it when it opens. */
+export function prepareVoices(
+  audio: AudioBus,
+  pages: readonly string[],
+  pick: (page: string) => VoiceName | null,
+): void {
+  for (const page of pages) {
+    const voice = pick(page);
+    if (voice) buffered(audio, page, voice);
+  }
 }
 
 /** Pager hooks for `ctx.read`: speaks each page in the voice `pick` chooses, stops on change and close. */

@@ -1,6 +1,7 @@
 import type { DreamContext } from '../types';
 import { playFlashback } from './flashback';
-import { voiceFor, voiceHooks } from './voice';
+import type { VoiceName } from './voice';
+import { prepareVoices, voiceFor, voiceHooks } from './voice';
 
 export const TAPES: Readonly<Record<number, readonly string[]>> = {
   1: [
@@ -33,14 +34,20 @@ export const TAPES: Readonly<Record<number, readonly string[]>> = {
   ],
 };
 
+const pick = (page: string): VoiceName | null => voiceFor(page, 'tape');
+
 /**
  * Plays a tape: its transcript pages over an animated flashback of what Mom describes (the lab,
  * the orca in its tank, the night she set it free); each quoted line is voiced as Mom on tape.
  */
 export function playTape(ctx: DreamContext, tape: number, onDone: () => void): void {
   const pages = TAPES[tape] ?? [];
-  const hooks = voiceHooks(ctx.audio, (page) => voiceFor(page, 'tape'));
+  const hooks = voiceHooks(ctx.audio, pick);
+  const prepare = (): void => prepareVoices(ctx.audio, pages, pick);
   if (tape === 1 || tape === 2 || tape === 3)
-    void playFlashback(ctx, tape, pages, hooks).then(onDone);
-  else ctx.read(pages, onDone, hooks);
+    void playFlashback(ctx, tape, pages, hooks, prepare).then(onDone);
+  else {
+    prepare();
+    ctx.read(pages, onDone, hooks);
+  }
 }

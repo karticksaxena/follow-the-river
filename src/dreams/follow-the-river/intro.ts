@@ -20,7 +20,7 @@ import { applyDim, LIGHTING } from './lighting';
 import { createMomActor, TURN_RATE, wrapAngle, type MomActor } from './mom-actor';
 import { createFilmRoll, rollStep } from './phone';
 import { lookAt } from './rig';
-import { introVoice, stopVoice, voiceHooks } from './voice';
+import { introVoice, prepareVoices, stopVoice, voiceHooks } from './voice';
 
 export type IntroStep =
   'news' | 'mom-leaves' | 'mom-back' | 'outside' | 'throw' | 'goodbye' | 'done';
@@ -454,6 +454,7 @@ export async function runIntro(
   ctx.player.teleport(AT.spawnRoom.x, AT.spawnRoom.z, YAW_TO_TV);
   ctx.stage.scene = sc.scene;
   ctx.grade('dusk');
+  prepareVoices(ctx.audio, Object.values(INTRO_PAGES).flat(), introVoice); // the TV and Mom lines, synthesized behind black
   await warmIntro(ctx, sc); // the transition is still black: every spot's first frames build here
 
   return {

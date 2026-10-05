@@ -30,7 +30,8 @@ import { atSafeSpot } from './flow';
 import { sicknessAt } from './orca-sick';
 import type { Run, Systems } from './run';
 import { addSupply, AMMO_OF, SUPPLY_LIMITS, type SupplyKind } from './state';
-import { stopVoice, voiceFor, voiceHooks } from './voice';
+import type { VoiceName } from './voice';
+import { prepareVoices, stopVoice, voiceFor, voiceHooks } from './voice';
 
 export type EndingStep =
   | 'mom'
@@ -197,6 +198,7 @@ async function buildLake(h: EndingHost, st: State): Promise<void> {
   st.scene = scene;
   st.pack ??= await loadPackOnWater(h.sys.world.scene);
   if (st.cancelled) return;
+  prepareLines(h);
   st.cast ??= createCast(scene, ctx.stage.camera, h.sys.fish);
   ctx.warmFocus(); // the depth-of-field graph compiles here, behind the black
   st.pack.visible = false;
@@ -205,6 +207,14 @@ async function buildLake(h: EndingHost, st: State): Promise<void> {
   const mom = h.sys.area.meetAt;
   if (mom) ctx.player.teleport(cam.x, cam.z, facing(cam.x, cam.z, mom.x, mom.z) + Math.PI);
   await ctx.stage.renderer.compileAsync(h.sys.world.scene, ctx.stage.camera);
+}
+
+const sceneVoice = (page: string): VoiceName | null => voiceFor(page, 'scene');
+
+/** Synthesizes Mom's lines (the fight's and the farewell's) so no page pays for it as it opens. */
+function prepareLines(h: EndingHost): void {
+  const pages = [...Object.values(ENDING_PAGES), ...Object.values(FAREWELL_PAGES)].flat();
+  prepareVoices(h.sys.ctx.audio, pages, sceneVoice);
 }
 
 const read = (h: EndingHost, st: State, pages: readonly string[]): Promise<void> =>
@@ -217,7 +227,7 @@ const read = (h: EndingHost, st: State, pages: readonly string[]): Promise<void>
         st.reading = false;
         resolve();
       },
-      voiceHooks(ctx.audio, (page) => voiceFor(page, 'scene')),
+      voiceHooks(ctx.audio, sceneVoice),
     );
   });
 
@@ -518,6 +528,7 @@ export function createEnding(h: EndingHost): Ending {
     async prepare() {
       st.scene ??= await buildEndingScene(h.sys);
       st.pack ??= await loadPackOnWater(h.sys.world.scene);
+      prepareLines(h);
     },
     warmShow() {
       const undoScene = st.scene?.warmShow();

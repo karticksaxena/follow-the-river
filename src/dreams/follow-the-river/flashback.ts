@@ -39,10 +39,11 @@ export function playFlashback(
   tape: Tape,
   pages: readonly string[],
   hooks?: PageHooks,
+  prepare?: () => void,
 ): Promise<void> {
   return new Promise((resolve) => {
     ctx.hold(); // freezes the chapter while the models load
-    void run(ctx, tape, pages, hooks, resolve);
+    void run(ctx, tape, pages, hooks, resolve, prepare);
   });
 }
 
@@ -52,6 +53,7 @@ async function run(
   pages: readonly string[],
   hooks: PageHooks | undefined,
   done: () => void,
+  prepare?: () => void,
 ): Promise<void> {
   const { stage, overlay } = ctx;
   const previous = stage.scene;
@@ -67,6 +69,7 @@ async function run(
     overlay.fade(true, FLASHBACK_FADE_MS),
   ]).finally(stopLoading);
   freeHeldFlashback(); // black now: the last tape's buffers go here, not on the cut back
+  prepare?.(); // and the voiced lines are synthesized here, not as their pages open
   if (stage.scene !== previous) {
     // The dream was quit or swapped scenes while we loaded.
     flashback?.dispose();
