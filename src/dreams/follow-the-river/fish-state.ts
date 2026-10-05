@@ -83,8 +83,9 @@ export interface FishState {
   time: number;
   surfaceIn: number; // seconds until the next surfacing
   strikes: number;
+  /** Out of ammo (see `Fish.dry`). */
+  dry: boolean;
   cooldown: number;
-  /** Seconds between strikes while armed, and how far from the water (m) it can take one. */
   /** How it strikes this night (see orca-grab.ts). */
   style: StrikeStyle;
   placed: boolean;
@@ -239,6 +240,7 @@ export function createState(
     time: 0,
     surfaceIn: nextSurfacing(Math.random()),
     strikes: 0,
+    dry: false,
     cooldown: 0,
     style: { ...NIGHT_STRIKE },
     placed: false,

@@ -3,6 +3,7 @@ import { CITY } from './areas/city';
 import { FOREST } from './areas/forest';
 import { SUBURBS } from './areas/suburbs';
 import type { WaveDef } from './areas/types';
+import { NIGHT_DIFFICULTY } from './difficulty';
 import { spawnFor } from './flow';
 import { EDGE_X } from './river';
 import {
@@ -155,10 +156,15 @@ describe('waves', () => {
   });
 
   it('keeps the planned quotas', () => {
-    expect(CITY.waves.map((w) => w.quota)).toEqual([9, 12, 15]);
+    expect(CITY.waves.map((w) => w.quota)).toEqual([13, 17, 21]);
     expect(SUBURBS.waves.map((w) => w.quota)).toEqual([11, 14, 17]);
     expect(FOREST.waves.map((w) => w.quota)).toEqual([13, 16]);
     expect(CITY.waves.map(waveTotal)).toEqual([5, 6, 10]);
+  });
+
+  it('Night 1 waves are 40% bigger, never alive past the night cap', () => {
+    expect(CITY.waves.map((w) => w.cap)).toEqual([7, 9, 11]);
+    expect(Math.max(...CITY.waves.map((w) => w.cap))).toBeLessThanOrEqual(NIGHT_DIFFICULTY[1].cap);
   });
 
   it('restarts at a checkpoint on the next wave with none sprung', () => {

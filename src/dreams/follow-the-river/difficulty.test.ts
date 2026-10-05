@@ -46,6 +46,26 @@ describe('night difficulty', () => {
   });
 });
 
+describe('body hits and the orca', () => {
+  it('body hits rise with difficulty: 1, 2, 3', () => {
+    expect([DIFFICULTY.story, DIFFICULTY.normal, DIFFICULTY.hard].map((d) => d.bodyHits)).toEqual([
+      1, 2, 3,
+    ]);
+  });
+  it('she helps less the harder it is: closer guard, smaller share, slower', () => {
+    const [s, n, h] = (['story', 'normal', 'hard'] as const).map((d) => DIFFICULTY[d].orca);
+    for (const [a, b] of [
+      [s, n],
+      [n, h],
+    ] as const) {
+      expect(b.guard).toBeLessThan(a.guard);
+      expect(b.share).toBeLessThan(a.share);
+      expect(b.armedCooldown).toBeGreaterThan(a.armedCooldown);
+      expect(b.dryCooldown).toBeGreaterThan(a.dryCooldown);
+    }
+  });
+});
+
 describe('difficulty', () => {
   it('each step up is harder on every knob', () => {
     const [s, n, h] = (['story', 'normal', 'hard'] as const).map((d) => DIFFICULTY[d]);

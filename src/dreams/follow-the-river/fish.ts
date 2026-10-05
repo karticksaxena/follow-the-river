@@ -18,6 +18,7 @@ import {
   NIGHT_STRIKE,
   pickStrike,
   smooth,
+  strikeWait,
   surfaceRoll,
   surfaceTime,
   turnToward,
@@ -34,7 +35,7 @@ import { beached, newStrand, strandRest, swimming } from './orca-strand';
 import { EDGE_X, WATER_Y } from './river';
 import type { Sounds } from './sounds';
 import type { Horde } from './zombies/horde';
-export { canThrow, cruiseHeading, FISH, pickStrike, strikesFor, styleFor } from './fish-parts';
+export { canThrow, cruiseHeading, FISH, pickStrike, styleFor } from './fish-parts';
 export type { Finale } from './fish-state';
 
 // Tuning knobs (metres, seconds); heights are relative to the river's WATER_Y.
@@ -81,9 +82,11 @@ export interface Fish {
   head(out: { x: number; y: number; z: number }): typeof out | null;
   /** True while she is out of the water: blowing, breaching, mid-strike or stranded (not just a fin). */
   readonly surfaced: boolean;
-  /** Night: strikes left this phase. */
+  /** Night: strikes left this wave (the budget; ignored while `dry`). */
   readonly strikes: number;
-  /** Arms `strikes` for the night, struck in `style` (a normal night's by default). */
+  /** Out of ammo: the budget no longer limits her, but each strike waits the style's `dryCooldown`. */
+  dry: boolean;
+  /** Arms `strikes`, struck in `style` (a normal night's by default). */
   arm(strikes: number, style?: StrikeStyle): void;
   /** Throw a pack: arc into the water, splash, the orca surfaces once to take it. */
   feed(from: Vec3): void;
@@ -183,9 +186,9 @@ function tryStrike(f: FishState, player: { x: number; z: number }, horde: Horde)
       zz = f.buffer[i * 3 + 2];
     }
   }
-  f.strikes--;
+  f.strikes = Math.max(0, f.strikes - 1);
   f.lastStrike = { x: zx, z: zz };
-  f.cooldown = f.style.cooldown;
+  f.cooldown = strikeWait(f.style, f.dry, Math.random());
   const { x, y, z } = f.root.position;
   const from = { x, y, z, yaw: f.yaw, pitch: 0 };
   f.grab = newGrab(from, id, zx, zz, f.cruiseY, f.style, f.waterline);
@@ -208,6 +211,11 @@ function stepOrcaGrab(f: FishState, dt: number, horde: Horde | null): void {
   if (!g) return;
   const before = g.t;
   const going = stepGrab(g, dt, horde, f.ground, f.hooks, f.pose);
+  if (g.swept > 0) {
+    // A night's sweep spends the budget too (the last stand's has no dry cooldown and keeps count itself).
+    if (f.style.dryCooldown !== undefined) f.strikes = Math.max(0, f.strikes - g.swept);
+    g.swept = 0;
+  }
   const { pose } = f;
   f.root.position.set(pose.x, pose.y, pose.z);
   f.root.rotation.x = pose.pitch;
@@ -329,7 +337,8 @@ function updateFish(
   else if (f.rise) stepRise(f, f.rise, dt);
   else {
     if (f.takePending) startTake(f);
-    else if (night && f.strikes > 0 && f.cooldown === 0 && horde) tryStrike(f, player, horde);
+    else if (night && (f.strikes > 0 || f.dry) && f.cooldown === 0 && horde)
+      tryStrike(f, player, horde);
     if (!f.rise && !f.grab) {
       f.surfaceIn -= dt;
       if (f.surfaceIn <= 0) startSurface(f);
@@ -342,6 +351,7 @@ function updateFish(
 
 function resetFish(f: FishState): void {
   f.strikes = 0;
+  f.dry = false;
   f.cooldown = 0;
   f.placed = false;
   f.root.visible = false;
@@ -462,9 +472,19 @@ export async function createFish(
     get lastStrike() {
       return f.lastStrike;
     },
+    get dry() {
+      return f.dry;
+    },
+    set dry(v) {
+      f.dry = v;
+    },
     arm(n, style = NIGHT_STRIKE) {
       f.strikes = n;
       f.style = { ...style };
+      // A night's wave (it has a dry wait) opens with a fresh wait, never an instant strike; any other
+      // style (the last stand's) is never dry.
+      f.dry &&= style.dryCooldown !== undefined;
+      if (style.dryCooldown !== undefined) f.cooldown = strikeWait(f.style, f.dry, Math.random());
       if (besideYou(f)) f.surfaceIn = Math.min(f.surfaceIn, nextUp(f));
     },
     setGuards(points) {

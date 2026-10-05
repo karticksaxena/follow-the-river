@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
-import type { AmbushDef } from './areas/types';
+import type { AmbushDef, WaveDef } from './areas/types';
 import { DIFFICULTY, nightTuning } from './difficulty';
+import { isDry, styleFor, waveBudget } from './fish-parts';
 import type { State } from './play';
 import {
   ambushPlace,
@@ -8,6 +9,7 @@ import {
   isPlaced,
   passedBy,
   placeOk,
+  quotaOf,
   spawnSpot,
   stepWaves,
   wavesWake,
@@ -120,7 +122,17 @@ function startWave(p: State, wave: number): void {
   }
   refreshView(p);
   flushPending(p);
+  armOrca(p, def);
   p.events.hint('wave');
+}
+
+/** Dras helps for this wave: a budget of strikes (her share of the wave), near you only. */
+function armOrca(p: State, def: WaveDef): void {
+  const { sys, run } = p;
+  const d = sys.ctx.difficulty();
+  const { quota, orca } = DIFFICULTY[d];
+  sys.fish.setGuards([sys.ctx.stage.camera.position]); // live reference: she follows you
+  sys.fish.arm(waveBudget(quotaOf(def, quota), orca.share), styleFor(run.live.fed, d));
 }
 
 /** One zombie that keeps the wave coming, on a free spot out of sight, hunting at once. */
@@ -163,6 +175,7 @@ function springAmbush(p: State, ambush: AmbushDef): void {
 /** The night's waves: start when you pass one, keep sending zombies, spring its ambushes, open the barricade when it's dead. */
 export function tickWaves(p: State, dt: number): void {
   const { sys, run, sense } = p;
+  sys.fish.dry = run.waves.fighting && isDry(run.live.supplies, run.live.guns);
   if (!run.waves.fighting) p.waveD = DIFFICULTY[sys.ctx.difficulty()];
   else {
     if (p.pendingN > 0) {
@@ -183,6 +196,7 @@ export function tickWaves(p: State, dt: number): void {
   if (!event) return;
   if (event.kind === 'start') startWave(p, event.wave);
   else if (event.kind === 'clear') {
+    sys.fish.arm(0, styleFor(run.live.fed, sys.ctx.difficulty())); // between waves she strikes nothing
     sys.gates.open(event.wave);
     p.events.checkpoint(event.wave + 1);
   } else if (event.kind === 'one') spawnOne(p);

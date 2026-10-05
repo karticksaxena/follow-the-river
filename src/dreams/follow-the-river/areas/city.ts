@@ -181,9 +181,9 @@ export const CITY: AreaDef = {
     {
       z: -134,
       gateZ: -239,
-      quota: 9,
+      quota: 13,
       every: [4, 6],
-      cap: 6,
+      cap: 7,
       faster: 0,
       ambushes: [
         { z: -134, count: 2, kind: 'street' },
@@ -195,9 +195,9 @@ export const CITY: AreaDef = {
     {
       z: -249,
       gateZ: -354,
-      quota: 12,
+      quota: 17,
       every: [3.5, 5],
-      cap: 8,
+      cap: 9,
       faster: 0.15,
       ambushes: [
         { z: -249, count: 2, kind: 'street' },
@@ -209,9 +209,9 @@ export const CITY: AreaDef = {
     {
       z: -364,
       gateZ: -469,
-      quota: 15,
+      quota: 21,
       every: [3, 4.5],
-      cap: 10,
+      cap: 11,
       faster: 0.3,
       ambushes: [
         { z: -364, count: 3, kind: 'street' },

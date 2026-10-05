@@ -2,7 +2,7 @@ import type * as THREE from 'three/webgpu';
 import type { SaveStore } from '../../engine/save';
 import type { PickupDef } from './areas/types';
 import { dayTuning, DIFFICULTY } from './difficulty';
-import { strikesFor, styleFor } from './fish';
+import { styleFor } from './fish';
 import { MAX_HEALTH, phaseTitle, spawnFor, waitQuestion } from './flow';
 import { HINTS, type HintId } from './hints';
 import { applyLighting, LIGHTING, setFogFar } from './lighting';
@@ -109,7 +109,8 @@ export function beginPhase(f: Flow): void {
   ctx.player.teleport(at.x, at.z, at.yaw);
   sys.world.lights.sky.position.set(at.x, 0, at.z); // the dome follows the player; paused frames skip that
   f.onReset(); // may reset the fish (ending.cancel), so arm her after it
-  if (night) fish.arm(strikesFor(run.live.fed), styleFor(run.live.fed));
+  // No strikes until a wave begins (play-waves.ts arms each wave's budget).
+  if (night) fish.arm(0, styleFor(run.live.fed, ctx.difficulty()));
 }
 
 /** Days 2 and 3 name their place on the title card (Day 1 stays plain). */

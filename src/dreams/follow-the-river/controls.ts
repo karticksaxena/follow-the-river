@@ -1,7 +1,8 @@
 import type * as THREE from 'three/webgpu';
 import type { PickupDef } from './areas/types';
 import { DIFFICULTY } from './difficulty';
-import { canThrow, FISH, styleFor } from './fish';
+import { canThrow, styleFor } from './fish';
+import { FED_BONUS } from './fish-parts';
 import { nearSpot } from './flow';
 import type { Gun } from './gun';
 import { collect, gunIn, isFull, nearestPickup, promptFor } from './pickups';
@@ -141,7 +142,9 @@ function throwPack(c: Ctl): void {
   c.run.live.fed++;
   c.sys.fish.feed(c.sense.eye);
   if (!isNight(c.run.phase)) return;
-  c.sys.fish.arm(c.sys.fish.strikes + FISH.strikesPerPack, styleFor(c.run.live.fed));
+  // Hungrier at once; mid-wave she also gets two more strikes (between waves she strikes nothing).
+  const more = c.run.waves.fighting ? FED_BONUS : 0;
+  c.sys.fish.arm(c.sys.fish.strikes + more, styleFor(c.run.live.fed, c.sys.ctx.difficulty()));
 }
 
 /** Works out what E would do from where the player stands. */

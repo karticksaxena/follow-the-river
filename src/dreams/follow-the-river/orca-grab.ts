@@ -13,7 +13,7 @@ export type Prey = Pick<
  * faster) and sweep: zombies this close to its jaws when it lands are knocked into the river too
  * (0 = only the one it bites), and guard: she only takes zombies within this many metres of a guard
  * point (you, Mom; see `Fish.setGuards`; Infinity = anyone). The ending's last stand is far, fast,
- * sweeping and guarding.
+ * sweeping and guarding. A night's also has `dryCooldown` and guards you alone.
  */
 export interface StrikeStyle {
   cooldown: number;
@@ -21,6 +21,8 @@ export interface StrikeStyle {
   pace: number;
   sweep: number;
   guard: number;
+  /** Night only: seconds between strikes while you are out of ammo (`cooldown` is for when armed). */
+  dryCooldown?: number;
 }
 
 /**
@@ -91,6 +93,8 @@ export interface Grab {
   water: number;
   reach: number;
   sweep: number;
+  /** Zombies its landing has thrown in besides the victim (the orca spends them from its budget). */
+  swept: number;
   /** Seconds of the leap, the thrash and the slide back (all shorter in the ending's frenzy). */
   burst: number;
   shake: number;
@@ -143,6 +147,7 @@ export function newGrab(
     water,
     reach,
     sweep,
+    swept: 0,
     burst: GRAB.burst * pace,
     shake: GRAB.shake * pace,
     back: GRAB.back * pace,
@@ -279,8 +284,9 @@ export function jawAt(g: Grab): number {
 function sweepAside(g: Grab, horde: Prey): void {
   if (g.sweep <= 0) return;
   horde.forEachAlive((id, x, z) => {
-    if (id !== g.victim && Math.hypot(x - jaw.x, z - jaw.z) <= g.sweep)
-      horde.throwByFish(id, jaw.z);
+    if (id === g.victim || Math.hypot(x - jaw.x, z - jaw.z) > g.sweep) return;
+    horde.throwByFish(id, jaw.z);
+    g.swept++;
   });
 }
 

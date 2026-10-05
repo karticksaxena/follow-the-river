@@ -161,6 +161,10 @@ describe('wounds and stuns', () => {
     expect(hitKills(0, false, 2)).toBe(false);
     expect(hitKills(1, false, 2)).toBe(true);
     expect(hitKills(0, false, 1)).toBe(true);
+    // Hard: 3 body hits, a head hit still one.
+    expect(hitKills(0, true, 3)).toBe(true);
+    expect(hitKills(1, false, 3)).toBe(false);
+    expect(hitKills(2, false, 3)).toBe(true);
   });
   it("the stun lasts the tuning's seconds", () => {
     const m = newMind();

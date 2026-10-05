@@ -1,7 +1,10 @@
 import * as THREE from 'three/webgpu';
+import type { Difficulty } from '../../engine/settings';
+import { DIFFICULTY } from './difficulty';
 import { ANATOMY, SKIN_MATERIALS } from './dras-anatomy';
 import type { StrikeStyle } from './orca-grab';
 import { WATER_Y } from './river';
+import { AMMO_OF, type GunKind, type Supplies } from './state';
 
 const THROW_RANGE = 1.5;
 const MIN_SWIM_SPEED = 0.3; // m/s along the river before the heading follows motion
@@ -209,14 +212,12 @@ export function makeWet(body: THREE.Object3D): void {
 }
 
 export const FISH = {
-  strikesPerPack: 4,
-  baseStrikes: 4,
   reach: 4.5,
   cooldown: 1.1,
   follow: 2.5,
 };
 
-/** A normal night's strikes (orca-grab.ts StrikeStyle). */
+/** The orca's default strikes (orca-grab.ts StrikeStyle): any zombie, any distance. Nights use `styleFor`. */
 export const NIGHT_STRIKE = {
   cooldown: FISH.cooldown,
   reach: FISH.reach,
@@ -225,28 +226,52 @@ export const NIGHT_STRIKE = {
   guard: Infinity,
 } as const;
 
-export function strikesFor(fed: number): number {
-  return FISH.baseStrikes + fed * FISH.strikesPerPack;
+/** What one fish pack thrown mid-wave adds to that wave's budget of strikes. Tuning knob. */
+export const FED_BONUS = 2;
+
+/** Strikes the orca may take in a wave that sends `quota` zombies: her `share` of them (difficulty.ts). */
+export const waveBudget = (quota: number, share: number): number => Math.round(quota * share);
+
+/** Dry: every gun you own is out of rounds and you have no arrows (she then takes any you lead to her, slowly). */
+export function isDry(supplies: Supplies, guns: readonly GunKind[]): boolean {
+  return supplies.arrows === 0 && guns.every((g) => supplies[AMMO_OF[g]] === 0);
 }
 
-/** How much hungrier each fish pack makes it (per pack, and the limits). Tuning knobs. */
+/**
+ * How much hungrier each fish pack makes it (per pack, and the limits). Tuning knobs. `cooldown`
+ * shortens both waits by this share per pack, never below `floor` of the base wait.
+ */
 export const FED = {
-  cooldown: { per: -0.12, limit: 0.5 },
+  cooldown: { per: 0.08, floor: 0.4 },
   reach: { per: 0.5, limit: 7 },
   pace: { per: -0.06, limit: 0.7 },
   sweep: { per: 0.4, limit: 2 },
 } as const;
 
-/** The night's strike style after `fed` packs: sooner, further, quicker, sweeping. */
-export function styleFor(fed: number): StrikeStyle {
+const shorter = (base: number, n: number): number =>
+  base * Math.max(FED.cooldown.floor, 1 - FED.cooldown.per * n);
+
+/** A night's strike style after `fed` packs: near you only, then sooner, further, quicker, sweeping. */
+export function styleFor(fed: number, difficulty: Difficulty): StrikeStyle {
   const n = Math.max(0, fed);
+  const { guard, armedCooldown, dryCooldown } = DIFFICULTY[difficulty].orca;
   return {
-    cooldown: Math.max(FED.cooldown.limit, FISH.cooldown + FED.cooldown.per * n),
+    cooldown: shorter(armedCooldown, n),
+    dryCooldown: shorter(dryCooldown, n),
     reach: Math.min(FED.reach.limit, FISH.reach + FED.reach.per * n),
     pace: Math.max(FED.pace.limit, 1 + FED.pace.per * n),
     sweep: Math.min(FED.sweep.limit, FED.sweep.per * n),
-    guard: Infinity,
+    guard,
   };
+}
+
+/**
+ * Seconds until her next strike, with `r` in [0, 1): armed waits 1 to 2 times the style's
+ * cooldown, dry 1 to 1.5 times its dry cooldown. A style without `dryCooldown` (the last stand's) waits exactly its cooldown.
+ */
+export function strikeWait(style: StrikeStyle, dry: boolean, r: number): number {
+  if (style.dryCooldown === undefined) return style.cooldown;
+  return dry ? style.dryCooldown * (1 + 0.5 * r) : style.cooldown * (1 + r);
 }
 
 /** Is (x, z) within `guard` of one of the guard points? (No guard points: anywhere.) */

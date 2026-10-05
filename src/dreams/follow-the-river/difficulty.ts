@@ -23,6 +23,17 @@ export function nightDifficulty(chapter: number): NightDifficulty {
   return chapter === 2 || chapter === 3 ? NIGHT_DIFFICULTY[chapter] : NIGHT_DIFFICULTY[1];
 }
 
+export interface OrcaTuning {
+  /** She only takes zombies within this many metres of you. */
+  guard: number;
+  /** Share of a wave's zombies she may take while you have ammo. */
+  share: number;
+  /** Seconds between her strikes while you have ammo, times a random 1 to 2. */
+  armedCooldown: number;
+  /** Seconds between her strikes once you are dry, times a random 1 to 1.5: keep moving. */
+  dryCooldown: number;
+}
+
 export interface DifficultyTuning {
   /** Zombies a wave needs killed, times the wave's quota. */
   quota: number;
@@ -34,7 +45,7 @@ export interface DifficultyTuning {
   stun: { exposure: number; seconds: number };
   /** One blow (health 100): 34 = three hits, 50 = two, 25 = four. */
   damage: number;
-  /** Body hits that drop a zombie (a head hit always kills). */
+  /** Body hits that drop a zombie (a head hit always kills, on every difficulty). */
   bodyHits: number;
   /** An arrow that hit a zombie can be pulled out and picked up again (otherwise it stays in the body). */
   keepHitArrows: boolean;
@@ -42,6 +53,8 @@ export interface DifficultyTuning {
   supplies: number;
   /** Share of Mom's bag in the last stand. */
   bag: number;
+  /** How Dras helps on a night (the last stand has its own, ending-wave.ts). */
+  orca: OrcaTuning;
 }
 
 /** Tuning knobs. Normal is the game as meant: scarce, fast, short stuns. */
@@ -56,6 +69,7 @@ export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyTuning>> = {
     keepHitArrows: true,
     supplies: 1.6,
     bag: 1,
+    orca: { guard: 9, share: 0.5, armedCooldown: 3, dryCooldown: 6 },
   },
   normal: {
     quota: 1,
@@ -67,6 +81,7 @@ export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyTuning>> = {
     keepHitArrows: false,
     supplies: 1,
     bag: 0.5,
+    orca: { guard: 7, share: 0.3, armedCooldown: 4, dryCooldown: 9 },
   },
   hard: {
     quota: 1.4,
@@ -74,10 +89,11 @@ export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyTuning>> = {
     interval: 0.75,
     stun: { exposure: 0.8, seconds: 0.6 },
     damage: 50,
-    bodyHits: 2,
+    bodyHits: 3,
     keepHitArrows: false,
     supplies: 0.6,
     bag: 0.34,
+    orca: { guard: 6, share: 0.2, armedCooldown: 5, dryCooldown: 12 },
   },
 };
 

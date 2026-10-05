@@ -1,6 +1,5 @@
 /* oxlint-disable vitest/require-mock-type-parameters, typescript/no-unsafe-type-assertion -- partial fakes of big interfaces */
 import { describe, expect, it, vi } from 'vitest';
-import { strikesFor } from './fish';
 import { beginPhase, type Flow } from './phases';
 import { freshRun } from './state';
 
@@ -62,7 +61,6 @@ describe('beginPhase', () => {
     } as unknown as Flow;
     beginPhase(f);
     expect(f.onReset).toHaveBeenCalled();
-    expect(fish.strikes).toBe(strikesFor(f.run.live.fed));
-    expect(fish.strikes).toBeGreaterThan(0);
+    expect(fish.strikes).toBe(0); // no strikes until a wave begins
   });
 });
