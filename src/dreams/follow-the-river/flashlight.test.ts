@@ -6,6 +6,7 @@ import {
   chargeBattery,
   createFlashlight,
   FLASHLIGHT,
+  groundScale,
   inBeamDistance,
   setTorchShadowTier,
   TORCH_EXPOSURE,
@@ -173,5 +174,26 @@ describe('the eye adjusts to Dras too', () => {
     torch.clearWatch(WATCH.dras);
     torch.apply(100, 0);
     expect(torch.light.intensity).toBe(full);
+  });
+});
+
+describe('groundScale (the pool on pale paving)', () => {
+  const { groundRef, groundFloor } = TORCH_EXPOSURE;
+  it('is full when the beam is level or up, or meets ground at groundRef or farther', () => {
+    expect(groundScale(0, 1.6)).toBe(1);
+    expect(groundScale(-0.5, 1.6)).toBe(1);
+    expect(groundScale(Math.asin(1.6 / groundRef), 1.6)).toBeCloseTo(1);
+  });
+  it('falls as (d / groundRef)^2 when the ground is nearer, never below the floor', () => {
+    expect(groundScale(Math.asin(1.6 / 4), 1.6)).toBeCloseTo((4 / groundRef) ** 2);
+    expect(groundScale(Math.PI / 2, 1.6)).toBe(groundFloor);
+  });
+  it('is monotonic: looking further down never brightens', () => {
+    let prev = 1;
+    for (let p = 0; p <= Math.PI / 2; p += 0.05) {
+      const s = groundScale(p, 1.6);
+      expect(s).toBeLessThanOrEqual(prev + 1e-12);
+      prev = s;
+    }
   });
 });

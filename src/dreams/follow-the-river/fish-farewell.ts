@@ -24,6 +24,12 @@ export const END = {
   eyeRoughness: 0.9,
 } as const;
 
+/**
+ * The TailLift clip's weight on top of Beached (weight 1): the mixer blends by weight / (1 + weight),
+ * so 0.4 gives ~0.29 of the clip, its 1.4 m rise becoming about 0.4 m. Tuning knob.
+ */
+export const TAIL_LIFT_WEIGHT = 0.4;
+
 export interface Farewell {
   /** What her head follows (a reference, read each frame), its share now and wanted; her jaw's share now and wanted. */
   target: THREE.Vector3 | null;
@@ -109,14 +115,13 @@ export function turnHead(
 /** Her tail lifts once, weakly, and settles back into her breathing (see `afterLift`). */
 export function liftTail(f: FishState): void {
   f.lift.reset().play();
-  f.lift.crossFadeFrom(f.settled, END.fade.lift, false);
+  f.lift.setEffectiveWeight(TAIL_LIFT_WEIGHT); // over Beached, which keeps breathing
 }
 
 /** After a tail lift the breathing carries on. */
 export function afterLift(f: FishState): void {
   if (f.end.exhaled >= 0) return;
-  f.settled.reset().play();
-  f.settled.crossFadeFrom(f.lift, END.fade.lift, false);
+  f.lift.fadeOut(END.fade.lift); // Beached never stopped; the lift fades off it
 }
 
 /** The last breath: a pale blow and the Exhale clip (she sags, her jaw closes, she is still). */

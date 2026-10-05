@@ -1,7 +1,16 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { blowsOn, END, eyeRoughness, liftDelay, turnHead } from './fish-farewell';
+import {
+  blowsOn,
+  END,
+  eyeRoughness,
+  liftDelay,
+  liftTail,
+  TAIL_LIFT_WEIGHT,
+  turnHead,
+} from './fish-farewell';
 import { WET } from './fish-parts';
+import type { FishState } from './fish-state';
 
 /** Her rig as orca.glb has it: nose at -z, the Head bone's own rotation turning its local Y along the body, the first spine bone 1.26 m down it. */
 function rig(): { head: THREE.Object3D; trunk: THREE.Object3D; root: THREE.Group } {
@@ -119,5 +128,17 @@ describe('her struggle', () => {
     expect(eyeRoughness(0)).toBe(WET.eye);
     expect(eyeRoughness(1)).toBe(END.eyeRoughness);
     expect(eyeRoughness(0.5)).toBeGreaterThan(WET.eye);
+  });
+});
+
+describe('tail lift cap', () => {
+  it('plays TailLift at TAIL_LIFT_WEIGHT (0.35-0.4) over Beached', () => {
+    expect(TAIL_LIFT_WEIGHT).toBeGreaterThanOrEqual(0.35);
+    expect(TAIL_LIFT_WEIGHT).toBeLessThanOrEqual(0.4);
+    const mixer = new THREE.AnimationMixer(new THREE.Object3D());
+    const lift = mixer.clipAction(new THREE.AnimationClip('TailLift', 1, []));
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a stub with only the field liftTail reads
+    liftTail({ lift } as unknown as FishState);
+    expect(lift.getEffectiveWeight()).toBe(TAIL_LIFT_WEIGHT);
   });
 });

@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { EYE_HEIGHT } from '../../engine/player';
 import { TIERS, type Tier } from '../../engine/quality';
 import { VOLUME_LAYER } from '../../engine/volume';
 
@@ -21,7 +22,21 @@ export const FLASHLIGHT = {
  * at the character), so a face at 2 m is not blown white while the far ground pool stays bright.
  * `ease` is the time constant (s) of the change; `chest` the height (m) aimed at on a body.
  */
-export const TORCH_EXPOSURE = { cap: 7, ease: 0.15, chest: 1.1 } as const;
+export const TORCH_EXPOSURE = {
+  cap: 7,
+  ease: 0.15,
+  chest: 1.1,
+  /** Ground pool: where the axis meets flat ground nearer than `groundRef` m, intensity falls by (d / groundRef)^2, never below `groundFloor`. */
+  groundRef: 5,
+  groundFloor: 0.35,
+} as const;
+
+/** Pure: the torch's scale 0..1 so the pool on flat ground does not clip pale paving (`pitch`: the beam axis below horizontal, rad). */
+export function groundScale(pitch: number, eyeHeight: number): number {
+  if (pitch <= 1e-3) return 1;
+  const k = eyeHeight / Math.sin(pitch) / TORCH_EXPOSURE.groundRef;
+  return Math.max(TORCH_EXPOSURE.groundFloor, Math.min(1, k * k));
+}
 
 /** Pure: the torch's scale 0..1 so a character `d` m away is lit by at most `cap`. Infinity: full. */
 export function torchScale(d: number, intensity: number, decay: number, cap: number): number {
@@ -156,7 +171,11 @@ export function createFlashlight(camera: THREE.Camera, tier: Tier = 'high'): Fla
         FLASHLIGHT.decay,
         TORCH_EXPOSURE.cap,
       );
-      exposure += (target - exposure) * (1 - Math.exp(-dt / TORCH_EXPOSURE.ease));
+      const aim =
+        FLASHLIGHT.pitch + Math.asin(THREE.MathUtils.clamp(camera.matrixWorld.elements[9], -1, 1));
+      exposure +=
+        (Math.min(target, groundScale(aim, EYE_HEIGHT)) - exposure) *
+        (1 - Math.exp(-dt / TORCH_EXPOSURE.ease));
       light.intensity =
         this.on && !this.blackout ? FLASHLIGHT.intensity * exposure * beamLevel(battery, time) : 0;
       const isOn = light.intensity > 0;
