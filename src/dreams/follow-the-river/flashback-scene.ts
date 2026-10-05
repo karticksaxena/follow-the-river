@@ -42,9 +42,12 @@ export const LAB_LIGHT = {
 } as const;
 
 export const TANK_LIGHT = {
-  ambient: { sky: 0x1a262e, ground: 0x08080a, intensity: 1 },
-  fog: { color: 0x04070a, near: 3, far: 18 },
-  inside: { color: 0x2a6a7a, intensity: 12, distance: 8, at: [0, 1.6, 0] as Vec },
+  ambient: { sky: 0x31414e, ground: 0x08080a, intensity: 3 },
+  fog: { color: 0x161e27, near: 4, far: 24 },
+  inside: { color: 0x2a6a7a, intensity: 24, distance: 8, at: [0, 1.6, 0] as Vec },
+  /** A soft cold work light from the camera's side, so Mom reads as a person, not a silhouette (Kartik: "still dark as hell"). */
+  fill: { color: 0xa6b8c9, intensity: 9, distance: 10, at: [2.4, 2.8, 4.2] as Vec },
+  floor: 0x2a2e35,
   glassOpacity: 0.18,
   waterOpacity: 0.38,
 } as const;
@@ -304,11 +307,12 @@ async function buildTank(): Promise<Flashback> {
   darkRoom(scene, TANK_LIGHT.fog);
   hemi(scene, TANK_LIGHT.ambient);
   point(scene, TANK_LIGHT.inside);
+  point(scene, TANK_LIGHT.fill);
   restyle(tank, 'Glass', seeThrough(TANK_LIGHT.glassOpacity));
   restyle(tank, 'Water', seeThrough(TANK_LIGHT.waterOpacity));
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(40, 40),
-    new THREE.MeshLambertMaterial({ color: 0x0c0d10 }),
+    new THREE.MeshLambertMaterial({ color: TANK_LIGHT.floor }),
   );
   floor.rotation.x = -Math.PI / 2;
   const mom = createCharacter(momAsset, new THREE.Group());

@@ -15,14 +15,14 @@ export interface Interior {
 /** How dark interiors get. Tuning knobs. */
 export const INTERIOR = {
   /** Share of the outdoor ambient and key light left deep inside. */
-  floor: 0.03,
+  floor: 0.015,
   /** Walls: the mask starts this far inside the footprint edge (the outer wall face stays lit)... */
   edge: 0.15,
   /** ...and reaches full darkness this much further in. */
   feather: 0.35,
   /** Light left at the doorway, and how far (m) it spills before falling to 1/e. */
-  doorLight: 0.5,
-  doorReach: 1.2,
+  doorLight: 0.12,
+  doorReach: 0.7,
   /** The mask fades out over this much below `top` (the roof underside stays dark). */
   roofFade: 0.1,
   /** Slots drawn per frame: the nearest few buildings. */
