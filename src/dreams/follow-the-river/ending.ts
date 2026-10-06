@@ -22,6 +22,7 @@ import {
   type Script,
   type Shore,
 } from './ending-farewell';
+import { ENDING_PAGES } from './ending-pages';
 import { buildEndingScene, facing, retreatPoint, type EndingScene } from './ending-scene';
 import { FLINCH, struckNear, WAVE, waveCount, waveDue, waveSpot } from './ending-wave';
 import { createCast, type Cast } from './farewell-cast';
@@ -46,7 +47,6 @@ export type EndingStep =
   | 'ride'
   | 'credits'
   | 'done';
-type PagedStep = 'mom' | 'home' | 'credits';
 
 const ORDER: readonly EndingStep[] = [
   'mom',
@@ -68,31 +68,9 @@ export function nextEndingStep(step: EndingStep): EndingStep {
   return ORDER[Math.min(ORDER.indexOf(step) + 1, ORDER.length - 1)] ?? 'done';
 }
 
-export const ENDING_PAGES: Readonly<Record<PagedStep, readonly string[]>> = {
-  mom: [
-    'Mom: "It\'s you. You followed the river."',
-    'Mom: "I\'m so sorry. For all of it."',
-    'Mom: "They\'re coming, all of them. Take this, and stay by the water. Dras will fight with us."',
-  ],
-  home: ['Mom: "Come on. Let\'s go home."'],
-  // Every source in public/assets/LICENSES.md (ending.test.ts checks the names).
-  credits: [
-    "Kartik's Dreams - Follow the River",
-    'A dream by Kartik',
-    'Models: Kenney (kenney.nl): Furniture Kit, City Kit (Commercial, Roads, Suburban), Car Kit, Survival Kit, Nature Kit. CC0.',
-    'Characters, animation and plants: Quaternius (quaternius.com): Ultimate Modular Men, Ultimate Modular Women, Universal Animation Library 1 and 2, Stylized Nature MegaKit. CC0.',
-    'Textures: Poly Haven (polyhaven.com). CC0. Everything else (Dras, the guns, the bow, the river town) was made for this game in Blender.',
-    'Gunshots: The Free Firearm Sound Library by Ben Jaszczak, Brian Nelson, Kevin Heras and Matthew Nanney. Zombies: Zombies Sound Pack by artisticdude. All on OpenGameArt. CC0.',
-    'Ambience and water: 30 CC0 SFX loops, Ambient Bird Sounds by isaiah658, and 40 CC0 water, splash and slime SFX by rubberduck (OpenGameArt). Splashes by roboroo, Bird_man and qubodup, paddle strokes by EpicWizard (Freesound). CC0.',
-    "Dras's voice and breath: killer whale recordings by the U.S. National Park Service (Glacier Bay) and the U.S. Fish and Wildlife Service. Public domain.",
-    'Fonts: IM Fell English (SIL Open Font License 1.1) and Special Elite (Apache License 2.0), from Google Fonts via Fontsource.',
-    'Made with three.js (MIT License) and Vite.',
-    'Thank you for playing.',
-  ],
-};
-
 export { bedFade } from './ending-dawn';
 export { FLINCH, struckNear, WAVE, waveCount, waveDue, waveSpot } from './ending-wave';
+export { ENDING_PAGES };
 
 /** How the night ends at depth `z`: the safe spot, the lake shore (Night 3), or not yet. */
 export function nightEnd(
@@ -410,7 +388,13 @@ async function runStep(h: EndingHost, st: State, step: EndingStep, at: Shore): P
     st.cast?.release(); // and its camera is the ride's, not the farewell's
     h.sys.ctx.cinematic(false); // and your mouse look is the ride's too (it brings its own end shot)
     await playCanoeRide(h.sys.ctx, h.sys.sounds);
-  } else if (step === 'credits') await read(h, st, ENDING_PAGES.credits);
+  } else if (step === 'credits') await credits(h, st);
+}
+
+/** The credits on black: the HUD (its last goal line) goes; the chapter is frozen and would not clear it. */
+async function credits(h: EndingHost, st: State): Promise<void> {
+  h.sys.hud.show(false);
+  await read(h, st, ENDING_PAGES.credits);
 }
 
 /** A load or a step failed: give the player the world back and read them out (home, credits) instead of a black, held screen. */
@@ -424,7 +408,7 @@ async function recover(h: EndingHost, st: State): Promise<void> {
   await ctx.overlay.fade(false); // the next `read` also releases the hold
   if (st.cancelled) return;
   await read(h, st, ENDING_PAGES.home);
-  if (!st.cancelled) await read(h, st, ENDING_PAGES.credits);
+  if (!st.cancelled) await credits(h, st);
 }
 
 /** The whole ending, step by step; every await is followed by a cancelled check. It always settles, and a failure never strands the player. */

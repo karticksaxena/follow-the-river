@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { aimAngles, LOOK, newWatch, turnToward, watchStep } from './canoe-look';
+import { aimAngles, LOOK, newWatch, sideOf, turnToward, watchStep } from './canoe-look';
 import { newScript, nextCue, STOP_AT, STOP_PAUSE } from './canoe-timing';
 
 const DT = 0.1;
+
+describe('which way to look', () => {
+  it('names the side the calf is on, from where you face', () => {
+    // Facing down the river (-z): +x is your right.
+    expect(sideOf(0, -1, 1, 0)).toBe('right');
+    expect(sideOf(0, -1, -1, 0)).toBe('left');
+    // Facing Mom at the stern (+z): the same calf at -x is now on your right.
+    expect(sideOf(0, 1, -1, 0)).toBe('right');
+    expect(LOOK.lines.right).toMatch(/right/);
+    expect(LOOK.lines.left).toMatch(/left/);
+  });
+});
 
 describe('watchStep', () => {
   it('is done after the calf has been near the view centre for the dwell time', () => {

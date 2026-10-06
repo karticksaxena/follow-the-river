@@ -15,8 +15,16 @@ export const LOOK = {
   steer: 2.5,
   /** The calf counts from this surfacing (0..1), the same moment its blow is heard. */
   from: 0.6,
-  line: 'Something in the water. Look right.',
+  /** The top-left line names the side the calf is on from where you face (you may be facing Mom). */
+  lines: {
+    right: 'Something in the water. Look to your right.',
+    left: 'Something in the water. Look to your left.',
+  },
 } as const;
+
+/** Pure: is the offset (dx, dz) to the right or the left of the facing (fx, fz)? (Right of -z is +x.) */
+export const sideOf = (fx: number, fz: number, dx: number, dz: number): 'right' | 'left' =>
+  fx * dz - fz * dx >= 0 ? 'right' : 'left';
 
 export interface Watch {
   /** Seconds the calf has been in view without a break. */
@@ -70,7 +78,7 @@ export function watchCalf(r: Ride): void {
     r.script.looked = true;
     return setLine(r, '');
   }
-  setLine(r, LOOK.line);
+  setLine(r, LOOK.lines[sideOf(facing.x, facing.z, toCalf.x, toCalf.z)]);
   if (verdict !== 'assist') return;
   const aim = aimAngles(toCalf.x, toCalf.y, toCalf.z);
   const k = 1 - Math.exp(-r.dt * LOOK.steer);
