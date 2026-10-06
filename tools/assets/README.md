@@ -177,9 +177,22 @@ No CC0 bow, shotgun-pump or dry-fire clip was found (OpenGameArt bow sounds are 
 
 Compress both with the meshopt command above (with `--resample false`).
 
-`kartik-arm.glb` is cut from the body after `pose_hand` bends the wrist back 20 degrees and fans the fingers (`WRIST_BACK`, `SPREAD`), with its
-origin at the middle of the palm (not the elbow): `farewell-arm.ts` puts that point on the skin. `CasualN` needs `kZ3DmIoGip.glb` (the
-Quaternius pack) and the two UAL files; pass a scratch path for the body output if only the arm changed.
+`kartik-arm.glb` is cut from the body after `pose_hand` bends the wrist back 20 degrees (`WRIST_BACK`), brings the fingers together (`SPREAD`: degrees
+each finger points toward the thumb side of the middle finger, measured then set, because the A-pose already fans them: Index 2, Ring -2, Pinky -4, Thumb 25 so
+the thumb lies alongside) and curls bones 2-4 of each finger a little (`CURL`, degrees per joint: 10-14 for the fingers, 8-10 at the tips, 6 for the thumb;
+relaxed, not a fist). The origin is the middle of the palm (not the elbow): `farewell-arm.ts` puts that point on the skin. The palm frame is taken after the
+wrist bend and before the fingers move, so the pose never tilts the arm.
+
+To rebuild only the arm, no source packs needed (the finished body is the source):
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python tools/blender/kartik.py -- \
+  public/assets/characters/kartik.glb /tmp/kartik-arm-raw.glb
+pnpm dlx @gltf-transform/cli@latest optimize /tmp/kartik-arm-raw.glb public/assets/characters/kartik-arm.glb --compress meshopt \
+  --join false --flatten false --palette false --instance false --simplify false --texture-compress auto --resample false
+```
+
+`CasualN` (the full build above) needs `kZ3DmIoGip.glb` (the Quaternius pack) and the two UAL files; pass a scratch path for the body output if only the arm changed.
 
 ## Textures (`public/assets/textures/`)
 

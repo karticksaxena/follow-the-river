@@ -7,7 +7,7 @@ Sit, SitTalk, Kneel (a seamless hold cut from Fixing_Kneeling), Crouch and Talk,
 Universal Animation Libraries with ual_retarget.py (hips never travel; the game moves the character).
 
 The arm is a static mesh of his right forearm and hand plus the short-sleeve hem, cut from the body by bone
-weights after posing the hand (wrist bent back, fingers and thumb fanned a little: a hand laid flat on a
+weights after posing the hand (wrist bent back, fingers together and slightly curled, the thumb alongside: a hand resting on a
 surface with the forearm coming in from the player's side), then turned palm down with fingers forward:
 origin at the middle of the palm, metres, +Z (glTF / three.js) toward the fingertips, +Y up (the back of the
 hand), the thumb on the +X side, the forearm trailing behind and above. No skeleton.
@@ -29,7 +29,10 @@ import bpy
 from mathutils import Matrix, Vector
 from ual_retarget import FPS, PREFIX, bake, export_with_clips, loop_frames, normalize_rest, pose_state, rest_frames, restore, source_clips
 
-UAL1_FBX, UAL2, SRC_GLB, OUT_BODY, OUT_ARM = sys.argv[sys.argv.index("--") + 1 :]
+ARGS = sys.argv[sys.argv.index("--") + 1 :]
+ARM_ONLY = len(ARGS) == 2  # <kartik.glb> <kartik-arm.glb>: rebuild only the arm from the finished body (no Quaternius / UAL files needed)
+if not ARM_ONLY:
+    UAL1_FBX, UAL2, SRC_GLB, OUT_BODY, OUT_ARM = ARGS
 SOURCES = {
     "Sit": ("ual1", "Sitting_Idle_Loop"), "SitTalk": ("ual1", "Sitting_Talking_Loop"),
     "Kneel": ("ual1", "Fixing_Kneeling"), "Crouch": ("ual1", "Crouch_Idle_Loop"), "Talk": ("ual1", "Idle_Talking_Loop"),
@@ -43,8 +46,10 @@ COLOURS = {
 FINGERS = re.compile(r"^(Index|Middle|Ring|Pinky|Thumb)\d\.R$")
 ARM_BONES = {"LowerArm.R", "Wrist.R"}
 HEM_REACH = 0.16  # metres of upper arm kept above the elbow: the short sleeve and its hem
+HAND = None  # (thumb side, back of hand, fingers) of the palm after the wrist bend
 WRIST_BACK = math.radians(20)  # the wrist bends back (hand pressed flat, forearm angled in from the player's side)
-SPREAD = {"Index": 7, "Ring": 7, "Pinky": 13, "Thumb": 16}  # degrees each finger fans out from the middle finger
+SPREAD = {"Index": 2, "Ring": -2, "Pinky": -4, "Thumb": 25}  # degrees each finger points toward the thumb side of the middle finger: together, the thumb alongside
+CURL = {"Index": (10, 12, 8), "Middle": (10, 12, 8), "Ring": (11, 13, 9), "Pinky": (12, 14, 10), "Thumb": (6, 6)}  # degrees per joint (bone 2, 3, 4) toward the palm: relaxed, not a fist
 
 
 def linear(hexstr):
@@ -92,8 +97,16 @@ def turn_toward(arm, bone, point, axis, angle, probe, goal):
         rotate_about(arm, bone, point, axis, -2 * angle)
 
 
+def fan(arm, finger):
+    """Degrees the finger (knuckle to its last bone) points toward the thumb side of the middle finger, in the palm plane."""
+    t, u, f = HAND
+    angle = lambda name, tip: math.degrees(math.atan2(*[(world_head(arm, tip) - world_head(arm, f"{name}1.R")).dot(x) for x in (t, f)]))
+    last = "Thumb3.R" if finger == "Thumb" else f"{finger}4.R"
+    return angle(finger, last) - angle("Middle", "Middle4.R")
+
+
 def pose_hand(arm):
-    """Wrist bent back, fingers fanned. Returns the undo."""
+    """Wrist bent back, fingers together and slightly curled. Returns the undo."""
     saved = {pb.name: pb.matrix_basis.copy() for pb in arm.pose.bones}
     to_arm = arm.matrix_world.inverted()
     local = lambda v: to_arm.to_3x3() @ v
@@ -102,12 +115,25 @@ def pose_hand(arm):
     # the fingers move toward the back of the hand (+u): the wrist extends
     goal = world_head(arm, "Wrist.R") + f * 0.1 + u * 0.1
     turn_toward(arm, "Wrist.R", wrist, local(t), WRIST_BACK, "Middle2.R", goal)
-    for finger, degrees in SPREAD.items():
-        t, u, f = arm_basis(arm)  # the hand has moved
-        head = world_head(arm, f"{finger}1.R")
-        out = 1 if (world_head(arm, f"{finger}2.R") - world_head(arm, "Middle2.R")).dot(t) > 0 else -1
-        goal = world_head(arm, f"{finger}2.R") + t * out * 0.1
-        turn_toward(arm, f"{finger}1.R", to_arm @ head, local(u), math.radians(degrees), f"{finger}2.R", goal)
+    global HAND
+    HAND = arm_basis(arm)  # the palm's frame, taken before the fingers move so the pose below never tilts the arm
+    t, u, f = HAND
+    for finger, target in SPREAD.items():  # the rest A-pose already fans the fingers: measure, then turn to the target
+        delta = math.radians(target - fan(arm, finger))
+        head = to_arm @ world_head(arm, f"{finger}1.R")
+        rotate_about(arm, f"{finger}1.R", head, local(u), delta)
+        if abs(fan(arm, finger) - target) > 1:  # turned the wrong way
+            rotate_about(arm, f"{finger}1.R", head, local(u), -2 * delta)
+    for finger, joints in CURL.items():  # bones 2.. bend toward the palm (-u) about the thumb-side axis; bone 1 is the metacarpal
+        goal = world_head(arm, f"{finger}3.R") - u * 0.1
+        before = (world_head(arm, f"{finger}3.R") - goal).length
+        sign = 1
+        for i, degrees in enumerate(joints, 2):
+            head = to_arm @ world_head(arm, f"{finger}{i}.R")
+            rotate_about(arm, f"{finger}{i}.R", head, local(t), sign * math.radians(degrees))
+            if i == 2 and (world_head(arm, f"{finger}3.R") - goal).length > before:
+                sign = -1
+                rotate_about(arm, f"{finger}{i}.R", head, local(t), -2 * math.radians(degrees))
 
     def undo():
         for name, matrix in saved.items():
@@ -148,7 +174,7 @@ def cut_arm(arm, body):
     bmesh.ops.bisect_plane(bm, geom=geom, plane_co=elbow - up_dir * HEM_REACH, plane_no=-up_dir, clear_outer=True)
     bm.to_mesh(me)
     bm.free()
-    t, u, f = arm_basis(arm)
+    t, u, f = HAND
     # glTF (x, y, z) = Blender (x, z, -y): thumb side +X, up +Y, fingers +Z -> Blender (1,0,0), (0,0,1), (0,-1,0)
     want = Matrix(((1, 0, 0), (0, 0, 1), (0, -1, 0))).transposed()  # columns: thumb, up, fingers targets
     have = Matrix((t, u, f))  # rows
@@ -170,6 +196,17 @@ def export_arm(arm, body):
     bpy.ops.object.material_slot_remove_unused()
     bpy.ops.export_scene.gltf(filepath=OUT_ARM, export_format="GLB", use_selection=True)
     bpy.data.objects.remove(obj, do_unlink=True)
+
+
+def main_arm():
+    global OUT_ARM
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    body_glb, OUT_ARM = ARGS
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=body_glb)
+    new = [o for o in bpy.data.objects if o not in before]
+    dst = next(o for o in new if o.type == "ARMATURE")
+    export_arm(dst, next(o for o in new if o.type == "MESH" and o.name.endswith("_Body")))
 
 
 def main():
@@ -204,4 +241,4 @@ def main():
     export_with_clips(dst, new, keep, made, static, OUT_BODY)
 
 
-main()
+main_arm() if ARM_ONLY else main()
