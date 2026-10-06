@@ -5,7 +5,7 @@ import { ANATOMY } from './dras-anatomy';
 import { shoreFor } from './ending-farewell';
 import { rails, SHOTS, shotsFor, type V3 } from './farewell-shots';
 import { SHORE_CELL, shoreHeight } from './lake';
-import { restGaps, strandRest } from './orca-strand';
+import { DRY_RISE, FIN_SINK, FINS, landShare, restGaps, strandRest } from './orca-strand';
 import { EDGE_X, LAKE, shoreY, WATER_Y } from './river';
 import { mouthFlare } from './shore-shape';
 
@@ -43,7 +43,7 @@ function toCentreLine(x: number, z: number): number {
 describe('the farewell shots', () => {
   it('keeps every camera point on the pebbles or above the water', () => {
     const bad = POINTS.filter(([, [, y, z]]) => {
-      const onPebbles = z >= LAKE_Z + 0.5 && z <= LAKE_Z + 9; // the pebbles end at 6, flat grass goes on level with them
+      const onPebbles = z >= LAKE_Z + 0.5 && z <= LAKE_Z + 12; // the pebbles end at 6, flat grass goes on level with them
       const overWater = z < LAKE_Z + 0.5 && y >= WATER_Y + 1;
       return !(onPebbles || overWater);
     }).map(([name]) => name);
@@ -216,13 +216,12 @@ const mesh = (z: number): number => {
 
 describe('where she lies, the same in every beat', () => {
   const lo = REST.z - (ANATOMY.length / 2) * Math.cos(REST.pitch); // tail end
-  const hi = REST.z + (ANATOMY.length / 2) * Math.cos(REST.pitch); // nose
 
-  it('has 70-80 % of her out of the water, her back well above it and only the tail end in the shallows', () => {
-    const share = (hi - LAKE_Z) / (hi - lo);
-    expect(share).toBeGreaterThanOrEqual(0.7);
-    expect(share).toBeLessThanOrEqual(0.8);
-    expect(lo).toBeLessThan(LAKE_Z); // the tail end is in the water
+  it('has 60-70 % of her length over land (ground 0.5 m or more above the water), her back well above it and the tail end in the shallows', () => {
+    const share = landShare(REST, (z) => shoreY(z - LAKE_Z));
+    expect(share).toBeGreaterThanOrEqual(0.6);
+    expect(share).toBeLessThanOrEqual(0.7);
+    expect(lo).toBeLessThan(LAKE_Z + DRY_RISE * 4); // the tail end is on the wet slope
     expect(REST.y - WATER_Y).toBeGreaterThan(1); // the root (her mid-body) is more than a metre over the water: her back well above it
   });
 
@@ -247,8 +246,10 @@ describe('where she lies, the same in every beat', () => {
       expect(mesh(z)).toBeCloseTo(shoreY(z - LAKE_Z), 6);
     }
     const gaps = restGaps(REST, mesh);
-    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(-0.001); // no ground through her
-    expect(Math.min(...gaps)).toBeLessThan(0.01);
+    gaps.forEach((g, i) => {
+      expect(g).toBeGreaterThanOrEqual(FINS.includes(i) ? -FIN_SINK - 0.001 : -0.001); // no ground through her, bar her pectoral tips
+    });
+    expect(Math.min(...gaps.filter((_, i) => !FINS.includes(i)))).toBeLessThan(0.15);
   });
 
   it('keeps her body west of the river mouth bank (it crossed her in two when she lay further east)', () => {

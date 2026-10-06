@@ -78,8 +78,9 @@ export function stepMist(f: FishState, dt: number): void {
 export function sag(f: FishState, k: number): void {
   f.sagK = k;
   if (k <= 0) return;
-  const q = turn.setFromAxisAngle(X_AXIS, -STRAND.bend.angle * k);
-  for (const bone of f.sagBones) bone.quaternion.multiply(q);
+  f.sagBones.forEach((bone, i) => {
+    bone.quaternion.multiply(turn.setFromAxisAngle(X_AXIS, -(STRAND.bend.angles[i] ?? 0) * k));
+  });
 }
 
 /**
@@ -88,8 +89,9 @@ export function sag(f: FishState, k: number): void {
  */
 export function unsag(f: FishState): void {
   if (f.sagK <= 0) return;
-  const q = turn.setFromAxisAngle(X_AXIS, STRAND.bend.angle * f.sagK);
-  for (const bone of f.sagBones) bone.quaternion.multiply(q);
+  f.sagBones.forEach((bone, i) => {
+    bone.quaternion.multiply(turn.setFromAxisAngle(X_AXIS, (STRAND.bend.angles[i] ?? 0) * f.sagK));
+  });
   f.sagK = 0;
 }
 

@@ -22,12 +22,12 @@ import { spend } from './state';
 export const FAREWELL = {
   /**
    * Where its nose comes to rest, from Mom's spot (x) and from the water line (z, up the shore). One placement for every
-   * beat: `upShore` / her 7 m is the share of her out of the water (5 m: 71 %, her back well above it, only the tail end
-   * in the shallows), and `fromMom` keeps her body west of the river mouth's flared bank (shoreWest ends at
-   * x = EDGE_X - flare(z) there: east of it the ground is the bank and water, which cut her in two), 1.5 m east
-   * of where Mom waits (clear of the landing).
+   * beat: `upShore` puts about 65 % of her length over land (ground 0.5 m or more above the water: the wet slope reads as
+   * water; `landShare` is pinned at 60-70 % by a test) and her tail end in the shallows, and `fromMom` keeps her body west
+   * of the river mouth's flared bank (shoreWest ends at x = EDGE_X - flare(z) there: east of it the ground is the bank
+   * and water, which cut her in two), 1.5 m east of where Mom waits (clear of the landing).
    */
-  nose: { fromMom: 1.5, upShore: 5 },
+  nose: { fromMom: 1.5, upShore: 6.5 },
   /** You may kneel from this far (m) of the kneeling spot (it is by her flank, short of the wall you cannot pass). */
   kneelRadius: 1.6,
   /** The pack's E works within this of where the camera lands. */

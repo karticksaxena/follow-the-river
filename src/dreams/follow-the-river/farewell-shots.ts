@@ -13,19 +13,19 @@ import { shoreY } from './river';
  */
 export const SHOTS = {
   /** Kartik's hand on her flank, this far ahead of her centre and this high above her centre line (her body is an ellipse `tall` m high there: the skin tilts up, so the back of your hand faces you); hands press this far into the skin. */
-  flank: { ahead: 2.2, up: 0.15, tall: 0.66, press: 0.06 },
+  flank: { ahead: 1.2, up: 0.15, tall: 0.66, press: 0.06 },
   /**
    * Mom's hand lies on her skin `gap` m ahead of yours (toward her head) and her wrist is held `off` m off the skin;
    * Mom kneels `out` m from her skin and `behind` m behind her hand (so her right arm reaches about 0.65 m across the floor).
    */
-  momHand: { gap: 0.27, off: 0.05, out: 0.4, behind: 0.5 },
+  momHand: { gap: 0.27, off: 0.02, out: 0.4, behind: 0.5 },
   /** The kneel: eye height, out from her skin, how far ahead of her centre the camera kneels, and what it looks at (her flank by your hand, `side` m in from her centre line, `ahead` of her centre, `down` below the eye). */
   kneel: {
     eye: 1.2,
     out: 0.45,
-    ahead: 2.0,
+    ahead: 1.0,
     seconds: 2.5,
-    look: { side: 0.1, ahead: 3.1, down: 0.45 },
+    look: { side: 0.1, ahead: 2.1, down: 0.35 },
   },
   /** Mom kneels in front of her face, facing her (never between you and her eye): `side` m out from her centre line, `beyond` her nose. */
   mom: { side: 0.25, beyond: 0.6 },
@@ -66,7 +66,7 @@ export const SHOTS = {
   /** The camera swings over the lake on its way from the orbit to kneeling beside her head. */
   swing: { out: 2.2, up: 2.6, into: 2 },
   /** Standing again for the dawn: `out` m west of her centre line, looking at a point `look.x` m east and `look.ahead` m out over the lake, `look.y` high: the lake and the far shore with the sun off to the left, out of frame (it glared). */
-  stand: { eye: 1.6, out: 9, seconds: 3, look: { x: 34, y: 0.6, ahead: 22 } },
+  stand: { eye: 1.6, out: 9, seconds: 3, look: { x: 34, y: 0.6, ahead: 20.6 } },
   /** Then she turns to Mom coming up the shore: the look point's height (m) and how long the turn takes (s). */
   turnToMom: { height: 1.2, seconds: 2.5 },
   /** Where Mom sets her lantern down: beside her knees on the camera's side, so its light stays off her dress. */

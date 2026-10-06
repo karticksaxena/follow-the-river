@@ -1,5 +1,6 @@
 import { ANATOMY } from './dras-anatomy';
 import type { GrabPose } from './orca-grab';
+import { WATER_Y } from './river';
 
 /**
  * The orca's last leap (Plan 7, swim-in Plan 9): too sick to make it back, it comes in across the
@@ -22,43 +23,53 @@ export const STRAND = {
   /** Height of the leap above the straight line to its resting pose. */
   arc: 1.6,
   /**
-   * Once beached her spine and tail sag: each of these bones turns about its X axis by `-angle`
-   * (tail down) on top of the Beached clip, so the chin, pectoral tips and tail all lie on the slope.
-   * Seconds: the sag eases in over `settle` after the landing.
+   * Her spine arches a little: each bone turns about its X axis by `-angle` (positive: head and tail down) on top
+   * of the Beached clip (which alone curls her back half 17 degrees). Spine1/2 nod her neck down (so her jaw rests
+   * low on the bank), Spine3..Tail2 curl her tail down the shore's slope: about 25 degrees in all, 4 or less at any
+   * joint, nothing like the 0.13 rad each that folded her into a 55 degree crease behind the head ("broken bones").
+   * Seconds: eases in over `settle` after the landing.
    */
-  bend: { bones: ['Spine3', 'Spine4', 'Spine5', 'Tail1', 'Tail2'], angle: 0.13, settle: 1.2 },
+  bend: {
+    bones: ['Spine1', 'Spine2', 'Spine3', 'Spine4', 'Spine5', 'Tail1', 'Tail2'],
+    angles: [0.06, 0.06, 0.01, 0.01, 0.01, 0.01, 0.01],
+    settle: 1.2,
+  },
 } as const;
 
 const HALF_LENGTH = ANATOMY.halfLength;
-const PITCH_MIN = -0.2;
+const PITCH_MIN = -0.3;
 const PITCH_MAX = 0.6;
 const PITCH_STEP = 0.004;
 
 /**
- * The orca's underside as she lies (the Beached clip's rest pose with `STRAND.bend` on top), measured
- * from the skinned mesh in three.js (`ahead` of the centre, `depth` below the root, m): the nose tip
- * (3.4), chin (3), pectoral tips (the lowest points, 1.3-1.5), belly, and the tail sagging into the lake.
+ * The orca's underside as she lies (the Beached clip's rest pose with `STRAND.bend` on top, 25 degrees of arch in all),
+ * measured from the skinned mesh in three.js (`ahead` of the centre, `depth` below the root, m): the nose tip, chin,
+ * pectoral tips (the lowest points of her front, 1-1.5), belly, and the tail (its tip, past -3.2, curls out of the table).
  */
 export const UNDERSIDE: readonly (readonly [number, number])[] = [
-  [3.4, 0.423],
-  [3, 0.53],
-  [2.5, 0.586],
-  [2, 0.64],
-  [1.5, 0.831],
-  [1.3, 0.844],
-  [1, 0.684],
-  [0.5, 0.677],
-  [0, 0.687],
-  [-0.5, 0.702],
-  [-1, 0.79],
-  [-1.5, 0.946],
-  [-2, 1.151],
-  [-2.5, 1.481],
-  [-3, 1.717],
+  [3.4, 0.441],
+  [3, 0.527],
+  [2.5, 0.577],
+  [2, 0.65],
+  [1.5, 0.88],
+  [1.3, 0.88],
+  [1, 0.776],
+  [0.5, 0.818],
+  [0, 0.855],
+  [-0.5, 0.873],
+  [-1, 0.899],
+  [-1.5, 0.933],
+  [-2, 1.025],
+  [-2.5, 1.112],
+  [-3, 1.201],
 ];
-/** The samples that must touch: nose tip, chin, pectoral tips (1.3), tail; and how much more they weigh than the belly. */
-const KEY = [0, 1, 5, UNDERSIDE.length - 1] as const;
-const KEY_WEIGHT = 10;
+/** The samples by name: her chin, her pectoral tips (they may sink into the pebbles), her tail's end. */
+export const CHIN = 1;
+export const FINS: readonly number[] = [4, 5, 6];
+export const TAIL = UNDERSIDE.length - 1;
+/** Her pectoral tips may sink this far (m) into the pebbles (hidden by them), and her tail may hover this far above the bed. */
+export const FIN_SINK = 0.12;
+const TAIL_HOVER = 0.15;
 
 /** Where a pose's underside sample `[ahead, depth]` is (z along the shore, and height). */
 function underside(rest: GrabPose, [ahead, depth]: readonly [number, number]): [number, number] {
@@ -76,6 +87,20 @@ export function restGaps(rest: GrabPose, ground: (z: number) => number): number[
     const [z, y] = underside(rest, p);
     return y - ground(z);
   });
+}
+
+/** The shore counts as land (not shallows) where it stands this far (m) above the water: the wet slope below is water to the eye. */
+export const DRY_RISE = 0.5;
+const LAND_SAMPLES = 20;
+
+/** Pure: the share (0..1) of her length that lies over land (see `DRY_RISE`), sampled along her centre line. */
+export function landShare(rest: GrabPose, ground: (z: number) => number): number {
+  let land = 0;
+  for (let i = 0; i < LAND_SAMPLES; i++) {
+    const ahead = ((i + 0.5) / LAND_SAMPLES - 0.5) * 2 * HALF_LENGTH;
+    if (ground(rest.z + ahead * Math.cos(rest.pitch)) >= WATER_Y + DRY_RISE) land++;
+  }
+  return land / LAND_SAMPLES;
 }
 
 export interface Strand {
@@ -97,28 +122,36 @@ const lerp = (a: number, b: number, s: number): number => a + (b - a) * s;
 const lerpAngle = (a: number, b: number, s: number): number =>
   a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * s;
 
+/** Pure: the root height that puts every underside sample on or over the shore (the pectoral tips may sink `FIN_SINK`). */
+function liftFor(rest: GrabPose, ground: (z: number) => number): number {
+  const gaps = restGaps(rest, ground);
+  return Math.max(...gaps.map((g, i) => -g - (FINS.includes(i) ? FIN_SINK : 0)));
+}
+
 /**
  * Pure: where it comes to rest with its nose at (noseX, noseZ), lying along +z (facing up the
  * shore, its tail back in the lake); `ground(z)` is the shore height at z. It lies ON the pebbles:
- * pitched so its chin and tail sit lowest over the slope, then lowered until its lowest point (the
- * pectoral tips) touches and nothing is under the shore. The body is rigid here, so on a slope the chin and
- * tail sit above the ground; the Beached clip droops the tail.
+ * lowered until nothing is under the shore (the pectoral tips may sink a little), at the pitch that
+ * puts her chin lowest while her tail end stays within `TAIL_HOVER` of the bed (her head rests low
+ * and her tail is in the shallows; a nearly straight body cannot do both, so the pitch is a compromise).
  */
 export function strandRest(noseX: number, noseZ: number, ground: (z: number) => number): GrabPose {
   const z = noseZ - HALF_LENGTH;
   let best: GrabPose = { x: noseX, y: 0, z, yaw: Math.PI, pitch: 0 };
-  let bestScore = Infinity;
-  // Nose-up from a little down to steep: lowest total gap, the nose, chin, pectoral tips and tail first.
+  let bestChin = Infinity;
+  let bestTail = Infinity;
   for (let pitch = PITCH_MIN; pitch <= PITCH_MAX; pitch += PITCH_STEP) {
     const rest = { x: noseX, y: 0, z, yaw: Math.PI, pitch };
+    rest.y = liftFor(rest, ground);
     const gaps = restGaps(rest, ground);
-    const low = Math.min(...gaps);
-    const score =
-      gaps.reduce((sum, g) => sum + g - low, 0) +
-      KEY_WEIGHT * Math.max(...KEY.map((i) => gaps[i] - low));
-    if (score < bestScore) {
-      bestScore = score;
-      best = { ...rest, y: -low };
+    const tail = gaps[TAIL] ?? 0;
+    const chin = gaps[CHIN] ?? 0;
+    // The pitch with the lowest chin whose tail is within reach of the bed; if none is, the lowest tail.
+    const ok = tail <= TAIL_HOVER;
+    if (ok ? chin < bestChin : bestChin === Infinity && tail < bestTail) {
+      if (ok) bestChin = chin;
+      bestTail = tail;
+      best = rest;
     }
   }
   return best;

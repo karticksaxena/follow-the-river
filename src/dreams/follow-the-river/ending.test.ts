@@ -165,7 +165,7 @@ describe('the farewell', () => {
     const at = shoreFor(meet, lake.z);
     const reach = FOREST.endZ + 0.3; // the wall's land face plus your body
     const kneel = shotsFor(at).kneel.at;
-    expect(kneel[2] - FAREWELL.kneelRadius).toBeLessThan(reach + 1);
+    expect(kneel[2]).toBeGreaterThan(reach + 1); // on the walkable side of the wall, not against it
     expect(kneel[2] + FAREWELL.kneelRadius).toBeGreaterThan(reach);
     expect(Math.abs(kneel[0] - at.noseX)).toBeGreaterThan(0.9); // beside her, not on her
   });

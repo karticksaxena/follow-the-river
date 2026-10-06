@@ -177,7 +177,7 @@ No CC0 bow, shotgun-pump or dry-fire clip was found (OpenGameArt bow sounds are 
 
 Compress both with the meshopt command above (with `--resample false`).
 
-`kartik-arm.glb` is cut from the body after `pose_hand` bends the wrist back 40 degrees and fans the fingers (`WRIST_BACK`, `SPREAD`), with its
+`kartik-arm.glb` is cut from the body after `pose_hand` bends the wrist back 20 degrees and fans the fingers (`WRIST_BACK`, `SPREAD`), with its
 origin at the middle of the palm (not the elbow): `farewell-arm.ts` puts that point on the skin. `CasualN` needs `kZ3DmIoGip.glb` (the
 Quaternius pack) and the two UAL files; pass a scratch path for the body output if only the arm changed.
 

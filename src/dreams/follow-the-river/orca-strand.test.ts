@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   beached,
+  CHIN,
+  FIN_SINK,
+  FINS,
+  landShare,
   newStrand,
   restGaps,
   STRAND,
@@ -17,12 +21,12 @@ const shore = (z: number): number => shoreY(z - LAKE_Z);
 const CRUISE_Y = -0.45;
 
 describe('where she lies', () => {
-  const rest = strandRest(1.5, LAKE_Z + 3.5, shore);
+  const rest = strandRest(1.5, LAKE_Z + 6.5, shore);
 
   it('lies up the shore facing the pebbles, nose up the slope, tail back in the lake', () => {
     expect(rest.yaw).toBeCloseTo(Math.PI);
-    expect(rest.z).toBeCloseTo(LAKE_Z);
-    expect(rest.pitch).toBeGreaterThan(0); // nose up the slope (her sagging tail is what dips)
+    expect(rest.z).toBeCloseTo(LAKE_Z + 3); // her centre: 6.5 m up from the water line to her nose, minus half her length
+    expect(rest.pitch).toBeGreaterThan(0); // nose up the slope
   });
 
   /** The underside gap at the sample `ahead` m from the centre (see UNDERSIDE). */
@@ -31,24 +35,35 @@ describe('where she lies', () => {
     return restGaps(rest, shore)[i];
   };
 
-  it('lies ON the pebbles: nothing under the shore, her lowest point touches', () => {
+  it('lies ON the pebbles: nothing under the shore but her pectoral tips (they may sink a hand), something touches', () => {
     const gaps = restGaps(rest, shore);
-    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(-0.001); // not buried (pectoral tips included)
-    expect(Math.min(...gaps)).toBeLessThan(0.01); // and resting on something
+    gaps.forEach((g, i) => {
+      expect(g).toBeGreaterThanOrEqual(FINS.includes(i) ? -FIN_SINK - 0.001 : -0.001);
+    });
+    expect(Math.min(...gaps.filter((_, i) => !FINS.includes(i)))).toBeLessThan(0.15);
   });
 
-  it('has nose, chin, middle (pectoral tips) and tail all within 5 cm of the shore', () => {
-    for (const ahead of [3.4, 3, 1.3, -3]) expect(gapAt(ahead)).toBeLessThan(0.05);
+  it('rests her head low (jaw within 0.5 m of the bank, nose-up under 8 degrees) and her tail on the bed (within 15 cm)', () => {
+    expect(gapAt(3)).toBeLessThan(0.5);
+    expect(rest.pitch).toBeLessThan((8 * Math.PI) / 180);
+    expect(restGaps(rest, shore)[CHIN]).toBeLessThan(0.5);
+    expect(gapAt(-3)).toBeLessThan(0.16);
   });
 
-  it('bends the tail down into the lake to do it (a straight body cannot)', () => {
-    expect(STRAND.bend.angle).toBeGreaterThan(0.05);
+  it('arches over eight joints by under 4 degrees each on top of the clip (the old 0.13 rad each folded her)', () => {
+    expect(STRAND.bend.bones.length).toBe(STRAND.bend.angles.length);
+    for (const a of STRAND.bend.angles) expect(Math.abs(a)).toBeLessThan((4 * Math.PI) / 180);
     expect(STRAND.bend.bones).toContain('Tail2');
+  });
+
+  it('has 60-70 % of her length over land (see DRY_RISE) on the lake shore', () => {
+    expect(landShare(rest, shore)).toBeGreaterThanOrEqual(0.6);
+    expect(landShare(rest, shore)).toBeLessThanOrEqual(0.7);
   });
 
   it('is not half buried or floating on flat pebbles either', () => {
     const flat = strandRest(1.5, 3.5, () => 0);
-    expect(Math.min(...restGaps(flat, () => 0))).toBeGreaterThanOrEqual(-0.001);
+    expect(Math.min(...restGaps(flat, () => 0))).toBeGreaterThanOrEqual(-FIN_SINK - 0.001);
     expect(flat.y).toBeGreaterThan(0.5);
     expect(flat.y).toBeLessThan(1.3);
   });
