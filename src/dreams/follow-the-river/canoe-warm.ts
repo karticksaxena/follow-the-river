@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { frames, gpuIdle } from '../../engine/frames';
+import { frames, gpuIdle, revealInBatches } from '../../engine/frames';
 import type { Pose, Ride } from './canoe-ride';
 import { Vegetation } from './nature';
 import { logWarm, mark, unculled, type WarmTimes } from './warm';
@@ -72,6 +72,7 @@ export async function warmRide(
     mark(times, 'compile', t0);
     allPlants();
     undo.push(showPlants(cs.scene, true)); // real frames: one cell per species, not the whole route
+    await revealInBatches(stage);
     const f0 = performance.now();
     for (const at of spots) {
       if (at !== spots[0] && performance.now() - f0 > BUDGET_MS) break;

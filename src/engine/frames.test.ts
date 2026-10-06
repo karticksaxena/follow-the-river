@@ -1,6 +1,6 @@
 /* oxlint-disable typescript/no-unsafe-type-assertion -- partial fake of the Stage */
 import { describe, expect, it, vi } from 'vitest';
-import { drawBehind, GPU_IDLE_TIMEOUT_MS, gpuIdle } from './frames';
+import { drawBehind, GPU_IDLE_TIMEOUT_MS, gpuIdle, splitBatches } from './frames';
 import type { Stage } from './stage';
 
 interface Fake {
@@ -86,5 +86,20 @@ describe('gpuIdle', () => {
 
   it('does not wait on the WebGL 2 backend', async () => {
     await expect(gpuIdle({ backend: { isWebGLBackend: true } })).resolves.toBeUndefined();
+  });
+});
+
+describe('splitBatches (WebGL 2 compiles a few new materials per frame)', () => {
+  it('puts every item in exactly one batch, in order, at most `size` per batch', () => {
+    const items = Array.from({ length: 10 }, (_, i) => i);
+    const batches = splitBatches(items, 4);
+    expect(batches).toEqual([
+      [0, 1, 2, 3],
+      [4, 5, 6, 7],
+      [8, 9],
+    ]);
+    expect(batches.flat()).toEqual(items);
+    expect(splitBatches(items, 0)).toHaveLength(10); // a size below 1 still makes progress
+    expect(splitBatches([], 4)).toEqual([]);
   });
 });

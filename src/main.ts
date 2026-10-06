@@ -3,12 +3,13 @@ import '@fontsource/special-elite/index.css';
 import { runDream, type App } from './app';
 import { createAudioBus } from './engine/audio';
 import { isDesktop } from './engine/device';
+import { HIGH_PERFORMANCE_TIP, isWindows, shouldTipHighPerformance } from './engine/gpu-class';
 import { KeyState } from './engine/input';
-import { showMessage, showUnsupported } from './engine/menus';
+import { showMessage, showPages, showUnsupported } from './engine/menus';
 import { browserStorage, createSaveStore } from './engine/save';
 import { clampSettings, isSettings, loadSettings } from './engine/settings';
 import { createStage, type Stage } from './engine/stage';
-import { createOverlay } from './engine/ui';
+import { createOverlay, type Overlay } from './engine/ui';
 import { startHome } from './home/home';
 import './style.css';
 
@@ -21,6 +22,22 @@ async function tryStage(root: HTMLElement): Promise<Stage | null> {
   } catch {
     return null;
   }
+}
+
+const isSeen = (value: unknown): value is true => value === true;
+
+/** Once, on Windows with an integrated adapter in use: how to set Chrome to High performance. Player-paced. */
+async function tipHighPerformance(overlay: Overlay, stage: Stage): Promise<void> {
+  const data: unknown = Reflect.get(navigator, 'userAgentData');
+  const platform: unknown = data ? Reflect.get(Object(data), 'platform') : undefined;
+  const windows = isWindows(
+    typeof platform === 'string' ? platform : undefined,
+    navigator.userAgent,
+  );
+  const seen = createSaveStore(browserStorage(), 'gpu-tip', isSeen);
+  if (seen.load() || !shouldTipHighPerformance(windows, stage.gpuInfo)) return;
+  seen.save(true);
+  await new Promise<void>((done) => showPages(overlay, HIGH_PERFORMANCE_TIP, done));
 }
 
 async function boot(): Promise<void> {
@@ -37,6 +54,7 @@ async function boot(): Promise<void> {
       'Your browser could not start 3D graphics. Try the latest Chrome or Safari.',
     );
   }
+  await tipHighPerformance(overlay, stage);
   document.documentElement.dataset.backend = stage.backend;
   const keys = new KeyState();
   keys.attach(window);

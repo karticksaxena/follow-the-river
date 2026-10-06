@@ -1,7 +1,13 @@
 import * as THREE from 'three/webgpu';
 import { initEnvironment } from './environment';
 import { capPeriod, newPacer, shouldRender, type MaxFps } from './frame-cap';
-import { autoStartTier, readGpuInfo } from './gpu-class';
+import {
+  autoStartTier,
+  POWER_PREFERENCE,
+  readGpuInfo,
+  webglAttributes,
+  type GpuInfo,
+} from './gpu-class';
 import type { GradePreset } from './grade';
 import { createPerf, type Perf } from './perf';
 import { createPost, POST } from './post';
@@ -33,6 +39,8 @@ export interface Stage {
   readonly renderer: THREE.WebGPURenderer;
   readonly camera: THREE.PerspectiveCamera;
   readonly backend: Backend;
+  /** The WebGPU adapter in use (null on WebGL 2); the Windows tip reads it. */
+  readonly gpuInfo: GpuInfo | null;
   /** Adaptive resolution state (dev: `kd.stage.quality`). */
   readonly quality: Readonly<Quality>;
   /** The graph in use (Auto starts from the GPU and steps down). */
@@ -83,11 +91,22 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
   // GPU timestamp queries cost a little, so they are on only in dev with `?perf`.
   const trackTimestamp = import.meta.env.DEV && new URLSearchParams(location.search).has('perf');
   const gpuInfo = forceWebGL ? null : await readGpuInfo();
-  const renderer = new THREE.WebGPURenderer({ antialias: false, forceWebGL, trackTimestamp });
+  // WebGL 2 will run (forced, no WebGPU, no adapter): make its context here to ask for the fast GPU.
+  // Never otherwise: a webgl2 context on the canvas would block its webgpu one.
+  const canvas = document.createElement('canvas');
+  const context = forceWebGL || !gpuInfo ? canvas.getContext('webgl2', webglAttributes()) : null;
+  const renderer = new THREE.WebGPURenderer({
+    antialias: false,
+    forceWebGL,
+    trackTimestamp,
+    powerPreference: POWER_PREFERENCE,
+    ...(context ? { canvas, context } : {}),
+  });
   await renderer.init();
-  // The WebGL 2 fallback (forced, or no WebGPU) never starts at High; a software adapter starts at Low.
+  // The WebGL 2 fallback (forced, or no WebGPU) means an old browser or GPU: it starts at Low (no
+  // GTAO, pre-pass or mist, so far fewer programs to compile, all synchronously there).
   const webgpu = 'isWebGPUBackend' in renderer.backend;
-  const autoStart: Tier = webgpu ? autoStartTier(gpuInfo) : gpuInfo?.isFallback ? 'low' : 'medium';
+  const autoStart: Tier = webgpu ? autoStartTier(gpuInfo) : 'low';
   initEnvironment(renderer);
   renderer.toneMapping = THREE.AgXToneMapping;
   renderer.toneMappingExposure = POST.exposure;
@@ -120,6 +139,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
     renderer,
     camera,
     backend: webgpu ? 'webgpu' : 'webgl2',
+    gpuInfo: webgpu ? gpuInfo : null,
     scene: new THREE.Scene(),
     hold: false,
     get warming() {

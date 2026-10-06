@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { autoStartTier, type GpuInfo } from './gpu-class';
+import {
+  autoStartTier,
+  isWindows,
+  looksIntegrated,
+  shouldTipHighPerformance,
+  webglAttributes,
+  type GpuInfo,
+} from './gpu-class';
 
 const gpu = (vendor: string, architecture = '', description = ''): GpuInfo => ({
   vendor,
@@ -39,5 +46,37 @@ describe('autoStartTier', () => {
   it('a software adapter starts at Low, no adapter at High', () => {
     expect(autoStartTier({ ...gpu('google', 'swiftshader'), isFallback: true })).toBe('low');
     expect(autoStartTier(null)).toBe('high');
+  });
+});
+
+describe('the fastest GPU on laptops', () => {
+  it("asks WebGL 2 for the high-performance GPU, with three's own attributes", () => {
+    expect(webglAttributes()).toEqual({
+      antialias: false,
+      alpha: true,
+      depth: true,
+      stencil: false,
+      powerPreference: 'high-performance',
+    });
+  });
+
+  it('tells integrated adapters from discrete ones', () => {
+    expect(looksIntegrated(gpu('intel', 'gen-12lp'))).toBe(true);
+    expect(looksIntegrated(gpu('amd', '', 'AMD Radeon(TM) Graphics'))).toBe(true);
+    expect(looksIntegrated(gpu('amd', '', 'AMD Radeon RX 6700M'))).toBe(false);
+    expect(looksIntegrated(gpu('nvidia', 'ada', 'NVIDIA GeForce RTX 4050 Laptop GPU'))).toBe(false);
+    expect(looksIntegrated(gpu('apple', 'metal-3'))).toBe(false);
+  });
+
+  it('shows the Windows "High performance" tip only on Windows with an integrated adapter', () => {
+    const win = isWindows('Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
+    expect(win).toBe(true);
+    expect(isWindows('macOS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe(false);
+    expect(shouldTipHighPerformance(win, gpu('intel'))).toBe(true);
+    expect(shouldTipHighPerformance(win, gpu('nvidia', 'ada'))).toBe(false);
+    expect(shouldTipHighPerformance(false, gpu('intel'))).toBe(false); // macOS honours the hint
+    expect(shouldTipHighPerformance(win, gpu(''))).toBe(false); // unknown: say nothing
+    expect(shouldTipHighPerformance(win, null)).toBe(false); // WebGL 2: no adapter info
+    expect(shouldTipHighPerformance(win, { ...gpu('intel'), isFallback: true })).toBe(false);
   });
 });

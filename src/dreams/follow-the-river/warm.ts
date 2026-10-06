@@ -1,5 +1,5 @@
 import type * as THREE from 'three/webgpu';
-import { frames, gpuIdle } from '../../engine/frames';
+import { frames, gpuIdle, revealInBatches } from '../../engine/frames';
 import type { Stage } from '../../engine/stage';
 import { VOLUME_LAYER } from '../../engine/volume';
 import type { DreamContext } from '../types';
@@ -286,6 +286,7 @@ export async function warmArea(
     allPlants();
     undo.push(sys.world.showAllPlants(true)); // real frames: one cell per species, not the whole route
     stage.warmFocus(); // the depth-of-field graph builds here, not at the first cutscene
+    await revealInBatches(stage); // WebGL 2: the real-frame programs build a few at a time
     await frames(stage, 3);
     await drawPoses(sys, camera.position.x, opts, performance.now());
     mark(times, 'frames', t0);
