@@ -300,3 +300,28 @@ h1.title {
 #overlay.loading .hud {
   visibility: hidden;
 }
+
+/* The drawn mouse cursor over story boxes: the real one is hidden while the pointer is locked. */
+.drawn-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+.drawn-cursor::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: -2px;
+  width: 16px;
+  height: 22px;
+  background: #fff;
+  clip-path: polygon(0 0, 0 100%, 30% 76%, 52% 100%, 72% 90%, 52% 66%, 100% 66%);
+  filter: drop-shadow(0 0 2px #000);
+}
+.drawn-cursor[hidden] {
+  display: none;
+}

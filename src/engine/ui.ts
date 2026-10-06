@@ -26,6 +26,11 @@ export interface Overlay {
   /** Replace the current panel. `build` fills it; returns the panel element. */
   panel(build: (panel: HTMLElement) => void): HTMLElement;
   closePanel(): void;
+  /** Take the panel off screen but keep it (pages under the pause menu); `resumePanel` puts it back. */
+  suspendPanel(): void;
+  resumePanel(): void;
+  /** The panel is the current one, or the one set aside by `suspendPanel`. */
+  holds(panel: HTMLElement): boolean;
   /**
    * A wait on black: hides the HUD now, fades a small spinner in if it lasts past ~150 ms. Call the
    * returned function when done (then fade the screen back in). Waits nest.
@@ -41,6 +46,7 @@ export function createOverlay(root: HTMLElement): Overlay {
   loader.append(el('div', 'loader-ring'), label);
   root.append(loader);
   let current: HTMLElement | null = null;
+  let aside: HTMLElement | null = null;
   const state = createLoadingState(
     (busy) => root.classList.toggle('loading', busy),
     (visible) => loader.classList.toggle('on', visible),
@@ -54,6 +60,7 @@ export function createOverlay(root: HTMLElement): Overlay {
     },
     panel(build) {
       current?.remove();
+      aside = null;
       current = el('div', 'panel');
       build(current);
       root.append(current);
@@ -66,6 +73,21 @@ export function createOverlay(root: HTMLElement): Overlay {
     closePanel() {
       current?.remove();
       current = null;
+      aside = null;
     },
+    suspendPanel() {
+      if (!current) return;
+      aside = current;
+      current.remove();
+      current = null;
+    },
+    resumePanel() {
+      if (!aside) return;
+      current?.remove();
+      current = aside;
+      aside = null;
+      root.append(current);
+    },
+    holds: (panel) => panel === current || panel === aside,
   };
 }

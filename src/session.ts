@@ -3,7 +3,15 @@ import type { App } from './app';
 import type { DreamContext, DreamInfo, DreamModule } from './dreams/types';
 import { disposeScene } from './engine/dispose';
 import { lockKeyboard, unlockKeyboard } from './engine/fullscreen';
-import { screenAfter, type LockEvent, type Screen } from './engine/lock';
+import {
+  NO_READER,
+  openReaderState,
+  pauseReader,
+  resumeReaderState,
+  screenAfter,
+  type LockEvent,
+  type Screen,
+} from './engine/lock';
 import { showChoice, showPages, showPauseMenu, type PageHooks } from './engine/menus';
 import { createPlayer, type Player } from './engine/player';
 
@@ -26,11 +34,14 @@ interface Gate {
   player: Player;
   lock: () => void;
   isPaused: () => boolean;
+  /** The menu's Resume: back to the reader that Esc paused, or into play. */
+  resume: () => void;
   /**
-   * Pause for pages or a choice. The pointer stays locked (no new Chrome full-screen bubble on
-   * every page) unless `cursor`: a choice's buttons need the mouse.
+   * Pause for pages, a choice (`pausable`: Esc opens the pause menu over them) or a bare hold.
+   * The pointer stays locked (no new Chrome full-screen bubble on every page); a drawn cursor
+   * stands in for the mouse.
    */
-  openReader: (cursor: boolean) => void;
+  openReader: (pausable: boolean) => void;
   /** Leave the reader screen and resume play. */
   closeReader: () => void;
   dispose: () => void;
@@ -39,7 +50,7 @@ interface Gate {
 /** Screen state, the shared player and pointer-lock wiring (including dev `?nolock`). */
 function createGate(app: App, showMenu: () => void): Gate {
   let screen: Screen = 'reader';
-  let reading = false;
+  let reader = NO_READER;
   const setScreen = (next: Screen): void => {
     screen = next;
     app.audio.setWorldPaused(next !== 'game');
@@ -55,11 +66,23 @@ function createGate(app: App, showMenu: () => void): Gate {
   const onLock = (event: LockEvent): void => {
     // Dev `?nolock` plays on when the browser refuses the lock (automated or unfocused windows).
     if (NO_LOCK && event === 'lock-error') return;
-    setScreen(screenAfter(event, reading));
-    // A late 'locked' (requested by a closed reader) while another reader is open: stay paused.
-    if (event === 'locked' && reading) player.unlock();
+    // The pause menu is over a reader: only Resume changes the screen.
+    if (reader.menuOver) return;
+    if (event === 'unlocked' && openMenuOverReader()) return;
+    setScreen(screenAfter(event, reader.open));
     if (screen === 'game') app.overlay.closePanel();
     if (screen === 'pause-menu') showMenu();
+  };
+  // Esc over pages or a choice: set them aside (the pager keeps its place) and show the menu.
+  const openMenuOverReader = (): boolean => {
+    const next = pauseReader(reader);
+    if (!next) return false;
+    reader = next;
+    app.overlay.suspendPanel();
+    setScreen('pause-menu');
+    player.unlock();
+    showMenu();
+    return true;
   };
   const player = createPlayer(app.stage.camera, app.stage.renderer.domElement, app.keys, onLock);
   const lock = (): void => {
@@ -68,11 +91,14 @@ function createGate(app: App, showMenu: () => void): Gate {
     // never leaves the window), even on the dev link.
     player.lock();
   };
-  // Without pointer lock the browser can't report Esc as an unlock, so do it here (dev only).
+  // Without pointer lock (dev `?nolock`, or a lock the browser refused) the browser can't report
+  // Esc as an unlock, so catch the key as well.
   const onEscape = (event: KeyboardEvent): void => {
-    if (event.code === 'Escape' && screen === 'game') onLock('unlocked');
+    if (event.code !== 'Escape' || event.repeat) return;
+    if (screen === 'game' && NO_LOCK) onLock('unlocked');
+    else if (screen === 'reader') openMenuOverReader();
   };
-  if (NO_LOCK) addEventListener('keydown', onEscape);
+  addEventListener('keydown', onEscape);
   player.setSensitivity(app.settings.sensitivity);
   const stopMove = app.stage.addUpdater((dt) => {
     if (screen === 'game') player.update(dt);
@@ -81,14 +107,21 @@ function createGate(app: App, showMenu: () => void): Gate {
     player,
     lock,
     isPaused: () => screen !== 'game',
-    openReader: (cursor) => {
-      reading = true;
+    resume: () => {
+      if (!reader.menuOver) return lock();
+      reader = resumeReaderState(reader);
+      app.overlay.resumePanel();
       setScreen('reader');
-      if (cursor) player.unlock();
-      else player.holdLook(true);
+      lockKeyboard();
+      lock();
+    },
+    openReader: (pausable) => {
+      reader = openReaderState(pausable);
+      setScreen('reader');
+      player.holdLook(true);
     },
     closeReader: () => {
-      reading = false;
+      reader = NO_READER;
       player.holdLook(false);
       // Still locked (pages): resume without asking again. Otherwise ask, which may show the bubble.
       if (player.isLocked()) onLock('locked');
@@ -114,7 +147,7 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
       howToPlay: info.howToPlay,
       settings: app.settings,
       tier: app.stage.tier,
-      onResume: gate.lock,
+      onResume: gate.resume,
       onSettings: (settings) => {
         app.saveSettings(settings);
         gate.player.setSensitivity(app.settings.sensitivity);
@@ -139,7 +172,7 @@ export function createSession(app: App, info: DreamInfo, onQuit: () => void): Se
     onQuit();
   }
   const read = (pages: readonly string[], onDone?: () => void, hooks?: PageHooks): void => {
-    gate.openReader(false);
+    gate.openReader(true);
     showPages(
       app.overlay,
       pages,

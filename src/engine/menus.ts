@@ -1,3 +1,4 @@
+import { attachCursor } from './cursor';
 import { MAX_FPS, type MaxFps } from './frame-cap';
 import { toggleFullscreen } from './fullscreen';
 import { pagerActionForKeyEvent, startPager, stepPager, type PagerAction } from './pager';
@@ -12,6 +13,8 @@ export interface PageHooks {
   /** The pager closed, just before `onDone`; `skipped` when the player pressed Skip. */
   onClose?: (skipped: boolean) => void;
 }
+
+const NOOP = (): void => undefined;
 
 export function showUnsupported(overlay: Overlay): void {
   overlay.panel((panel) => {
@@ -51,9 +54,12 @@ export function showPages(
     back.disabled = state.index === 0;
     next.textContent = state.index + 1 === state.total ? 'Continue ✓' : 'Next →';
   };
+  let stopCursor = NOOP;
   const onKey = (event: KeyboardEvent): void => {
     // Another screen replaced these pages: stop listening instead of acting on stale state.
-    if (!panel.isConnected) return stopListening();
+    if (!overlay.holds(panel)) return stopListening();
+    // Under the pause menu the pages are set aside and frozen.
+    if (!panel.isConnected) return;
     const action = pagerActionForKeyEvent({
       code: event.code,
       repeat: event.repeat,
@@ -64,15 +70,9 @@ export function showPages(
     event.preventDefault();
     act(action);
   };
-  // The mouse stays locked over pages (re-locking after each one re-shows Chrome's full-screen
-  // bubble), so the buttons can't be clicked: a plain click turns the page. Esc frees the mouse.
-  const onClick = (): void => {
-    if (!panel.isConnected) return stopListening();
-    if (document.pointerLockElement) act('next');
-  };
   const stopListening = (): void => {
     removeEventListener('keydown', onKey);
-    removeEventListener('click', onClick);
+    stopCursor();
   };
   const act = (action: PagerAction): void => {
     state = stepPager(state, action);
@@ -89,17 +89,14 @@ export function showPages(
       next,
       button('Skip', () => act('skip'), 'btn quiet'),
     );
-    body.append(
-      text,
-      count,
-      row,
-      el('p', 'keys', 'Enter / click / → next · ← back · Esc shows the mouse'),
-    );
+    body.append(text, count, row, el('p', 'keys', 'Enter / click / → next · ← back · Esc pause'));
   });
   // Caption at the top: what the text is about (the TV, Mom, the horde) sits at or below eye level.
   panel.classList.add('caption');
   addEventListener('keydown', onKey);
-  addEventListener('click', onClick);
+  // The mouse stays locked over pages (re-locking after each one re-shows Chrome's full-screen
+  // bubble): a drawn cursor stands in for it, and a click presses the button under it.
+  stopCursor = attachCursor(overlay, panel);
   render();
 }
 
@@ -111,21 +108,24 @@ export function showChoice(
   onPick: (index: number) => void,
   focus = 0,
 ): void {
+  let stopCursor = NOOP;
   const buttons = labels.map((label, index) =>
     button(
       label,
       () => {
+        stopCursor();
         overlay.closePanel();
         onPick(index);
       },
       index === focus ? 'btn primary' : 'btn',
     ),
   );
-  overlay.panel((panel) => {
+  const panel = overlay.panel((body) => {
     const row = el('div', 'row');
     row.append(...buttons);
-    panel.append(el('p', 'page-text', text), row);
+    body.append(el('p', 'page-text', text), row);
   });
+  stopCursor = attachCursor(overlay, panel);
   buttons[focus]?.focus();
 }
 

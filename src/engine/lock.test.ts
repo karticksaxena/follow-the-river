@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { screenAfter } from './lock';
+import { NO_READER, openReaderState, pauseReader, resumeReaderState, screenAfter } from './lock';
+
+describe('reader pause', () => {
+  it('Esc over pages opens the menu once; a second Esc does nothing', () => {
+    const paused = pauseReader(openReaderState(true));
+    expect(paused?.menuOver).toBe(true);
+    expect(paused && pauseReader(paused)).toBeNull();
+  });
+
+  it('Resume returns to the same open reader, and Esc works again', () => {
+    const paused = pauseReader(openReaderState(true));
+    const back = paused && resumeReaderState(paused);
+    expect(back).toEqual(openReaderState(true));
+    expect(back && pauseReader(back)?.menuOver).toBe(true);
+  });
+
+  it('a bare hold or no reader cannot be paused', () => {
+    expect(pauseReader(openReaderState(false))).toBeNull();
+    expect(pauseReader(NO_READER)).toBeNull();
+  });
+});
 
 describe('screenAfter', () => {
   it('shows the game once the mouse is locked', () => {
