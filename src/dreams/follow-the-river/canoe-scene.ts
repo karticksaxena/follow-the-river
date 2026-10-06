@@ -280,7 +280,7 @@ export interface Calf {
 }
 
 /** The orca calf: tiny, hidden until the ride surfaces it; Swim loops from the start. */
-export const CALF_SCALE = 0.35;
+export const CALF_SCALE = 0.3; // 15% under the first 0.35
 function makeCalf(asset: { scene: THREE.Object3D; clips: readonly THREE.AnimationClip[] }): Calf {
   const root = new THREE.Group();
   root.rotation.order = 'YXZ';

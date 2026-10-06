@@ -10,6 +10,8 @@ export const SHOT = {
   seconds: 14,
   /** The picture fades to black over the last of these. */
   fadeSeconds: 2,
+  /** The camera leaves the seat's eye for the rail over this long (eased), so there is no snap. */
+  blendSeconds: 3,
   start: [0.8, 1.7, -0.1],
   end: [2.4, 8.5, -14],
   /** What the start looks at (the calf beside the bow) and what the wide view looks at (the canoe and the calf, the sun beyond). */
@@ -38,14 +40,20 @@ const toward = new THREE.Matrix4();
 const up = new THREE.Vector3(0, 1, 0);
 
 export interface Shot {
-  /** Puts the camera on the rail at `k` (0..1), its aim easing from the calf to the wide view. Allocates nothing. */
-  place(k: number): void;
+  /** Puts the camera on the rail at `k` (0..1), its aim easing from the calf to the wide view; `blend` (0..1) mixes in the camera's pose when the shot began (1 = all rail). Allocates nothing. */
+  place(k: number, blend?: number): void;
 }
 
 /** The shot's camera work, in the canoe's frame. */
 export function createShot(canoe: THREE.Object3D, camera: THREE.Camera): Shot {
+  // Where the camera is when the shot begins, in the canoe's frame (it rides along and turns with it).
+  canoe.updateMatrixWorld(true);
+  const fromPos = canoe.worldToLocal(camera.position.clone());
+  const fromQuat = canoe.quaternion.clone().invert().multiply(camera.quaternion);
+  const from = new THREE.Vector3();
+  const fromWorld = new THREE.Quaternion();
   return {
-    place(k: number): void {
+    place(k: number, blend = 1): void {
       canoe.updateMatrixWorld(true);
       canoe.localToWorld(railPoint(k, here));
       camera.position.copy(here);
@@ -58,6 +66,15 @@ export function createShot(canoe: THREE.Object3D, camera: THREE.Camera): Shot {
       );
       canoe.localToWorld(aim);
       camera.quaternion.setFromRotationMatrix(toward.lookAt(here, aim, up));
+      if (blend < 1) {
+        const w = smooth(blend);
+        camera.position.lerpVectors(canoe.localToWorld(from.copy(fromPos)), here, w);
+        camera.quaternion.slerpQuaternions(
+          fromWorld.copy(canoe.quaternion).multiply(fromQuat),
+          camera.quaternion,
+          w,
+        );
+      }
       camera.updateMatrixWorld(true);
     },
   };

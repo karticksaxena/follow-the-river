@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { HEAD_CLEARANCE, HEADS, railPoint, SHOT } from './canoe-shot';
+import { createShot, HEAD_CLEARANCE, HEADS, railPoint, SHOT } from './canoe-shot';
 
 describe('the end shot rail', () => {
   it('starts above and between them, rises and goes back to a high wide view, never dipping', () => {
@@ -31,5 +31,27 @@ describe('the end shot rail', () => {
       nearest = Math.min(nearest, p.distanceTo(kartik), p.distanceTo(mom));
     }
     expect(nearest).toBeGreaterThanOrEqual(HEAD_CLEARANCE);
+  });
+});
+
+describe('the shot blend', () => {
+  it('leaves the seat without a jump: tiny steps move the camera a tiny distance, and ends on the rail', () => {
+    const canoe = new THREE.Object3D();
+    const camera = new THREE.PerspectiveCamera();
+    camera.position.set(0, 1.2, 0.9);
+    const shot = createShot(canoe, camera);
+    const prev = new THREE.Vector3();
+    shot.place(0, 0);
+    expect(camera.position.distanceTo(new THREE.Vector3(0, 1.2, 0.9))).toBeLessThan(1e-6);
+    let worst = 0;
+    for (let t = 0; t <= SHOT.blendSeconds; t += 1 / 60) {
+      prev.copy(camera.position);
+      shot.place(t / SHOT.seconds, t / SHOT.blendSeconds);
+      if (t > 0) worst = Math.max(worst, camera.position.distanceTo(prev));
+    }
+    expect(worst).toBeLessThan(0.2);
+    expect(
+      camera.position.distanceTo(railPoint(SHOT.blendSeconds / SHOT.seconds, new THREE.Vector3())),
+    ).toBeLessThan(1e-6);
   });
 });

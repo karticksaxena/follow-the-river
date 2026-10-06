@@ -259,6 +259,9 @@ function startShot(r: Ride): void {
   r.ctx.cinematic(true);
   r.cs.kartik.group.visible = true;
   r.shot = createShot(r.cs.canoe, r.ctx.stage.camera);
+  r.rowing = true; // she takes the paddle up again: the canoe glides on through the shot
+  r.paddled = false;
+  r.cs.mom.play('Row');
 }
 
 /** Does what the director says is due: a talk, Mom stopping, the closing pages. */
@@ -296,7 +299,7 @@ function seatCamera(r: Ride): void {
 /** The end shot's rail; the picture fades to black over its last seconds, then the ride is over. */
 function stepShot(r: Ride, shot: NonNullable<Ride['shot']>): void {
   r.shotT += r.dt;
-  shot.place(Math.min(1, r.shotT / SHOT.seconds));
+  shot.place(Math.min(1, r.shotT / SHOT.seconds), r.shotT / SHOT.blendSeconds);
   if (!r.fading && r.shotT >= SHOT.seconds - SHOT.fadeSeconds) {
     r.fading = true;
     void r.ctx.overlay.fade(true, SHOT.fadeSeconds * 1000).then(r.onEnd);
@@ -411,6 +414,20 @@ async function run(
 
 const newPose = (): Pose => ({ x: 0, y: 0, z: 0, yaw: 0, roll: 0 });
 
+/** Black seconds between freeing the ride and handing on (its garbage collection lands here, not on the credits). */
+export const HANDOFF_SECONDS = 0.8;
+
+/** Calls `done` after `HANDOFF_SECONDS` of stage time; the screen is black meanwhile. */
+function handOff(stage: DreamContext['stage'], done: () => void): void {
+  let left = HANDOFF_SECONDS;
+  const stop = stage.addUpdater((dt) => {
+    left -= dt;
+    if (left > 0) return;
+    stop();
+    done();
+  });
+}
+
 /** Builds the ride around the loaded scene, wires its teardown and starts it. May throw; `run` catches. */
 function stageRide(
   ctx: DreamContext,
@@ -444,7 +461,8 @@ function stageRide(
     }
     r.motion.dispose();
     cs.dispose();
-    done();
+    if (finished) handOff(stage, done);
+    else done();
   };
   const stop = stage.addUpdater((dt) => {
     if (stage.scene !== cs.scene) return teardown(); // someone else took the stage

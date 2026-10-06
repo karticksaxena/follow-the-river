@@ -7,8 +7,8 @@ export const RIDE = {
   /** The calf starts to surface this long before `seconds`, rising over `surface` seconds. */
   calfLead: 20,
   surface: 2.5,
-  /** After Mom stops rowing the canoe eases down to `drift` (m/s) over `driftEase` seconds. */
-  drift: 0.35,
+  /** After Mom stops rowing the canoe eases down to `drift` (m/s) over `driftEase` seconds: a glide, never a halt (she rows on through the end shot). */
+  drift: 1.4,
   driftEase: 4,
   /** Glide allowed past `seconds` while the closing pages are read (world is built this long). */
   tail: 40,

@@ -34,6 +34,7 @@ import {
   terrainY,
   WATER_LEVEL,
 } from './canoe-scene';
+import { SHOT } from './canoe-shot';
 
 const blank = (): Pose => ({ x: 0, y: 0, z: 0, yaw: 0, roll: 0 });
 const calfBlank = (): CalfPose => ({ x: 0, z: 0, y: 0, pitch: 0, visible: false, surfaced: 0 });
@@ -218,9 +219,16 @@ describe('the paddle dips into the river', () => {
 });
 
 describe('the speed profile', () => {
+  it('never halts: the canoe moves through the closing pages, the end shot and its fade', () => {
+    const endShot = STOP_AT + STOP_PAUSE + 120 + SHOT.seconds; // generous page-reading time
+    for (let t = STOP_AT; t <= endShot; t += 0.5)
+      expect(speedAt(t, STOP_AT)).toBeGreaterThanOrEqual(RIDE.drift);
+    expect(RIDE.drift).toBeGreaterThan(1);
+  });
+
   it('glides to a drift after Mom stops rowing (it does not keep her speed)', () => {
     expect(speedAt(30, null)).toBeCloseTo(RIDE.speed);
-    expect(speedAt(60, 55)).toBeLessThan(RIDE.speed * 0.5);
+    expect(speedAt(60, 55)).toBeLessThan(RIDE.speed);
     expect(speedAt(70, 55)).toBeCloseTo(RIDE.drift, 1);
     for (let t = 55; t < 70; t += 0.5)
       expect(speedAt(t + 0.5, 55)).toBeLessThanOrEqual(speedAt(t, 55) + 1e-9);
