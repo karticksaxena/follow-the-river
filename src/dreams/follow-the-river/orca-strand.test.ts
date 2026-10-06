@@ -12,9 +12,11 @@ import {
   strandPose,
   strandRest,
   swimming,
+  swimPath,
   UNDERSIDE,
 } from './orca-strand';
-import { shoreY } from './river';
+import { EDGE_X, FAR_EDGE_X, shoreY } from './river';
+import { lakeEdgeZ } from './shore-shape';
 
 const LAKE_Z = -392;
 const shore = (z: number): number => shoreY(z - LAKE_Z);
@@ -91,7 +93,11 @@ describe('the last leap', () => {
   });
 
   it('rises to the surface first, and swims for as long as the distance takes (4 to 9 s)', () => {
-    const near = newStrand({ ...from, x: rest.x, z: LAKE_Z - 5 }, rest, CRUISE_Y);
+    const near = newStrand(
+      { ...from, x: EDGE_X + STRAND.bankMargin, z: LAKE_Z - 5 },
+      rest,
+      CRUISE_Y,
+    );
     const far = newStrand({ ...from, z: LAKE_Z + 200 }, rest, CRUISE_Y);
     expect(near.swim).toBe(STRAND.swimMin);
     expect(far.swim).toBe(STRAND.swimMax);
@@ -129,4 +135,41 @@ describe('the last leap', () => {
     s.t = strandPhases(s).dip;
     expect(Math.cos(strandPose(s, out).yaw - rest.yaw)).toBeCloseTo(1);
   });
+});
+
+describe('the swim in goes through water only', () => {
+  const rest = strandRest(1.5, LAKE_Z + 6.5, shore);
+  /** River water between the banks, lake water south of the shore line. */
+  const wet = (x: number, z: number): boolean =>
+    (x > EDGE_X && x < FAR_EDGE_X) || z < lakeEdgeZ(x, LAKE_Z);
+  // Fight spots in the river, up to the mouth and close to the west bank, and one out in the lake.
+  const starts = [
+    [18, LAKE_Z + 30],
+    [5, LAKE_Z + 12],
+    [4, LAKE_Z + 3],
+    [8, LAKE_Z + 1],
+    [30, LAKE_Z + 10],
+    [12, LAKE_Z - 4],
+    [0, LAKE_Z - 15],
+  ];
+
+  it.each(starts)(
+    'from (%f, %f) every point of the path is water and it ends at the launch',
+    (x, z) => {
+      const from = { x, y: -2, z, yaw: 0, pitch: 0 };
+      const p = { x: 0, z: 0 };
+      for (let i = 0; i <= 200; i++) {
+        swimPath(from, rest, i / 200, p);
+        expect(wet(p.x, p.z)).toBe(true);
+      }
+      expect(p.x).toBeCloseTo(rest.x);
+      expect(p.z).toBeCloseTo(rest.z - STRAND.launchOut);
+      const s = newStrand(from, rest, CRUISE_Y);
+      s.t = strandPhases(s).dip;
+      const out = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+      strandPose(s, out);
+      expect(out.x).toBeCloseTo(rest.x);
+      expect(out.z).toBeCloseTo(rest.z - STRAND.launchOut);
+    },
+  );
 });

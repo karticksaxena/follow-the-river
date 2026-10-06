@@ -79,9 +79,11 @@ export function travelled(t: number, stopAt: number | null = null): number {
 export interface Script {
   beat: number;
   stopped: boolean;
+  /** The player has seen the calf (canoe-look): the closing pages wait for it. */
+  looked: boolean;
   closed: boolean;
 }
-export const newScript = (): Script => ({ beat: 0, stopped: false, closed: false });
+export const newScript = (): Script => ({ beat: 0, stopped: false, looked: false, closed: false });
 
 export type Cue = { kind: 'stop' } | { kind: 'beat' | 'closing'; pages: readonly string[] };
 
@@ -100,7 +102,7 @@ export function nextCue(s: Script, t: number, reading: boolean): Cue | null {
     s.beat++;
     return { kind: 'beat', pages: talk.pages };
   }
-  if (s.stopped && !talk && !s.closed && t >= STOP_AT + STOP_PAUSE) {
+  if (s.stopped && s.looked && !talk && !s.closed && t >= STOP_AT + STOP_PAUSE) {
     s.closed = true;
     return { kind: 'closing', pages: CLOSING_PAGES };
   }

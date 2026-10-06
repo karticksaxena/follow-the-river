@@ -75,12 +75,19 @@ export const ENDING_PAGES: Readonly<Record<PagedStep, readonly string[]>> = {
     'Mom: "They\'re coming, all of them. Take this, and stay by the water. Dras will fight with us."',
   ],
   home: ['Mom: "Come on. Let\'s go home."'],
+  // Every source in public/assets/LICENSES.md (ending.test.ts checks the names).
   credits: [
     "Kartik's Dreams - Follow the River",
     'A dream by Kartik',
-    'Art: Kenney and Quaternius (CC0)',
-    'Sound: OpenGameArt and Freesound contributors (CC0), U.S. National Park Service recordings (public domain)',
-    'Made with three.js',
+    'Models: Kenney (kenney.nl): Furniture Kit, City Kit (Commercial, Roads, Suburban), Car Kit, Survival Kit, Nature Kit. CC0.',
+    'Characters, animation and plants: Quaternius (quaternius.com): Ultimate Modular Men, Ultimate Modular Women, Universal Animation Library 1 and 2, Stylized Nature MegaKit. CC0.',
+    'Textures: Poly Haven (polyhaven.com). CC0. Everything else (Dras, the guns, the bow, the river town) was made for this game in Blender.',
+    'Gunshots: The Free Firearm Sound Library by Ben Jaszczak, Brian Nelson, Kevin Heras and Matthew Nanney. Zombies: Zombies Sound Pack by artisticdude. All on OpenGameArt. CC0.',
+    'Ambience and water: 30 CC0 SFX loops, Ambient Bird Sounds by isaiah658, and 40 CC0 water, splash and slime SFX by rubberduck (OpenGameArt). Splashes by roboroo, Bird_man and qubodup, paddle strokes by EpicWizard (Freesound). CC0.',
+    "Dras's voice and breath: killer whale recordings by the U.S. National Park Service (Glacier Bay) and the U.S. Fish and Wildlife Service. Public domain.",
+    'Fonts: IM Fell English (SIL Open Font License 1.1) and Special Elite (Apache License 2.0), from Google Fonts via Fontsource.',
+    'Made with three.js (MIT License) and Vite.',
+    'Thank you for playing.',
   ],
 };
 
@@ -391,7 +398,7 @@ async function runStep(h: EndingHost, st: State, step: EndingStep, at: Shore): P
   } else if (step === 'fight') await fight(h, st);
   else if (step === 'swim') await stranded(h, st, s, at);
   else if (step === 'song') await song(s, at);
-  else if (step === 'kneel') await kneel(s);
+  else if (step === 'kneel') await kneel(s, at);
   else if (step === 'look') await look(s);
   else if (step === 'orbit') await orbit(s);
   else if (step === 'pack' && st.pack) await lastPack(s, st.pack);

@@ -1,7 +1,9 @@
 import * as THREE from 'three/webgpu';
+import { el } from '../../engine/ui';
 import type { DreamContext } from '../types';
+import { newWatch } from './canoe-look';
 import { findArms } from './canoe-paddle';
-import type { Blade, Ride } from './canoe-ride';
+import type { Blade, Pose, Ride } from './canoe-ride';
 import type { CanoeScene } from './canoe-scene';
 import { WATER_LEVEL } from './canoe-scene';
 import { newScript } from './canoe-timing';
@@ -20,6 +22,8 @@ function makeBlades(cs: CanoeScene, ctx: DreamContext): Blade[] {
     return { mark, sound: ctx.audio.positional(mark, 3), y: -Infinity };
   });
 }
+
+export const newPose = (): Pose => ({ x: 0, y: 0, z: 0, yaw: 0, roll: 0 });
 
 /** The ride's state at t = 0: the scene's actors, the sounds' pickers, the fireflies. */
 export function makeRide(ctx: DreamContext, sounds: Sounds, cs: CanoeScene): Ride {
@@ -52,6 +56,8 @@ export function makeRide(ctx: DreamContext, sounds: Sounds, cs: CanoeScene): Rid
     pose: { x: 0, y: 0, z: 0, yaw: 0, roll: 0 },
     calf: { x: 0, z: 0, y: 0, pitch: 0, visible: false, surfaced: 0 },
     spot: { x: 0, z: 0 },
+    watch: newWatch(),
+    goalEl: el('div', 'hud-goal'),
     blades: makeBlades(cs, ctx),
     strokes: picker(sounds.paddles),
     blows: picker(sounds.blows),

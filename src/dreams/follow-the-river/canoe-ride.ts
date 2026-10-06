@@ -1,8 +1,9 @@
 import * as THREE from 'three/webgpu';
 import { drawBehind } from '../../engine/frames';
 import type { DreamContext } from '../types';
+import { watchCalf, type Watch } from './canoe-look';
 import { gripPaddle, type Arm } from './canoe-paddle';
-import { makeRide } from './canoe-ride-setup';
+import { makeRide, newPose } from './canoe-ride-setup';
 import { buildCanoeScene, pathSlope, pathX, WATER_LEVEL, type CanoeScene } from './canoe-scene';
 import { createShot, SHOT } from './canoe-shot';
 import {
@@ -131,6 +132,8 @@ export interface Ride {
   lastYaw: number;
   pose: Pose;
   calf: CalfPose;
+  watch: Watch;
+  goalEl: HTMLElement;
   spot: { x: number; z: number };
   /** The paddle's two blades: where each last was (m up) and the sound it makes going in. */
   blades: Blade[];
@@ -332,6 +335,7 @@ function frame(r: Ride, dt: number): void {
     cs.kartik.update(dt);
     cs.calf.mixer.update(dt);
     direct(r);
+    watchCalf(r);
   }
   placeAll(r);
   cs.canoe.updateMatrixWorld(true);
@@ -412,8 +416,6 @@ async function run(
   }
 }
 
-const newPose = (): Pose => ({ x: 0, y: 0, z: 0, yaw: 0, roll: 0 });
-
 /** Black seconds between freeing the ride and handing on (its garbage collection lands here, not on the credits). */
 export const HANDOFF_SECONDS = 0.8;
 
@@ -446,6 +448,7 @@ function stageRide(
     if (!live) return;
     live = false;
     r.over = true;
+    r.goalEl.remove();
     stop();
     const beds = birds ? [water, birds] : [water];
     for (const sound of [...beds, ...r.blades.map((b) => b.sound)]) {

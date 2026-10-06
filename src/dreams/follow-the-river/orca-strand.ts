@@ -1,6 +1,6 @@
 import { ANATOMY } from './dras-anatomy';
 import type { GrabPose } from './orca-grab';
-import { WATER_Y } from './river';
+import { EDGE_X, FAR_EDGE_X, WATER_Y } from './river';
 
 /**
  * The orca's last leap (Plan 7, swim-in Plan 9): too sick to make it back, it comes in across the
@@ -20,6 +20,8 @@ export const STRAND = {
   /** The launch point: this far out into the lake from where it comes to rest, and this deep. */
   launchOut: 10,
   launchDepth: 1.8,
+  /** She keeps this far (m) from either river bank until she is out in the lake (the banks and the mouth's flare are land to the eye). */
+  bankMargin: 4,
   /** Height of the leap above the straight line to its resting pose. */
   arc: 1.6,
   /**
@@ -157,11 +159,49 @@ export function strandRest(noseX: number, noseZ: number, ground: (z: number) => 
   return best;
 }
 
+/**
+ * Pure: the swim's corner: straight down the river (kept off the banks) to open water at the launch's z,
+ * then across the lake to the launch point. A straight line from the fight to the launch cut the west bank's corner (land).
+ */
+export function swimCorner(from: GrabPose, rest: GrabPose): { x: number; z: number } {
+  const m = STRAND.bankMargin;
+  return {
+    x: Math.min(FAR_EDGE_X - m, Math.max(EDGE_X + m, from.x)),
+    z: rest.z - STRAND.launchOut,
+  };
+}
+
+/** Pure: where she is `along` (0..1) the swim's path (`swimCorner`), by distance. Writes `out`. */
+export function swimPath(
+  from: GrabPose,
+  rest: GrabPose,
+  along: number,
+  out: { x: number; z: number },
+): void {
+  const c = swimCorner(from, rest);
+  const first = Math.hypot(c.x - from.x, c.z - from.z);
+  const across = Math.abs(rest.x - c.x);
+  const d = along * (first + across);
+  if (d <= first) {
+    const k = first > 0 ? d / first : 1;
+    out.x = lerp(from.x, c.x, k);
+    out.z = lerp(from.z, c.z, k);
+    return;
+  }
+  out.x = lerp(c.x, rest.x, across > 0 ? (d - first) / across : 1);
+  out.z = c.z;
+}
+
+/** Pure: the length (m) of her swim's path. */
+const swimLength = (from: GrabPose, rest: GrabPose): number => {
+  const c = swimCorner(from, rest);
+  return Math.hypot(c.x - from.x, c.z - from.z) + Math.abs(rest.x - c.x);
+};
+
 export function newStrand(from: GrabPose, rest: GrabPose, cruiseY: number): Strand {
-  const launchZ = rest.z - STRAND.launchOut;
   const swim = Math.min(
     STRAND.swimMax,
-    Math.max(STRAND.swimMin, Math.hypot(rest.x - from.x, launchZ - from.z) / STRAND.swimSpeed),
+    Math.max(STRAND.swimMin, swimLength(from, rest) / STRAND.swimSpeed),
   );
   const rise = STRAND.rise;
   const ends = { rise, swim: rise + swim, dip: rise + swim + STRAND.dip, leap: 0 };
@@ -180,7 +220,8 @@ function swimIn(s: Strand, out: GrabPose): GrabPose {
   const { from, rest, ends } = s;
   const launchZ = rest.z - STRAND.launchOut;
   const launchY = rest.y - STRAND.launchDepth - 1;
-  const heading = Math.atan2(from.x - rest.x, from.z - launchZ); // nose -z toward the launch
+  const corner = swimCorner(from, rest);
+  const heading = Math.atan2(from.x - corner.x, from.z - launchZ); // nose -z down the river
   if (s.t < ends.rise) {
     const k = smooth(clamp01(s.t / ends.rise));
     out.x = from.x;
@@ -191,9 +232,7 @@ function swimIn(s: Strand, out: GrabPose): GrabPose {
     return out;
   }
   const along = clamp01((s.t - ends.rise) / (ends.swim - ends.rise));
-  // Down the river first, sliding across to the shore only in the lake.
-  out.x = lerp(from.x, rest.x, smooth(clamp01((along - 0.6) / 0.4)));
-  out.z = lerp(from.z, launchZ, along);
+  swimPath(from, rest, along, out); // down the river first, across to the shore only in the lake
   const dip = smooth(clamp01((s.t - ends.swim) / STRAND.dip));
   out.y = lerp(s.cruiseY, launchY, dip);
   // Turns around to face the shore over the last of the swim and the dip.

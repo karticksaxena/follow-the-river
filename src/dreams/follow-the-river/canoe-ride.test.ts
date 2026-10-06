@@ -270,6 +270,7 @@ function simulateRide(): Entry[] {
   let readingUntil = 0;
   for (let i = 0; i < 1200; i++) {
     const t = i * 0.1;
+    if (t >= STOP_AT) s.looked = true; // a player who looks straight away
     const cue: Cue | null = nextCue(s, t, t < readingUntil);
     if (!cue) continue;
     if (cue.kind === 'stop') {

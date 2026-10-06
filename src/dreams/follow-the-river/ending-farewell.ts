@@ -5,6 +5,7 @@ import type { EndingScene } from './ending-scene';
 import { facing, meetPoint } from './ending-scene';
 import { handOnHer } from './farewell-arm';
 import type { Cast } from './farewell-cast';
+import { reachPoint } from './farewell-reach';
 import { keyFrom, rails, SHOTS, type Shots, type V3 } from './farewell-shots';
 import { propUrl } from './kits';
 import { shoreY } from './river';
@@ -28,9 +29,6 @@ export const FAREWELL = {
    * and water, which cut her in two), 1.5 m east of where Mom waits (clear of the landing).
    */
   nose: { fromMom: 1.5, upShore: 6.5 },
-  /** You may kneel from this far (m) of the kneeling spot (it is by her flank, short of the wall you cannot pass). */
-  kneelRadius: 1.6,
-  /** The pack's E works within this of where the camera lands. */
   packRadius: 1.6,
   cryVolume: 0.7,
   answerVolume: 0.5,
@@ -285,6 +283,22 @@ function waitForE(
   });
 }
 
+/** Waits for E within reach of her body (`reachPoint`). `at` is where you stand when you can reach (distance 0), else nowhere. */
+function waitForReach(s: Script, shore: Shore, prompt: string): Promise<void> {
+  const cam = s.sys.ctx.stage.camera.position;
+  const ground = (z: number): number => shoreY(z - shore.lakeZ);
+  const reach = (): number => (reachPoint(shore, cam.x, cam.z, ground) ? 0 : Infinity);
+  const at = {
+    get x() {
+      return cam.x + reach();
+    },
+    get z() {
+      return cam.z + reach();
+    },
+  };
+  return waitForE(s, at, 0, prompt);
+}
+
 /** Mom shuffles up beside you, kneeling just ahead of your hand, and rests hers on her skin next to it, her eyes on hers. */
 async function momBeside(s: Script): Promise<void> {
   const { actor, mom } = s.scene;
@@ -319,11 +333,10 @@ type ArmJobHandle = NonNullable<Cast['arm']>;
  * You kneel beside her: E at her flank; the camera lowers to kneeling height looking along her body
  * to her head, Mom shuffles up beside you, your arm comes up and rests on her skin, Mom's hand next to it.
  */
-export async function kneel(s: Script): Promise<void> {
+export async function kneel(s: Script, at: Shore): Promise<void> {
   const { ctx } = s.sys;
-  const { kneel: at } = s.shots;
   goal(s, ENDING_GOALS.kneel);
-  await waitForE(s, { x: at.at[0], z: at.at[2] }, FAREWELL.kneelRadius, FAREWELL_PROMPTS.kneel);
+  await waitForReach(s, at, FAREWELL_PROMPTS.kneel);
   if (s.cancelled) return;
   goal(s, ENDING_GOALS.stay);
   ctx.cinematic(true);

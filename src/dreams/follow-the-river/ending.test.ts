@@ -21,7 +21,6 @@ import {
 } from './ending';
 import {
   ENDING_GOALS,
-  FAREWELL,
   FAREWELL_PAGES,
   FAREWELL_PROMPTS,
   shoreFor,
@@ -76,6 +75,43 @@ describe('ending steps', () => {
     for (const name of ['Kenney', 'Quaternius', 'OpenGameArt', 'Made with three.js']) {
       expect(credits).toContain(name);
     }
+  });
+
+  it('credits every source in public/assets/LICENSES.md by name', () => {
+    const credits = ENDING_PAGES.credits.join(' ');
+    const sources = [
+      'Furniture Kit',
+      'City Kit',
+      'Car Kit',
+      'Survival Kit',
+      'Nature Kit',
+      'Ultimate Modular Men',
+      'Ultimate Modular Women',
+      'Universal Animation Library',
+      'Stylized Nature MegaKit',
+      'Poly Haven',
+      'Free Firearm Sound Library',
+      'Ben Jaszczak',
+      'Brian Nelson',
+      'Kevin Heras',
+      'Matthew Nanney',
+      'artisticdude',
+      '30 CC0 SFX loops',
+      'isaiah658',
+      'rubberduck',
+      'roboroo',
+      'Bird_man',
+      'qubodup',
+      'EpicWizard',
+      'Freesound',
+      'National Park Service',
+      'Fish and Wildlife Service',
+      'IM Fell English',
+      'Special Elite',
+      'Fontsource',
+      'Blender',
+    ];
+    expect(sources.filter((name) => !credits.includes(name))).toEqual([]);
   });
 
   it('never uses an em dash on screen', () => {
@@ -158,7 +194,7 @@ describe('the last stand', () => {
 });
 
 describe('the farewell', () => {
-  it('lets you walk to the kneeling spot (short of the shore wall) and lands the pack camera in its E range', () => {
+  it('lets you walk to the kneeling spot (short of the shore wall)', () => {
     const meet = FOREST.meetAt;
     const lake = FOREST.lake;
     if (!meet || !lake) throw new Error('the forest has Mom and a lake');
@@ -166,7 +202,6 @@ describe('the farewell', () => {
     const reach = FOREST.endZ + 0.3; // the wall's land face plus your body
     const kneel = shotsFor(at).kneel.at;
     expect(kneel[2]).toBeGreaterThan(reach + 1); // on the walkable side of the wall, not against it
-    expect(kneel[2] + FAREWELL.kneelRadius).toBeGreaterThan(reach);
     expect(Math.abs(kneel[0] - at.noseX)).toBeGreaterThan(0.9); // beside her, not on her
   });
 
