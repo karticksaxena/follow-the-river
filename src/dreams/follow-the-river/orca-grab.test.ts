@@ -88,6 +88,15 @@ function run(vx: number, prey: Prey | null): Run {
 }
 
 describe('the orca grab', () => {
+  it('ends with her back in the river, under the water (where the last leap may start)', () => {
+    // The last stand's end used to cut a grab short while she lay on the bank, and her swim in
+    // started from there: her fin slid through the land. Now the leap waits for the grab to end.
+    for (const vx of [EDGE_X - 4.5, EDGE_X - 2, EDGE_X - 0.5]) {
+      const r = run(vx, fakePrey(vx, -40));
+      expect(r.out.x).toBeGreaterThan(EDGE_X + 1);
+      expect(r.out.y).toBeLessThan(WATER_Y);
+    }
+  });
   it('reaches a zombie at full reach with its jaws while its tail stays over the water', () => {
     const vx = EDGE_X - 4.5;
     const g = start(vx);

@@ -50,7 +50,8 @@ export interface Fish {
   readonly beached: boolean;
   /**
    * Its last leap: out of the lake onto the shore, nose at (noseX, noseZ), where it lies breathing.
-   * `ground(z)` is the shore height. Any grab in progress lets go (the zombie drowns).
+   * `ground(z)` is the shore height. A grab in progress finishes first (it drags the zombie under
+   * and brings her back into the river), so the swim never starts on land.
    */
   strand(noseX: number, noseZ: number, ground: (z: number) => number, horde: Horde): void;
   /** One last breath (a pale blow, the Exhale clip, her eye dims), then she is still. */
@@ -230,6 +231,8 @@ function stepOrcaGrab(f: FishState, dt: number, horde: Horde | null): void {
       f.onEat?.(); // stepGrab has just drowned it
     }
     endGrab(f);
+    const due = f.strandDue;
+    if (due) startStrand(f, due.noseX, due.noseZ, due.ground); // back in the river: now the leap
   }
 }
 
@@ -265,21 +268,24 @@ function startSurface(f: FishState): void {
   });
 }
 
-/** The last leap (see orca-strand.ts): whatever it was doing, it lets go and swims for the shore. */
+/** The last leap (see orca-strand.ts): it stops hunting and swims for the shore, from the water. */
 function startStrand(
   f: FishState,
   noseX: number,
   noseZ: number,
   ground: (z: number) => number,
-  horde: Horde,
 ): void {
-  if (f.rise) endRise(f);
-  if (f.grab) {
-    if (f.grab.bitten && f.grab.victim >= 0) horde.drown(f.grab.victim);
-    endGrab(f);
-  }
   f.strikes = 0;
   f.takePending = false;
+  if (f.grab) {
+    // Mid-grab she may lie on the bank: cutting the grab short started the swim on land, and her
+    // fin slid through the ground. The grab's own retreat drags the zombie under and brings her
+    // back into the river first; the leap starts when it ends (stepOrcaGrab).
+    f.strandDue = { noseX, noseZ, ground };
+    return;
+  }
+  f.strandDue = null;
+  if (f.rise) endRise(f);
   f.finale = 'stranded';
   mistColor(0, f.mist.material.color); // her breath on the shore is pale
   const { x, y, z } = f.root.position;
@@ -353,6 +359,7 @@ function resetFish(f: FishState): void {
   f.rise = null;
   f.grab = null; // horde.reset parks a zombie still in the jaws
   f.strand = null;
+  f.strandDue = null;
   f.finale = 'no';
   f.mistT = -1;
   f.mist.visible = false;
@@ -415,7 +422,7 @@ export async function createFish(
     get beached() {
       return f.strand !== null && beached(f.strand);
     },
-    strand: (noseX, noseZ, ground, horde) => startStrand(f, noseX, noseZ, ground, horde),
+    strand: (noseX, noseZ, ground) => startStrand(f, noseX, noseZ, ground),
     breatheOut() {
       if (f.strand) f.strand.still = true; // the bob stops; the Exhale clip is her last breath
       startExhale(f);

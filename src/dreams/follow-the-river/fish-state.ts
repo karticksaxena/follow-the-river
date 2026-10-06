@@ -100,6 +100,8 @@ export interface FishState {
   finale: Finale;
   /** Its last leap and its rest on the shore (see orca-strand.ts). */
   strand: Strand | null;
+  /** The last leap, waiting for a grab to bring her back into the water first (never through the land). */
+  strandDue: { noseX: number; noseZ: number; ground: (z: number) => number } | null;
   /** 0 well .. 1 dying (see orca-sick.ts). */
   sickness: number;
   /** Her skin and wasting, driven by `sickness` (see orca-sick.ts). */
@@ -261,6 +263,7 @@ export function createState(
     takePending: false,
     finale: 'no',
     strand: null,
+    strandDue: null,
     sickness: 0,
     sick,
     onEat: null,
