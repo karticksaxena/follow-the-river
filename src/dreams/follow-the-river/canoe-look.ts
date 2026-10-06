@@ -13,6 +13,8 @@ export const LOOK = {
   force: 5,
   /** Camera turn rate while helping (per second, exponential). */
   steer: 2.5,
+  /** While helping, the camera looks down no further than this (rad): at the water, not under it. */
+  pitchFloor: -0.15,
   /** The calf counts from this surfacing (0..1), the same moment its blow is heard. */
   from: 0.6,
   /** The top-left line names the side the calf is on from where you face (you may be facing Mom). */
@@ -25,6 +27,14 @@ export const LOOK = {
 /** Pure: is the offset (dx, dz) to the right or the left of the facing (fx, fz)? (Right of -z is +x.) */
 export const sideOf = (fx: number, fz: number, dx: number, dz: number): 'right' | 'left' =>
   fx * dz - fz * dx >= 0 ? 'right' : 'left';
+
+/**
+ * Pure: the angle between the facing (fx, fz) and the offset (dx, dz) seen from above. Height is
+ * left out on purpose: the calf's rig sits about 2 m under the eye, so a 3D angle never got inside
+ * the cone however well you faced it (the view shows ±30 degrees up and down anyway).
+ */
+export const flatAngle = (fx: number, fz: number, dx: number, dz: number): number =>
+  Math.abs(Math.atan2(fx * dz - fz * dx, fx * dx + fz * dz));
 
 export interface Watch {
   /** Seconds the calf has been in view without a break. */
@@ -73,7 +83,9 @@ export function watchCalf(r: Ride): void {
   if (r.script.looked || r.reading || r.calf.surfaced < LOOK.from) return;
   const cam = r.ctx.stage.camera;
   r.cs.calf.root.getWorldPosition(toCalf).sub(cam.getWorldPosition(eye));
-  const verdict = watchStep(r.watch, cam.getWorldDirection(facing).angleTo(toCalf), r.dt);
+  cam.getWorldDirection(facing);
+  const angle = flatAngle(facing.x, facing.z, toCalf.x, toCalf.z);
+  const verdict = watchStep(r.watch, angle, r.dt);
   if (verdict === 'done') {
     r.script.looked = true;
     return setLine(r, '');
@@ -83,5 +95,6 @@ export function watchCalf(r: Ride): void {
   const aim = aimAngles(toCalf.x, toCalf.y, toCalf.z);
   const k = 1 - Math.exp(-r.dt * LOOK.steer);
   cam.rotation.y = turnToward(cam.rotation.y, aim.yaw, k);
-  cam.rotation.x = turnToward(cam.rotation.x, aim.pitch, k);
+  // Aim at the water's surface, not the rig under it.
+  cam.rotation.x = turnToward(cam.rotation.x, Math.max(aim.pitch, LOOK.pitchFloor), k);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aimAngles, LOOK, newWatch, sideOf, turnToward, watchStep } from './canoe-look';
+import { aimAngles, flatAngle, LOOK, newWatch, sideOf, turnToward, watchStep } from './canoe-look';
 import { newScript, nextCue, STOP_AT, STOP_PAUSE } from './canoe-timing';
 
 const DT = 0.1;
@@ -13,6 +13,14 @@ describe('which way to look', () => {
     expect(sideOf(0, 1, -1, 0)).toBe('right');
     expect(LOOK.lines.right).toMatch(/right/);
     expect(LOOK.lines.left).toMatch(/left/);
+  });
+
+  it('counts a look by direction only: the calf rig sits 2.35 m under your eye, below the cone', () => {
+    // Seen in Chrome: facing it exactly, the 3D angle to the rig was about 26 degrees (> 25).
+    expect(flatAngle(-0.98, 0.2, -4.78, 0.99)).toBeLessThan(LOOK.angle);
+    expect(flatAngle(0, -1, 0, -5)).toBeCloseTo(0);
+    expect(flatAngle(0, -1, 5, 0)).toBeCloseTo(Math.PI / 2);
+    expect(flatAngle(0, -1, 0, 5)).toBeCloseTo(Math.PI);
   });
 });
 
