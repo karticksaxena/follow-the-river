@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PickupDef } from './areas/types';
+import { DIFFICULTY } from './difficulty';
 import {
   AMMO_BOX,
   collect,
@@ -8,12 +9,13 @@ import {
   glowScale,
   inShowRange,
   isFull,
+  MODEL,
   nearestPickup,
   PICKUP_RADIUS,
   promptFor,
   SHOW_RANGE,
 } from './pickups';
-import { freshRun, restartPhase, SUPPLY_LIMITS, type GunKind } from './state';
+import { freshRun, restartPhase, SUPPLY_LIMITS, type GunKind, type Supplies } from './state';
 
 const battery: PickupDef = { id: 'battery-1', kind: 'battery', x: 0, z: 0 };
 const tape: PickupDef = { id: 'tape-1', kind: 'tape', x: 3, z: 0, tape: 1 };
@@ -106,6 +108,81 @@ describe('pickups', () => {
     expect(isFull(box, all, live.guns)).toBe(true);
     expect(isFull(box, { ...all, ammo: 0 }, [])).toBe(false);
     expect(isFull(box, all, [])).toBe(true);
+  });
+
+  it('every pickup kind has its own model: an ammo box never looks like arrows', () => {
+    expect(MODEL.ammo).not.toBe(MODEL.arrows);
+    expect(new Set(Object.values(MODEL)).size).toBe(Object.keys(MODEL).length);
+  });
+});
+
+/** What one pickup adds to each count, from empty, owning `guns`. */
+function gained(
+  kind: PickupDef['kind'],
+  k: number,
+  guns: GunKind[],
+  gun?: GunKind,
+): Supplies & { guns: readonly GunKind[] } {
+  const empty: Supplies = {
+    battery: 0,
+    cells: 0,
+    arrows: 0,
+    ammo: 0,
+    shells: 0,
+    rounds: 0,
+    fishPacks: 0,
+  };
+  const live = { ...restartPhase(freshRun()), guns, supplies: empty };
+  const after = collect(live, { id: 'p', kind, x: 0, z: 0, ...(gun ? { gun } : {}) }, k);
+  return { ...after.supplies, guns: after.guns };
+}
+
+const k = (d: 'story' | 'normal' | 'hard'): number => DIFFICULTY[d].supplies;
+
+describe('every count, every difficulty (Story 1.6, Normal 1, Hard 0.6)', () => {
+  it('arrows, spare batteries and fish packs add their own count and nothing else', () => {
+    const rows = [
+      ['arrows', 'arrows', [3, 2, 1]],
+      ['battery', 'cells', [2, 1, 1]],
+      ['fishPack', 'fishPacks', [2, 1, 1]],
+    ] as const;
+    for (const [kind, count, [story, normal, hard]] of rows) {
+      expect([k('story'), k('normal'), k('hard')].map((f) => gained(kind, f, [])[count])).toEqual([
+        story,
+        normal,
+        hard,
+      ]);
+      const others = Object.entries(gained(kind, 1, [])).filter(
+        ([s]) => s !== count && s !== 'guns',
+      );
+      expect(others.every(([, v]) => v === 0)).toBe(true);
+    }
+  });
+
+  it('an ammo box: pistol bullets 3, shotgun shells 2, rifle rounds 8 on Normal, for the guns you own', () => {
+    expect(gained('ammo', 1, [])).toMatchObject({ ammo: 3, shells: 0, rounds: 0, arrows: 0 });
+    expect(gained('ammo', 1, ['shotgun'])).toMatchObject({ ammo: 0, shells: 2, rounds: 0 });
+    const all: GunKind[] = ['pistol', 'shotgun', 'rifle'];
+    expect(gained('ammo', 1, all)).toMatchObject({ ammo: 3, shells: 2, rounds: 8, arrows: 0 });
+    expect(gained('ammo', k('story'), all)).toMatchObject({ ammo: 5, shells: 3, rounds: 13 });
+    expect(gained('ammo', k('hard'), all)).toMatchObject({ ammo: 2, shells: 1, rounds: 5 });
+  });
+
+  it('the Day 2 pistol comes with 6 bullets; each crate gun comes with its own ammo', () => {
+    expect(gained('gun', 1, [])).toMatchObject({ guns: ['pistol'], ammo: 6 });
+    expect(gained('crate', 1, [], 'pistol')).toMatchObject({ ammo: 6, arrows: 2, fishPacks: 1 });
+    expect(gained('crate', 1, ['pistol'], 'shotgun')).toMatchObject({ ammo: 6, shells: 4 });
+    expect(gained('crate', 1, ['pistol', 'shotgun'], 'rifle')).toMatchObject({
+      guns: ['pistol', 'shotgun', 'rifle'],
+      ammo: 6,
+      shells: 4,
+      rounds: 15,
+    });
+  });
+
+  it('a tape adds no supplies', () => {
+    const counts = Object.entries(gained('tape', 1, [])).filter(([s]) => s !== 'guns');
+    expect(counts.every(([, v]) => v === 0)).toBe(true);
   });
 });
 

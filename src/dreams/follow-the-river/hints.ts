@@ -11,6 +11,7 @@ export type HintId =
   | 'hurt'
   | 'tape'
   | 'battery'
+  | 'ammo'
   | 'pistol'
   | 'shotgun'
   | 'rifle'
@@ -35,6 +36,10 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
     'Switched off, it slowly charges back up.',
   ],
   battery: ['A spare battery. When the flashlight runs low, press R to put it in.'],
+  ammo: [
+    'An ammo box: bullets for every gun you own. The weapon list at the bottom left shows how many each gun has.',
+    'No gun yet? You keep the bullets for the first gun you find.',
+  ],
   bow: [
     'Click to shoot your bow. It is silent.',
     'Walk over arrows that missed to pick them back up. One that hits a zombie stays in it.',

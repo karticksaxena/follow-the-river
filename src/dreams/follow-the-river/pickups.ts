@@ -159,13 +159,14 @@ export interface PickupMeshes {
   dispose(): void;
 }
 
-// Ammo reuses the arrows model. The crate is the survival kit's chest, sat on the ground.
-const MODEL: Readonly<Record<PickupKind, string>> = {
+// Ammo is a small box, never the arrows model (players took ammo for arrows that added nothing).
+// The crate is the survival kit's chest, sat on the ground.
+export const MODEL: Readonly<Record<PickupKind, string>> = {
   battery: propUrl('battery'),
   arrows: propUrl('arrows'),
   fishPack: propUrl('fishpack'),
   tape: propUrl('tape'),
-  ammo: propUrl('arrows'),
+  ammo: kitUrl('survival', 'box'),
   gun: propUrl('pistol'),
   crate: kitUrl('survival', 'chest'),
 };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { batteryCells, gunBits, hearts, torchText, waveText } from './hud';
+import { batteryCells, gunBits, hearts, torchText, waveText, weaponLabel } from './hud';
 
 describe('batteryCells', () => {
   it('shows five cells, rounding up so a nearly-empty battery still shows one', () => {
@@ -31,5 +31,12 @@ describe('hud text', () => {
     expect(gunBits([])).toBe(0);
     expect(gunBits(['rifle'])).toBe(4);
     expect(gunBits(['pistol', 'shotgun'])).toBe(3);
+  });
+
+  it('lists each gun with its ammo, so an ammo box shows even with the bow in hand', () => {
+    expect(weaponLabel('bow', 0, 0)).toBe('1 Bow');
+    expect(weaponLabel('pistol', 1, 12)).toBe(' · 2 Pistol 12');
+    expect(weaponLabel('shotgun', 2, 0)).toBe(' · 3 Shotgun 0');
+    expect(weaponLabel('rifle', 3, 45)).toBe(' · 4 Rifle 45');
   });
 });

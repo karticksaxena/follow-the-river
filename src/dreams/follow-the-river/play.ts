@@ -150,6 +150,9 @@ export function createState(sys: Systems, run: Run, events: Events): State {
       health: 0,
       damage: 0,
       guns: 0,
+      pistol: 0,
+      shotgun: 0,
+      rifle: 0,
       weapon: 'bow',
       wave: 0,
       waves: area.waves.length,
@@ -305,6 +308,9 @@ function tickView(p: State, dt: number): void {
   hudState.fishPacks = s.fishPacks;
   hudState.ammo = weapon === 'bow' ? 0 : s[AMMO_OF[weapon]];
   hudState.guns = gunBits(run.live.guns);
+  hudState.pistol = s[AMMO_OF.pistol];
+  hudState.shotgun = s[AMMO_OF.shotgun];
+  hudState.rifle = s[AMMO_OF.rifle];
   hudState.weapon = weapon;
   hudState.health = run.health;
   hudState.damage = DIFFICULTY[sys.ctx.difficulty()].damage;

@@ -16,6 +16,10 @@ export interface HudState {
   damage: number;
   /** Guns owned, as bits (see `gunBits`): crates are optional, so any mix is possible. */
   guns: number;
+  /** Each gun's ammo, shown beside it in the weapon list even while another weapon is in hand. */
+  pistol: number;
+  shotgun: number;
+  rifle: number;
   weapon: Weapon;
   /** The wave being fought (1-based; 0 = none) of how many, and the goal line (what to do). */
   wave: number;
@@ -31,6 +35,13 @@ const NAMES: Readonly<Record<Weapon, string>> = {
 };
 
 const BIT: Readonly<Record<Weapon, number>> = { bow: 0, pistol: 1, shotgun: 2, rifle: 4 };
+const GUNS: readonly GunKind[] = ['pistol', 'shotgun', 'rifle'];
+
+/** One entry of the weapon list, e.g. " · 2 Pistol 12" (a gun shows its ammo; the bow's arrows have their own line). */
+export function weaponLabel(weapon: Weapon, slot: number, ammo: number): string {
+  const count = weapon === 'bow' ? '' : ` ${ammo}`;
+  return `${slot > 0 ? ' · ' : ''}${slot + 1} ${NAMES[weapon]}${count}`;
+}
 
 /** The guns owned as bits, for the HUD's change check (no array compare per frame). */
 export function gunBits(guns: readonly GunKind[]): number {
@@ -105,7 +116,7 @@ function buildHud(root: HTMLElement): HudEls {
   const weapons = { bow: el('span'), pistol: el('span'), shotgun: el('span'), rifle: el('span') };
   const weaponRow = el('div');
   SLOTS.forEach((w, i) => {
-    weapons[w].textContent = `${i > 0 ? ' · ' : ''}${i + 1} ${NAMES[w]}`;
+    weapons[w].textContent = weaponLabel(w, i, 0);
     weaponRow.append(weapons[w]);
   });
   // Hidden until the first set() says a gun is owned (a chapter can be built during the intro).
@@ -126,6 +137,9 @@ function buildHud(root: HTMLElement): HudEls {
     health: 0,
     damage: 0,
     guns: 0,
+    pistol: 0,
+    shotgun: 0,
+    rifle: 0,
     weapon: 'bow',
     wave: 0,
     waves: 0,
@@ -161,6 +175,11 @@ function writeWeapons(h: HudEls, s: HudState): void {
     h.ammo.hidden = s.weapon === 'bow';
   }
   if (fresh || last.ammo !== s.ammo) h.ammo.textContent = `● ${s.ammo}`;
+  for (const gun of GUNS) {
+    if (fresh || last[gun] !== s[gun]) {
+      h.weapons[gun].textContent = weaponLabel(gun, SLOTS.indexOf(gun), s[gun]);
+    }
+  }
 }
 
 function writeStats(h: HudEls, s: HudState): void {

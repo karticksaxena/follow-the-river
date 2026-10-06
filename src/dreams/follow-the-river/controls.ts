@@ -129,6 +129,7 @@ function take(c: Ctl, found: PickupDef): void {
   if (found.kind === 'arrows') c.events.hint('bow');
   else if (found.kind === 'fishPack') c.events.hint('fish');
   else if (found.kind === 'battery') c.events.hint('battery');
+  else if (found.kind === 'ammo') c.events.hint('ammo');
   else if (fresh && gun) c.events.hint(gun);
   else if (found.kind === 'tape') c.events.tape(found);
 }
