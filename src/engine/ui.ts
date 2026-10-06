@@ -70,8 +70,8 @@ export function createOverlay(root: HTMLElement): Overlay {
       return new Promise((resolve) => setTimeout(resolve, ms));
     },
     panel(build) {
+      // Keep `aside`: the pause menu opens over pages Esc set aside, and Resume needs them back.
       current?.remove();
-      aside = null;
       current = el('div', 'panel');
       build(current);
       root.append(current);
