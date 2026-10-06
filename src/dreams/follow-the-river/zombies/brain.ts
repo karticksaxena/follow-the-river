@@ -85,7 +85,10 @@ export interface Mind {
 
 export interface Senses {
   distance: number;
+  /** In the beam's core: what builds up to a stun. */
   lit: boolean;
+  /** Anywhere in the light you can see (wider than the core): keeps a stunned zombie slow and stops it re-arming. */
+  inLight?: boolean;
   heard: boolean;
 }
 
@@ -143,9 +146,17 @@ function set(out: Thought, intent: Intent, hit = false): Thought {
   return out;
 }
 
-/** Light builds up exposure; anything short of a stun fades away. Returns true when stunned. */
-function lightUp(mind: Mind, lit: boolean, stun: Tuning['stun'], dt: number): boolean {
-  if (lit) mind.unlit = 0;
+/** In any of the torch's visible light (the core counts too). */
+const inLight = (s: Senses): boolean => s.lit || s.inLight === true;
+
+/**
+ * The beam's core builds up exposure; anything short of a stun fades away. Returns true when
+ * stunned. A stunned zombie stays dazzled (no new stun) until it has been out of all visible light
+ * for REARM_SECONDS: drifting off the core while still lit is not darkness.
+ */
+function lightUp(mind: Mind, senses: Senses, stun: Tuning['stun'], dt: number): boolean {
+  const lit = senses.lit;
+  if (inLight(senses)) mind.unlit = 0;
   else if (mind.dazzled && (mind.unlit += dt) >= REARM_SECONDS) mind.dazzled = false;
   if (mind.dazzled) return false;
   mind.exposure = lit ? mind.exposure + dt : Math.max(0, mind.exposure - dt);
@@ -182,7 +193,7 @@ function wake(mind: Mind, senses: Senses, out: Thought): Thought {
 }
 
 function chase(mind: Mind, senses: Senses, tuning: Tuning, dt: number, out: Thought): Thought {
-  if (lightUp(mind, senses.lit, tuning.stun, dt)) return set(out, 'stagger');
+  if (lightUp(mind, senses, tuning.stun, dt)) return set(out, 'stagger');
   mind.hunt = senses.heard ? HUNT_SECONDS : mind.hunt - dt;
   if (senses.distance > tuning.giveUp && mind.hunt <= 0) {
     mind.state = 'idle';
@@ -193,7 +204,7 @@ function chase(mind: Mind, senses: Senses, tuning: Tuning, dt: number, out: Thou
     mind.timer = ATTACK.windup;
     return set(out, 'strike');
   }
-  if (mind.dazzled && senses.lit) {
+  if (mind.dazzled && inLight(senses)) {
     set(out, 'walk');
     out.slow = true;
     return out;
@@ -208,7 +219,7 @@ function windup(
   dt: number,
   out: Thought,
 ): Thought {
-  if (lightUp(mind, senses.lit, stun, dt)) return set(out, 'stagger');
+  if (lightUp(mind, senses, stun, dt)) return set(out, 'stagger');
   mind.timer -= dt;
   if (mind.timer > 0) return set(out, 'strike');
   mind.state = 'recover';

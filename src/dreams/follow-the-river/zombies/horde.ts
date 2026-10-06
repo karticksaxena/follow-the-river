@@ -32,6 +32,10 @@ export interface PlayerSense {
   beamOn: boolean;
   beamRange: number;
   beamHalfAngle: number;
+  /** The visible light's real axis (unit) and cone: a zombie inside it counts as in the light (Senses.inLight). */
+  lightDir?: Vec3;
+  lightRange?: number;
+  lightHalfAngle?: number;
 }
 
 export interface Horde {
@@ -126,6 +130,17 @@ function tick(
   chest.set(b.x, CHEST_Y, b.z);
   senses.lit =
     player.beamOn && inCone(player.eye, player.look, chest, player.beamRange, player.beamHalfAngle);
+  senses.inLight =
+    senses.lit ||
+    (player.beamOn &&
+      player.lightDir !== undefined &&
+      inCone(
+        player.eye,
+        player.lightDir,
+        chest,
+        player.lightRange ?? 0,
+        player.lightHalfAngle ?? 0,
+      ));
   senses.heard = b.heard;
   b.heard = false;
   const t = think(b.mind, senses, b.tuning, dt, b.thought);
@@ -362,7 +377,7 @@ function createState(
     grid,
     s: {
       chest: new THREE.Vector3(),
-      senses: { distance: 0, lit: false, heard: false },
+      senses: { distance: 0, lit: false, inLight: false, heard: false },
       dir: { x: 0, z: 0 },
       pos: { x: 0, z: 0 },
       aim: { x: 0, z: 0 },

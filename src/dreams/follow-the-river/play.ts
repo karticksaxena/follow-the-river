@@ -10,8 +10,10 @@ import {
   BEAM,
   chargeBattery,
   FLASHLIGHT,
+  LIGHT_CONE,
   setTorchShadowTier,
   TORCH_EXPOSURE,
+  torchDirection,
   WATCH,
 } from './flashlight';
 import { nearSpot, takeDamage } from './flow';
@@ -115,8 +117,14 @@ function newSense(): PlayerSense {
     beamOn: false,
     beamRange: BEAM.range,
     beamHalfAngle: BEAM.halfAngle,
+    lightDir: { x: 0, y: 0, z: -1 },
+    lightRange: LIGHT_CONE.range,
+    lightHalfAngle: LIGHT_CONE.halfAngle,
   };
 }
+
+/** Scratch for the torch's world axis (updateSense; no per-frame allocation). */
+const torchAxis = new THREE.Vector3();
 
 export function createState(sys: Systems, run: Run, events: Events): State {
   const { area, hud, grid } = sys;
@@ -203,6 +211,13 @@ function updateSense(p: State): void {
   sense.look.y = look.y;
   sense.look.z = look.z;
   sense.beamOn = sys.flashlight.on && run.live.supplies.battery > 0;
+  const light = sense.lightDir;
+  if (light) {
+    torchDirection(sys.ctx.stage.camera, torchAxis);
+    light.x = torchAxis.x;
+    light.y = torchAxis.y;
+    light.z = torchAxis.z;
+  }
 }
 
 /** The particles: dust in the beam, night mist, Night 3's fireflies at the forest edge, the forest's leaves by day. */

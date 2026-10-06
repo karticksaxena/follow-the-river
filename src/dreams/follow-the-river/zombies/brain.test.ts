@@ -259,6 +259,19 @@ describe('wounds and stuns', () => {
         ]),
       ).toBe(2);
     });
+    it('in the visible light but out of the beam core it stays slow and is never stopped again', () => {
+      // Kartik: "stopping for one second, then coming, then stopping again, even in the light".
+      // The core (lit) is narrower than the light you see (inLight): aim drifting off the core must
+      // not count as dark.
+      const glow: Senses = { distance: 8, lit: false, inLight: true, heard: false };
+      const mind = newMind();
+      const seq: [Senses, number][] = [[lit, 2]];
+      for (let i = 0; i < 4; i++) seq.push([glow, REARM_SECONDS + 0.5], [lit, 1]);
+      expect(stunnedCount(mind, seq)).toBe(1);
+      think(mind, glow, NIGHT_TUNING, 0.05, out);
+      expect(out.intent).toBe('walk');
+      expect(out.slow).toBe(true);
+    });
     it('chases an unlit zombie at full speed', () => {
       const mind = newMind();
       stunnedCount(mind, [

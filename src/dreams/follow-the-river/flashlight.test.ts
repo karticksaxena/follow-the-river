@@ -1,21 +1,57 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
+import { inCone } from '../../engine/ray';
 import {
   BATTERY,
+  BEAM,
   beamLevel,
   chargeBattery,
   createFlashlight,
   FLASHLIGHT,
   groundScale,
   inBeamDistance,
+  LIGHT_CONE,
   setTorchShadowTier,
   TORCH_EXPOSURE,
   torchAim,
+  torchDirection,
   torchScale,
   WATCH,
 } from './flashlight';
 
 const EYE = 1.6;
+/** A zombie's chest `d` m ahead, a little to one side. */
+const chestAt = (d: number): { x: number; y: number; z: number } => ({ x: 0.4, y: 1.3, z: -d });
+
+describe('the light zombies feel matches the light you see', () => {
+  it('points along the visible beam (below the view) and spans most of its cone', () => {
+    const cam = new THREE.PerspectiveCamera();
+    cam.updateMatrixWorld();
+    const dir = torchDirection(cam, new THREE.Vector3());
+    expect(dir.length()).toBeCloseTo(1);
+    expect(Math.asin(-dir.y)).toBeGreaterThan(FLASHLIGHT.pitch * 0.9); // aimed down like the spot
+    expect(LIGHT_CONE.halfAngle).toBeGreaterThan(0.3); // wider than the stun core (BEAM)
+    expect(LIGHT_CONE.halfAngle).toBeLessThanOrEqual(FLASHLIGHT.angle);
+    expect(LIGHT_CONE.range).toBeLessThanOrEqual(FLASHLIGHT.distance);
+  });
+
+  it('keeps a zombie walking straight at you in the light all the way in; the old core lost it', () => {
+    const cam = new THREE.PerspectiveCamera();
+    cam.position.set(0, EYE, 0);
+    cam.updateMatrixWorld();
+    const eye = { x: 0, y: EYE, z: 0 };
+    const view = { x: 0, y: 0, z: -1 };
+    const dir = torchDirection(cam, new THREE.Vector3());
+    const out: number[] = [];
+    const coreLost: number[] = [];
+    for (let d = 1.5; d <= 14; d += 0.5) {
+      if (!inCone(eye, dir, chestAt(d), LIGHT_CONE.range, LIGHT_CONE.halfAngle)) out.push(d);
+      if (!inCone(eye, view, chestAt(d), BEAM.range, BEAM.halfAngle)) coreLost.push(d);
+    }
+    expect(out).toEqual([]);
+    expect(coreLost.length).toBeGreaterThan(0); // close in, the stun core misses its chest
+  });
+});
 const smoothstep = (a: number, b: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);

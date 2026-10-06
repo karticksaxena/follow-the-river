@@ -72,6 +72,18 @@ export function torchAim<T extends { set(x: number, y: number, z: number): unkno
 }
 
 /**
+ * The light a player sees on a zombie: most of the spot's cone (its soft edge fades out toward
+ * FLASHLIGHT.angle) and most of its reach. Wider than BEAM, the core that stuns: inside this a
+ * stunned zombie stays slow and is not stopped again. Tuning knobs.
+ */
+export const LIGHT_CONE = { range: 18, halfAngle: 0.42 } as const;
+
+/** The torch's axis in world space (unit), from the camera: where the visible beam really points. Writes `out`. */
+export function torchDirection(camera: THREE.Object3D, out: THREE.Vector3): THREE.Vector3 {
+  return torchAim(out).transformDirection(camera.matrixWorld);
+}
+
+/**
  * The torch's charge is 0..100. It drains while on; once it has been off for `rechargeDelay` s it
  * creeps back up (like Alan Wake's torch). Below `low` the beam stutters. Tuning knobs.
  */
