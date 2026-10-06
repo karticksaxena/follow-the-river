@@ -157,6 +157,10 @@ function fireArrow(s: BowState, eye: Vec3, look: Vec3): void {
   s.kick = KICK_TIME;
 }
 
+/** A missed arrow (stuck in the ground or a wall) is picked up by walking over it. */
+export const canRecover = (a: Arrow, player: { x: number; z: number }): boolean =>
+  a.state === 'stuck' && Math.hypot(a.x - player.x, a.z - player.z) < RECOVER_RADIUS;
+
 /** One arrow's frame: fly and hit-test if flying, recover if stuck near the player (1 = recovered). */
 function updateArrow(
   s: BowState,
@@ -173,7 +177,7 @@ function updateArrow(
     stepArrow(a, dt);
     if (a.state === 'flying') resolveHit(s, i, x, y, z, horde, grid);
     if (a.state === 'flying') orient(s.meshes[i], a);
-  } else if (a.state === 'stuck' && Math.hypot(a.x - player.x, a.z - player.z) < RECOVER_RADIUS) {
+  } else if (canRecover(a, player)) {
     a.state = 'idle';
     s.audio.once(s.sounds.click, VOLUME.click);
     recovered = 1;

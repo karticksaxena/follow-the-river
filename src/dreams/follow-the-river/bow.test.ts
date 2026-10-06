@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOW, settleOnHit, stepArrow, type Arrow } from './bow';
+import { BOW, canRecover, settleOnHit, stepArrow, type Arrow } from './bow';
 import { DIFFICULTY } from './difficulty';
 
 const arrow = (): Arrow => ({
@@ -47,5 +47,28 @@ describe('settleOnHit', () => {
     const a = arrow();
     settleOnHit(a, DIFFICULTY.story.keepHitArrows, 1, 2);
     expect([a.state, a.x, a.z]).toEqual(['stuck', 1, 2]);
+  });
+});
+
+const stuck = (x: number, z: number): Arrow => ({ ...arrow(), x, z, state: 'stuck' });
+
+describe('canRecover (walk over a missed arrow to pick it up)', () => {
+  it('picks up a stuck arrow within about a metre of the player', () => {
+    expect(canRecover(stuck(0.5, -0.5), { x: 0, z: 0 })).toBe(true);
+    expect(canRecover(stuck(3, 0), { x: 0, z: 0 })).toBe(false);
+  });
+
+  it('never picks up an arrow still flying or gone', () => {
+    expect(canRecover({ ...arrow(), x: 0, z: 0 }, { x: 0, z: 0 })).toBe(false);
+    expect(canRecover({ ...arrow(), state: 'idle' }, { x: 0, z: 0 })).toBe(false);
+  });
+
+  it('a hit on Normal leaves nothing to pick up; on Story the arrow waits at the body', () => {
+    const normal = arrow();
+    settleOnHit(normal, false, 2, 2);
+    expect(canRecover(normal, { x: 2, z: 2 })).toBe(false);
+    const story = arrow();
+    settleOnHit(story, true, 2, 2);
+    expect(canRecover(story, { x: 2, z: 2 })).toBe(true);
   });
 });

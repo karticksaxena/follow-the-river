@@ -147,7 +147,7 @@ function makeSpots(sc: IntroScene): Record<ActiveStep, Spot> {
       at: AT.tv,
       reach: REACH.tv,
       prompt: 'E: watch the news',
-      hint: 'Walk to the TV: W A S D to move, mouse to look',
+      hint: 'Walk to the TV: W A S D to move, Shift to run, mouse to look',
     },
     'mom-leaves': mom('E: talk to Mom', 'Go to Mom'),
     'mom-back': mom('E: talk to Mom', 'Go to Mom'),

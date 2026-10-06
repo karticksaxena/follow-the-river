@@ -27,7 +27,7 @@ export const HINTS: Readonly<Record<HintId, readonly string[]>> = {
     'Batteries, arrows and fish packs lie about. Walk up to one and press E to pick it up.',
     'Explore the sheds by the road. Supplies and a tape are inside: go in and search them with your flashlight (F).',
     "Feed Dras: at the water's edge, press E to throw her a fish pack. The more you feed her, the hungrier she gets, and the more she helps you at night.",
-    'Keep moving downstream and follow the river. Click to shoot your bow.',
+    'Keep moving downstream and follow the river. Hold Shift to run. Click to shoot your bow.',
   ],
   shack: [
     'It is pitch black in here.',
