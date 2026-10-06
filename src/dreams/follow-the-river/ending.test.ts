@@ -91,6 +91,7 @@ describe('ending steps', () => {
       'Stylized Nature MegaKit',
       'Poly Haven',
       'Free Firearm Sound Library',
+      'Medieval Sound Effects',
       'Ben Jaszczak',
       'Brian Nelson',
       'Kevin Heras',
