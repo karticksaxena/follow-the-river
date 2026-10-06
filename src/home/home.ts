@@ -1,5 +1,6 @@
 import type * as THREE from 'three/webgpu';
 import type { App } from '../app';
+import { dreamFromSearch } from '../dreams/deepLink';
 import { DREAMS } from '../dreams/registry';
 import type { DreamInfo } from '../dreams/types';
 import { disposeScene } from '../engine/dispose';
@@ -122,7 +123,9 @@ export async function startHome(app: App, play: Play): Promise<HomeHandle> {
     };
     await tweenCamera(stage, room.view, to, 3.5);
     send('risen');
-    showCards();
+    const linked = dreamFromSearch(location.search, DREAMS);
+    if (linked && send('pick')) showWarning(linked);
+    else showCards();
   };
 
   overlay.panel((panel) => {
