@@ -42,6 +42,12 @@ export const FALL_SECONDS = 3;
 /** A lying zombie wakes when the player is this close (m) or makes noise, then takes RISE_SECONDS to get up. */
 export const WAKE = 4;
 export const RISE_SECONDS = 1.2;
+/** A deep sleeper (in a tent) wakes only when the player is this close (m): at the tent mouth. */
+export const TENT_WAKE = 1.8;
+/** Seconds without light before a dazzled zombie can be stunned again. */
+export const REARM_SECONDS = 1;
+/** Share of its speed a zombie keeps while the torch stays on it after its stun. */
+export const LIT_SLOW = 0.45;
 /** `heard` is a one-frame pulse; a zombie keeps hunting this long after the last one. */
 export const HUNT_SECONDS = 8;
 
@@ -70,6 +76,11 @@ export interface Mind {
   timer: number;
   exposure: number;
   hunt: number;
+  /** Already stunned by the light that is still on it: no new stun until REARM_SECONDS of dark. */
+  dazzled: boolean;
+  unlit: number;
+  /** Sleeps through noise until the player is at the tent mouth. */
+  deep: boolean;
 }
 
 export interface Senses {
@@ -81,14 +92,19 @@ export interface Senses {
 export interface Thought {
   intent: Intent;
   hit: boolean;
+  /** Moving at LIT_SLOW of its speed (dazzled and still lit). */
+  slow?: boolean;
 }
 
 /** `lying`: starts on the ground (a corpse that isn't one — day scares). */
-export const newMind = (lying = false): Mind => ({
+export const newMind = (lying = false, deep = false): Mind => ({
   state: lying ? 'lying' : 'idle',
   timer: 0,
   exposure: 0,
   hunt: 0,
+  dazzled: false,
+  unlit: 0,
+  deep,
 });
 
 export function isAlive(mind: Mind): boolean {
@@ -123,13 +139,19 @@ export function seize(mind: Mind): boolean {
 function set(out: Thought, intent: Intent, hit = false): Thought {
   out.intent = intent;
   out.hit = hit;
+  out.slow = false;
   return out;
 }
 
 /** Light builds up exposure; anything short of a stun fades away. Returns true when stunned. */
 function lightUp(mind: Mind, lit: boolean, stun: Tuning['stun'], dt: number): boolean {
+  if (lit) mind.unlit = 0;
+  else if (mind.dazzled && (mind.unlit += dt) >= REARM_SECONDS) mind.dazzled = false;
+  if (mind.dazzled) return false;
   mind.exposure = lit ? mind.exposure + dt : Math.max(0, mind.exposure - dt);
   if (mind.exposure < stun.exposure) return false;
+  mind.dazzled = true;
+  mind.unlit = 0;
   mind.state = 'stunned';
   mind.timer = stun.seconds;
   mind.exposure = 0;
@@ -148,7 +170,10 @@ function ending(mind: Mind, dt: number, out: Thought): Thought {
 }
 
 function wake(mind: Mind, senses: Senses, out: Thought): Thought {
-  if (senses.distance >= WAKE && !senses.heard) return set(out, 'lie');
+  const asleep = mind.deep
+    ? senses.distance >= TENT_WAKE
+    : senses.distance >= WAKE && !senses.heard;
+  if (asleep) return set(out, 'lie');
   mind.state = 'rising';
   mind.timer = RISE_SECONDS;
   mind.exposure = 0;
@@ -167,6 +192,11 @@ function chase(mind: Mind, senses: Senses, tuning: Tuning, dt: number, out: Thou
     mind.state = 'attack';
     mind.timer = ATTACK.windup;
     return set(out, 'strike');
+  }
+  if (mind.dazzled && senses.lit) {
+    set(out, 'walk');
+    out.slow = true;
+    return out;
   }
   return set(out, moveIntent(tuning));
 }

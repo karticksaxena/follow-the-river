@@ -304,6 +304,16 @@ export function waveCrates(area: AreaDef): PickupDef[] {
   });
 }
 
+/** Everything a night lays out: wave crates, edge supplies, the houses' supplies and its own extras. */
+export function nightPickups(area: AreaDef): PickupDef[] {
+  return [
+    ...waveCrates(area),
+    ...edgePickups(area),
+    ...(area.housePickups ?? []),
+    ...(area.nightPickups ?? []),
+  ];
+}
+
 /** Small supplies, three per zone, spread across the path (see `lootSpot`) so you run for them. */
 export function edgePickups(area: AreaDef): PickupDef[] {
   const kinds = ['ammo', 'arrows', 'ammo'] as const;
@@ -314,6 +324,12 @@ export function edgePickups(area: AreaDef): PickupDef[] {
     }),
   );
 }
+
+/** This far (m) back upstream of the furthest point reached, the goal line turns you round. Tuning knob. */
+export const BACKTRACK_M = 20;
+
+/** Downstream is -z: heading back means well above (upstream of) the furthest z reached. */
+export const backtracked = (z: number, furthestZ: number): boolean => z > furthestZ + BACKTRACK_M;
 
 /** The one line that says what to do; `wave` is the waves cleared (all of them: the lake is next). */
 export function objective(o: {
@@ -329,8 +345,11 @@ export function objective(o: {
   lake: boolean;
   /** The night has dark houses with ammo in them. */
   houses?: boolean;
+  /** The player is heading back upstream (see `backtracked`). */
+  backtracking?: boolean;
 }): string {
   if (o.ending) return o.endingGoal ?? '';
+  if (o.backtracking && !o.fighting) return 'Wrong way. Follow the river downstream.';
   if (!o.night)
     return 'Search the sheds for supplies. Feed Dras at the water. Rest by the fire when ready.';
   if (o.fighting && o.waiting) return 'They are waiting further on. Keep moving downstream.';

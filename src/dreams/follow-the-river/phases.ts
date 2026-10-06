@@ -23,7 +23,7 @@ import {
 } from './state';
 import { playTape } from './tapes';
 import { readWhileWarming, warmArea } from './warm';
-import { edgePickups, newWaveState, waveCrates } from './waves';
+import { newWaveState, nightPickups } from './waves';
 
 /** Lantern brightness at night (tuning knob); it is 0 by day. */
 const LANTERN_NIGHT = 6;
@@ -102,14 +102,12 @@ export function beginPhase(f: Flow): void {
   };
   fish.setSickness(sicknessAt(save.phase, run.live.eaten));
   sys.gates.set(cleared);
-  run.pickups = night
-    ? [...waveCrates(area), ...edgePickups(area), ...(area.housePickups ?? [])]
-    : spreadPickups(area);
+  run.pickups = night ? nightPickups(area) : spreadPickups(area);
   pickups.place(run.pickups, run.taken);
   horde.setHouses(area.shacks.map(shackInterior)); // zombies leave and enter through the doors
   if (!night)
     for (const l of area.lurkers)
-      horde.spawn(l.x, l.z, l.yaw, dayTuning(ctx.difficulty()), l.lying);
+      horde.spawn(l.x, l.z, l.yaw, dayTuning(ctx.difficulty()), l.lying, false, l.tent);
   sys.flashlight.on = night;
   const at = spawnFor(save.phase, area, cleared);
   ctx.player.teleport(at.x, at.z, at.yaw);

@@ -43,6 +43,8 @@ export interface LurkerDef {
   z: number;
   yaw: number;
   lying?: boolean;
+  /** Sleeps in a tent: ignores noise until the player is at the tent mouth. */
+  tent?: boolean;
 }
 export type ScareDef =
   | { kind: 'watcher'; x: number; z: number; trigger: number }
@@ -137,5 +139,7 @@ export interface AreaDef {
   lurkers: readonly LurkerDef[];
   /** Night supplies inside the night's houses (the wave crates and edge supplies come from waves.ts). */
   housePickups?: readonly PickupDef[];
+  /** Other night-only supplies (e.g. Night 3's spare battery near its start). */
+  nightPickups?: readonly PickupDef[];
   scares: readonly ScareDef[];
 }

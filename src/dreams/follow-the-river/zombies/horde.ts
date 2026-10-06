@@ -11,6 +11,7 @@ import {
   hitKills,
   isAlive,
   kill as killMind,
+  LIT_SLOW,
   newMind,
   seize as seizeMind,
   think,
@@ -42,6 +43,7 @@ export interface Horde {
     tuning: Tuning,
     lying?: boolean,
     sleeper?: boolean,
+    deep?: boolean,
   ): number;
   /** The buildings whose doors zombies walk through to reach a player on the other side of the walls. */
   setHouses(houses: readonly Interior[]): void;
@@ -132,11 +134,14 @@ function tick(
     if (t.intent === 'strike') h.voices.say(id, 1, true);
     else if (t.intent === 'fall') h.voices.say(id, 0.8, true);
   }
+  const fullSpeed = b.tuning.speed;
+  if (t.slow) b.tuning.speed = fullSpeed * LIT_SLOW; // body.move and the clip rate read it
   move(b, dt, player, h.grid, h.s);
   play(b, t.intent);
   if (t.intent === 'walk' || t.intent === 'run') {
     b.action?.setEffectiveTimeScale(timeScaleFor(CLIP_FOR[t.intent], b.tuning.speed));
   }
+  b.tuning.speed = fullSpeed;
   animate(b, t.intent, dt, player, senses.distance);
   b.root.position.set(b.x, b.y, b.z);
   b.root.rotation.y = b.yaw;
@@ -182,6 +187,7 @@ function spawnZombie(
   tuning: Tuning,
   lying: boolean,
   sleeper: boolean,
+  deep: boolean,
 ): number {
   const id = freeSlot(h.bodies);
   if (id < 0) return -1;
@@ -197,7 +203,7 @@ function spawnZombie(
   b.y = 0;
   b.z = z;
   b.yaw = yaw;
-  b.mind = newMind(lying);
+  b.mind = newMind(lying, deep);
   b.tuning.sight = tuning.sight;
   b.tuning.speed = tuning.speed;
   b.tuning.giveUp = tuning.giveUp;
@@ -385,8 +391,8 @@ export async function createHorde(
   const h = createState(scene, audio, grid, groans, capacity, { m, f });
   const { bodies } = h;
   return {
-    spawn: (x, z, yaw, tuning, lying = false, sleeper = false) =>
-      spawnZombie(h, x, z, yaw, tuning, lying, sleeper),
+    spawn: (x, z, yaw, tuning, lying = false, sleeper = false, deep = false) =>
+      spawnZombie(h, x, z, yaw, tuning, lying, sleeper, deep),
     setHouses(houses) {
       h.s.houses = houses;
     },

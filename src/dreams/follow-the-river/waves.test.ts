@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CITY } from './areas/city';
 import { FOREST } from './areas/forest';
 import { SUBURBS } from './areas/suburbs';
-import type { WaveDef } from './areas/types';
+import type { AreaDef, PickupDef, WaveDef } from './areas/types';
 import { NIGHT_DIFFICULTY } from './difficulty';
 import { spawnFor } from './flow';
 import { nearBox } from './houses';
@@ -11,11 +11,14 @@ import { shackBounds } from './shack';
 import {
   ambushPlace,
   ambushSpot,
+  BACKTRACK_M,
+  backtracked,
   edgePickups,
   fallbackSpot,
   inCone,
   isPlaced,
   newWaveState,
+  nightPickups,
   objective,
   passedBy,
   placeOk,
@@ -41,6 +44,8 @@ const first = (): WaveDef => {
   return w;
 };
 const N = { quota: 1, interval: 1 };
+const nightBatteries = (area: AreaDef): PickupDef[] =>
+  nightPickups(area).filter((p) => p.kind === 'battery');
 const standThenWalk = (t: number): number => (t < 1 ? -136 : -201);
 
 /** A test wave: 9 zombies, 3 of them in ambushes (the one at z -200 stays reserved). */
@@ -160,8 +165,17 @@ describe('waves', () => {
   it('keeps the planned quotas', () => {
     expect(CITY.waves.map((w) => w.quota)).toEqual([13, 17, 21]);
     expect(SUBURBS.waves.map((w) => w.quota)).toEqual([11, 14, 17]);
-    expect(FOREST.waves.map((w) => w.quota)).toEqual([13, 16]);
+    expect(FOREST.waves.map((w) => w.quota)).toEqual([18, 23]);
     expect(CITY.waves.map(waveTotal)).toEqual([5, 6, 10]);
+  });
+
+  it('the last night is the heaviest: Night 3 waves outnumber every earlier night, within its cap', () => {
+    const earlier = Math.max(...[...CITY.waves, ...SUBURBS.waves].map((w) => w.quota));
+    expect(FOREST.waves.every((w) => w.quota >= 18)).toBe(true);
+    expect(FOREST.waves[1]?.quota).toBeGreaterThan(earlier);
+    expect(Math.max(...FOREST.waves.map((w) => w.cap))).toBeLessThanOrEqual(
+      NIGHT_DIFFICULTY[3].cap,
+    );
   });
 
   it('Night 1 waves are 40% bigger, never alive past the night cap', () => {
@@ -392,6 +406,35 @@ describe('edge supplies and the objective', () => {
     expect(objective({ ...o, fighting: true, waiting: true })).toBe(
       'They are waiting further on. Keep moving downstream.',
     );
+  });
+
+  it('hands out spare batteries at night only in Night 1 and near the start of Night 3', () => {
+    expect(nightBatteries(CITY)).toHaveLength(1);
+    expect(nightBatteries(SUBURBS)).toHaveLength(0);
+    const [n3] = nightBatteries(FOREST);
+    expect(nightBatteries(FOREST)).toHaveLength(1);
+    const wave1 = FOREST.waves[0];
+    expect(n3 && wave1 && n3.z < FOREST.nightStart.z && n3.z > wave1.z - 20).toBe(true);
+    expect(n3 && n3.x > FOREST.landX + 1 && n3.x < EDGE_X).toBe(true);
+  });
+
+  it('turns you round when you head back upstream, unless a wave or the ending has its own line', () => {
+    const o = { night: true, fighting: false, wave: 1, waves: 3, ending: false, lake: false };
+    const back = 'Wrong way. Follow the river downstream.';
+    expect(objective({ ...o, backtracking: true })).toBe(back);
+    expect(objective({ ...o, night: false, backtracking: true })).toBe(back);
+    expect(objective({ ...o, lake: true, wave: 3, backtracking: true })).toBe(back);
+    expect(objective({ ...o, fighting: true, backtracking: true })).toMatch(/Kill them all/);
+    expect(
+      objective({ ...o, ending: true, endingGoal: 'Stay with Dras.', backtracking: true }),
+    ).toBe('Stay with Dras.');
+  });
+
+  it('counts as heading back only well upstream of the furthest point reached (downstream is -z)', () => {
+    expect(backtracked(-100, -100)).toBe(false);
+    expect(backtracked(-100 + BACKTRACK_M - 1, -100)).toBe(false);
+    expect(backtracked(-100 + BACKTRACK_M + 1, -100)).toBe(true);
+    expect(backtracked(-130, -100)).toBe(false);
   });
 
   it('never shows a count: no digits in any goal line', () => {

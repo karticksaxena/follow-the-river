@@ -238,8 +238,8 @@ const PICKUPS: readonly PickupDef[] = [
 
 const LURKERS: readonly LurkerDef[] = [
   // Campsite: lying in and beside the tents.
-  { x: -9, z: -22.2, yaw: FACE_DOOR, lying: true },
-  { x: -9.5, z: -30.2, yaw: FACE_DOOR, lying: true },
+  { x: -9, z: -22.2, yaw: FACE_DOOR, lying: true, tent: true },
+  { x: -9.5, z: -30.2, yaw: FACE_DOOR, lying: true, tent: true },
   { x: -6.5, z: -39, yaw: 0, lying: true },
   // The ambush: in the cabin's back corner, just over WAKE from the tape.
   { x: -16.2, z: -74.15, yaw: 0, lying: true },
@@ -264,39 +264,42 @@ export const FOREST: AreaDef = {
   landX: LAND_X,
   startZ: START_Z,
   endZ: END_Z,
-  // The lake's ending wave is the night's third.
+  // The lake's ending wave is the night's third. The last night is the heaviest: waves 1 and 2
+  // outnumber every earlier night's (Night 1: 13/17/21, Night 2: 11/14/17).
   waves: [
     {
       z: -134,
       gateZ: -239,
-      quota: 13,
-      every: [3, 4.5],
-      cap: 8,
-      faster: 0.2,
+      quota: 18,
+      every: [2.5, 4],
+      cap: 10,
+      faster: 0.25,
       ambushes: [
-        { z: -134, count: 3, kind: 'street' },
+        { z: -134, count: 4, kind: 'street' },
         { z: -156, count: 3, kind: 'cover', x: -16.5, at: -176 },
-        { z: -185, count: 2, kind: 'lying', x: -5, at: -210 },
-        { z: -210, count: 2, kind: 'behind' },
+        { z: -185, count: 3, kind: 'lying', x: -5, at: -210 },
+        { z: -210, count: 3, kind: 'behind' },
       ],
       crate: { x: -1 },
     },
     {
       z: -249,
       gateZ: -354,
-      quota: 16,
-      every: [2.5, 4],
-      cap: 10,
-      faster: 0.35,
+      quota: 23,
+      every: [2, 3.5],
+      cap: 12,
+      faster: 0.4,
       ambushes: [
-        { z: -249, count: 3, kind: 'street' },
-        { z: -270, count: 3, kind: 'cover', x: -16.5, at: -290 },
-        { z: -300, count: 3, kind: 'behind' },
+        { z: -249, count: 4, kind: 'street' },
+        { z: -270, count: 4, kind: 'cover', x: -16.5, at: -290 },
+        { z: -300, count: 4, kind: 'behind' },
         { z: -315, count: 3, kind: 'lying', x: -5, at: -335 },
       ],
       crate: { x: -1 },
     },
   ],
+  // The night's one spare battery, early on: Night 3 needs the torch on longer.
+  nightPickups: [{ id: 'n3-battery', kind: 'battery', x: -3, z: -129 }],
   gate: {
     row: { kit: 'nature', model: 'log_large', yaw: 0 },
     extra: { kit: 'nature', model: 'log_stack', yaw: 0.3, scale: 0.6 },

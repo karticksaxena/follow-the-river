@@ -10,12 +10,15 @@ import {
   kill,
   newMind,
   NIGHT_TUNING,
+  REARM_SECONDS,
   RISE_SECONDS,
   seize,
+  TENT_WAKE,
   think,
   throwByFish,
   THROWN_SECONDS,
   WAKE,
+  type Mind,
   type Senses,
   type Thought,
 } from './brain';
@@ -35,6 +38,20 @@ function run(
   for (let t = 0; t < seconds; t += 0.05) if (think(mind, senses, tuning, 0.05, out).hit) hits++;
   return { mind, hits, last: { ...out } };
 }
+
+const stunnedCount = (mind: Mind, seq: [Senses, number][]): number => {
+  let n = 0;
+  let was = mind.state === 'stunned';
+  for (const [senses, seconds] of seq) {
+    for (let t = 0; t < seconds; t += 0.05) {
+      think(mind, senses, NIGHT_TUNING, 0.05, out);
+      const now = mind.state === 'stunned';
+      if (now && !was) n++;
+      was = now;
+    }
+  }
+  return n;
+};
 
 describe('zombie brain', () => {
   it('stands still until the player comes close', () => {
@@ -213,5 +230,66 @@ describe('wounds and stuns', () => {
       think(m, { distance: 1, lit: true, heard: false }, t, 0.02, o);
     }
     expect(m.state).toBe('stunned');
+  });
+
+  describe('torchlight', () => {
+    const lit: Senses = { distance: 20, lit: true, heard: false };
+    const dark: Senses = { distance: 20, lit: false, heard: false };
+    it('stuns once under steady light, then walks slowly', () => {
+      const mind = newMind();
+      expect(stunnedCount(mind, [[lit, 5]])).toBe(1);
+      expect(out.intent).toBe('walk');
+      expect(out.slow).toBe(true);
+    });
+    it('does not re-stun after a short break, does after a long one', () => {
+      const short = newMind();
+      expect(
+        stunnedCount(short, [
+          [lit, 2],
+          [dark, REARM_SECONDS - 0.3],
+          [lit, 3],
+        ]),
+      ).toBe(1);
+      const long = newMind();
+      expect(
+        stunnedCount(long, [
+          [lit, 2],
+          [dark, REARM_SECONDS + 0.3],
+          [lit, 3],
+        ]),
+      ).toBe(2);
+    });
+    it('chases an unlit zombie at full speed', () => {
+      const mind = newMind();
+      stunnedCount(mind, [
+        [lit, 2],
+        [dark, 0.5],
+      ]);
+      expect(out.intent).toBe('run');
+      expect(out.slow).toBe(false);
+    });
+  });
+
+  describe('tent sleepers', () => {
+    it('ignore noise and stay lying at 3 m, wake at the tent mouth', () => {
+      const mind = newMind(true, true);
+      think(mind, { distance: 3.5, lit: false, heard: true }, DAY_TUNING, 0.05, out);
+      expect(mind.state).toBe('lying');
+      think(mind, { distance: TENT_WAKE - 0.3, lit: false, heard: false }, DAY_TUNING, 0.05, out);
+      expect(mind.state).toBe('rising');
+    });
+    it('an ordinary lurker still wakes at WAKE or on noise', () => {
+      const a = newMind(true);
+      think(a, { distance: WAKE - 0.5, lit: false, heard: false }, DAY_TUNING, 0.05, out);
+      expect(a.state).toBe('rising');
+      const b = newMind(true);
+      think(b, { distance: 30, lit: false, heard: true }, DAY_TUNING, 0.05, out);
+      expect(b.state).toBe('rising');
+    });
+    it('a hit still wakes a tent sleeper', () => {
+      const mind = newMind(true, true);
+      flinch(mind);
+      expect(mind.state).toBe('rising');
+    });
   });
 });

@@ -24,7 +24,7 @@ import type { Events, Run, Systems } from './run';
 import { shackBounds } from './shack';
 import { addSupply, AMMO_OF, chapterOf, isNight } from './state';
 import { setWaterTier } from './water';
-import { objective, reservedFrom, type SpawnView } from './waves';
+import { backtracked, objective, reservedFrom, type SpawnView } from './waves';
 import type { Tuning } from './zombies/brain';
 import type { PlayerSense } from './zombies/horde';
 
@@ -90,6 +90,8 @@ export interface State {
   cutscene: boolean;
   torchBefore: boolean;
   wasInShack: boolean;
+  /** The furthest downstream (lowest) z reached this phase: the goal line turns you round well behind it. */
+  furthestZ: number;
   blocked: (x: number, z: number) => boolean;
   onHit: (damage: number) => void;
 }
@@ -165,6 +167,7 @@ export function createState(sys: Systems, run: Run, events: Events): State {
     cutscene: false,
     torchBefore: false,
     wasInShack: false,
+    furthestZ: Infinity,
     blocked(x, z) {
       if (nearBox(state.houses, x, z, SPAWN_CLEARANCE)) return true;
       for (const box of grid.near(x, z, 1)) {
@@ -325,6 +328,8 @@ function tickView(p: State, dt: number): void {
   goalIn.waiting = fighting && isWaiting(p);
   goalIn.lake = sys.area.lake !== undefined;
   goalIn.houses = sys.area.housePickups !== undefined;
+  p.furthestZ = Math.min(p.furthestZ, sense.z);
+  goalIn.backtracking = backtracked(sense.z, p.furthestZ);
   hudState.goal = objective(goalIn);
   sys.hud.set(hudState);
   sys.hud.prompt(p.controls.prompt());
@@ -397,6 +402,7 @@ export function createPlay(sys: Systems, run: Run, events: Events): Play {
       p.sleeperN = 0;
       p.toldAboutWait = false;
       p.wasInShack = false;
+      p.furthestZ = Infinity; // set from the spawn point on the first frame
       p.hitPause = false;
       p.grace = 0;
       p.sys.armory.reset();
