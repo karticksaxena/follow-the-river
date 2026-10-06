@@ -455,7 +455,8 @@ export async function runIntro(
   ctx.stage.scene = sc.scene;
   ctx.grade('dusk');
   prepareVoices(ctx.audio, Object.values(INTRO_PAGES).flat(), introVoice); // the TV and Mom lines, synthesized behind black
-  await warmIntro(ctx, sc); // the transition is still black: every spot's first frames build here
+  const stopLoading = ctx.overlay.loading();
+  await warmIntro(ctx, sc).finally(stopLoading); // the transition is still black: every spot's first frames build here
 
   return {
     dispose() {

@@ -94,10 +94,10 @@ export async function startHome(app: App, play: Play): Promise<HomeHandle> {
     if (!send('confirm')) return;
     overlay.closePanel();
     await overlay.fade(true);
-    overlay.panel((panel) => panel.append(el('p', 'big', 'Falling asleep…')));
-    const error = await play(info).catch(
-      () => `Something went wrong starting "${info.title}". Please try again.`,
-    );
+    const stopLoading = overlay.loading('Falling asleep…'); // the moving ring, over the black fader
+    const error = await play(info)
+      .catch(() => `Something went wrong starting "${info.title}". Please try again.`)
+      .finally(stopLoading);
     if (error === null) return void send('loaded');
     send('load-failed');
     await overlay.fade(false);

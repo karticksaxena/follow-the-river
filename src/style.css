@@ -283,6 +283,7 @@ h1.title {
 }
 .loader p {
   margin: 0;
+  animation: loader-breathe 2.4s ease-in-out infinite;
 }
 .loader-ring {
   width: 34px;
@@ -295,6 +296,20 @@ h1.title {
 @keyframes loader-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+@keyframes loader-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+/* Reduced motion: slower, never still (the ring is transform-only and keeps turning off the main thread). */
+@media (prefers-reduced-motion: reduce) {
+  .loader-ring {
+    animation-duration: 6s;
+  }
+  .loader p {
+    animation-duration: 5s;
   }
 }
 #overlay.loading .hud {
