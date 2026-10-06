@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { warmEnvironment } from './environment';
 import type { Stage } from './stage';
 
 /** Longest the game waits for the GPU to go idle behind black (ms). A guard, never a gate. */
@@ -55,7 +56,7 @@ export async function drawBehind(stage: Stage, n = BEHIND_FRAMES): Promise<void>
   const was = stage.warming;
   stage.warming = true;
   try {
-    if (stage.backend === 'webgl2') await revealInBatches(stage);
+    if (stage.backend === 'webgl2') await revealInBatches(stage); // also builds the sky-lighting programs
     await frames(stage, n);
     await gpuIdle(stage.renderer);
   } finally {
@@ -112,6 +113,7 @@ function unrevealed(root: THREE.Object3D): Map<THREE.Material, Drawable[]> {
  */
 export async function revealInBatches(stage: Stage): Promise<void> {
   if (stage.backend !== 'webgl2' || stage.hold) return;
+  warmEnvironment(); // the sky-lighting refresh's programs build now, not at the first lighting change
   const groups = unrevealed(stage.scene);
   const hidden = new Set<Drawable>();
   for (const list of groups.values()) for (const o of list) hidden.add(o);

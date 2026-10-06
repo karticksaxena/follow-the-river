@@ -1,6 +1,7 @@
 /* oxlint-disable typescript/no-unsafe-type-assertion -- partial fake of the Stage */
 import { describe, expect, it, vi } from 'vitest';
-import { drawBehind, GPU_IDLE_TIMEOUT_MS, gpuIdle, splitBatches } from './frames';
+import * as environment from './environment';
+import { drawBehind, GPU_IDLE_TIMEOUT_MS, gpuIdle, revealInBatches, splitBatches } from './frames';
 import type { Stage } from './stage';
 
 interface Fake {
@@ -61,6 +62,18 @@ describe('drawBehind', () => {
     const f = fake(true);
     await drawBehind(f.stage, 3);
     expect(f.raw.warming).toBe(false);
+  });
+});
+
+describe('WebGL 2 warm-up builds the sky-lighting programs', () => {
+  it('revealInBatches runs the environment warm-up once before drawing', async () => {
+    const warm = vi.spyOn(environment, 'warmEnvironment').mockImplementation(() => undefined);
+    const f = fake();
+    (f.raw as unknown as { backend: string }).backend = 'webgl2';
+    (f.raw as unknown as { scene: object }).scene = { traverse: () => undefined };
+    await revealInBatches(f.stage);
+    expect(warm).toHaveBeenCalledTimes(1);
+    warm.mockRestore();
   });
 });
 

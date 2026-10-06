@@ -22,6 +22,7 @@ import * as THREE from 'three/webgpu';
 import { TIERS, type Tier } from '../../engine/quality';
 import { withoutShadowUpdates } from '../../engine/shadows';
 import { NO_REFLECTION_LAYER } from '../../engine/volume';
+import { isWarming } from '../../engine/warming';
 
 /** Downstream speed in m/s and the water's colours. Tuning knobs. */
 export const RIVER_FLOW = {
@@ -297,7 +298,8 @@ function newReflection(materials: ReadonlySet<THREE.Material>): THREE.ReflectorN
   };
   const drawHidden = (): void => withHidden(materials, draw);
   base.updateBefore = (frame) => {
-    const inView = !frame.camera || waterInView(materials, frame.camera);
+    // A warm-up draws whatever the view: the reflection's programs must build behind black.
+    const inView = isWarming() || !frame.camera || waterInView(materials, frame.camera);
     const halfRate = waterTier === 'medium' && !reflectionSharp;
     const due = reflectionDue(inView, stale, halfRate, frameNo++);
     stale = !inView; // a frame with no water in view leaves an old texture: redraw at once when it returns

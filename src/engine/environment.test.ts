@@ -1,7 +1,7 @@
 /* oxlint-disable vitest/require-mock-type-parameters, typescript/no-unsafe-type-assertion -- partial fakes of the renderer and render targets */
 import * as THREE from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
-import { initEnvironment, refreshEnvironment } from './environment';
+import { initEnvironment, refreshEnvironment, warmEnvironment } from './environment';
 
 describe('refreshEnvironment', () => {
   it('re-renders into the same target, so scene.environment stays the same texture (no recompile)', () => {
@@ -24,6 +24,21 @@ describe('refreshEnvironment', () => {
     expect(scene.environment).toBe(first); // the same texture object every time
     expect(made).toHaveLength(1); // one target, re-rendered
     expect(scene.environmentIntensity).toBe(0.4);
+    fromScene.mockRestore();
+  });
+});
+
+describe('warmEnvironment', () => {
+  it('captures once per rig, frees the target and leaves every scene alone', () => {
+    const dispose = vi.fn();
+    const fromScene = vi
+      .spyOn(THREE.PMREMGenerator.prototype, 'fromScene')
+      .mockReturnValue({ texture: new THREE.Texture(), dispose } as unknown as THREE.RenderTarget);
+    initEnvironment({} as THREE.WebGPURenderer);
+    warmEnvironment();
+    warmEnvironment();
+    expect(fromScene).toHaveBeenCalledTimes(1);
+    expect(dispose).toHaveBeenCalledTimes(1);
     fromScene.mockRestore();
   });
 });

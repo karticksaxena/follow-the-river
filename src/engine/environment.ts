@@ -27,6 +27,7 @@ export function initEnvironment(renderer: THREE.WebGPURenderer): void {
   const scene = new THREE.Scene();
   const dome = createSkyDome(0, 0, ENV_DOME);
   scene.add(dome);
+  warmed = false;
   rig = { generator: new THREE.PMREMGenerator(renderer), scene, dome };
 }
 
@@ -57,6 +58,19 @@ export function refreshEnvironment(
   kept?.dispose();
   targets.set(scene, target);
   scene.environment = target.texture;
+}
+
+let warmed = false;
+
+/**
+ * Builds the PMREM programs once (a throwaway capture of the rig's dome, touching no scene). They do
+ * not depend on the look, so one warm-up behind black makes every later `refreshEnvironment` in play
+ * free of compiles (on WebGL 2 each program links in the frame that first uses it). No-op after that.
+ */
+export function warmEnvironment(): void {
+  if (!rig || warmed) return;
+  warmed = true;
+  rig.generator.fromScene(rig.scene, 0, 0.1, FAR, { size: SIZE }).dispose();
 }
 
 /** Frees a scene's environment map (called when the scene is disposed). */

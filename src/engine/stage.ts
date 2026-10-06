@@ -28,6 +28,7 @@ import { setSurfaceTier } from './surfaces';
 import { clampDelta } from './time';
 import { runUpdaters, type Updater } from './updaters';
 import { NO_REFLECTION_LAYER } from './volume';
+import { setWarmingFlag } from './warming';
 
 /** DEV: frames longer than this (s) are logged in `window.__kdLong`. */
 const LONG_FRAME = 0.05;
@@ -147,6 +148,7 @@ export async function createStage(container: HTMLElement): Promise<Stage> {
     },
     set warming(on) {
       warming = on;
+      setWarmingFlag(on);
       if (on) applyDue();
     },
     quality,
