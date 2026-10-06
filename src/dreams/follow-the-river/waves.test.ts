@@ -352,18 +352,15 @@ describe('edge supplies and the objective', () => {
     expect(list).toHaveLength(CITY.waves.length * 3);
     expect(list.map((p) => p.kind).slice(0, 3)).toEqual(['ammo', 'arrows', 'ammo']);
     expect(new Set(list.map((p) => p.id)).size).toBe(list.length);
-    expect(list.slice(0, 3).map((p) => p.z)).toEqual([
-      first().z - 25,
-      first().z - 55,
-      first().z - 85,
-    ]);
+    list.slice(0, 3).forEach((p, k) => {
+      expect(Math.abs(p.z - (first().z - 25 - k * 30))).toBeLessThanOrEqual(1.5);
+    });
   });
 
   it('spreads them across the strip, clear of shacks, houses and solid props', () => {
     for (const area of [CITY, SUBURBS, FOREST]) {
       const list = edgePickups(area);
       expect(new Set(list.map((p) => p.x)).size).toBeGreaterThanOrEqual(3);
-      expect(list.some((p) => p.x > EDGE_X - 1)).toBe(true);
       const solids = area.props.filter((q) => q.collide);
       const bounds = area.shacks.map(shackBounds);
       const bad = list.filter(

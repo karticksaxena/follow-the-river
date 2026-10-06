@@ -6,6 +6,7 @@ import { styleFor } from './fish';
 import { MAX_HEALTH, phaseTitle, spawnFor, waitQuestion } from './flow';
 import { HINTS, type HintId } from './hints';
 import { applyLighting, LIGHTING, setFogFar } from './lighting';
+import { spreadPickups } from './loot';
 import { sicknessAt } from './orca-sick';
 import type { Run, Systems } from './run';
 import { shackAt } from './scares';
@@ -103,7 +104,7 @@ export function beginPhase(f: Flow): void {
   sys.gates.set(cleared);
   run.pickups = night
     ? [...waveCrates(area), ...edgePickups(area), ...(area.housePickups ?? [])]
-    : area.pickups;
+    : spreadPickups(area);
   pickups.place(run.pickups, run.taken);
   horde.setHouses(area.shacks.map(shackInterior)); // zombies leave and enter through the doors
   if (!night)

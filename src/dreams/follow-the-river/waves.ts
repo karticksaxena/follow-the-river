@@ -3,10 +3,10 @@ import { boxAt, type Box } from '../../engine/collide';
 import { loadModel } from '../../engine/models';
 import type { AmbushDef, AreaDef, GatePiece, PickupDef, WaveDef } from './areas/types';
 import type { DifficultyTuning } from './difficulty';
-import { HOUSE_CLEARANCE, houseSpot, nearBox } from './houses';
+import { houseSpot } from './houses';
 import { KIT_SCALE, kitUrl } from './kits';
+import { lootSpot } from './loot';
 import { EDGE_X } from './river';
-import { shackBounds } from './shack';
 
 /**
  * A night is fought in waves (Kartik, Plan 6), each a string of ambushes set off along the zone
@@ -304,28 +304,13 @@ export function waveCrates(area: AreaDef): PickupDef[] {
   });
 }
 
-/** Where the small supplies lie across the strip (m): the road; this far in from the land side; and the spot used there when a house is in the way. */
-const ROAD_PICKUP_X = -5;
-const LAND_PICKUP_INSET = 3;
-const LAND_PICKUP_FALLBACK_X = -8;
-
-/** Small supplies, three per zone, spread across the strip (road, river edge, land side) so you run for them. */
+/** Small supplies, three per zone, spread across the path (see `lootSpot`) so you run for them. */
 export function edgePickups(area: AreaDef): PickupDef[] {
   const kinds = ['ammo', 'arrows', 'ammo'] as const;
-  const houses = area.shacks.map(shackBounds);
-  const land = area.landX + LAND_PICKUP_INSET;
-  const lanes = [ROAD_PICKUP_X, EDGE_X - 0.45, land] as const;
   return area.waves.flatMap((w, i) =>
     kinds.map((kind, k) => {
-      const z = w.z - 25 - k * 30;
-      const x = lanes[(i + k) % lanes.length] ?? ROAD_PICKUP_X;
-      const blocked = x === land && nearBox(houses, x, z, HOUSE_CLEARANCE);
-      return {
-        id: `${area.id}-edge-${i + 1}-${k + 1}`,
-        kind,
-        x: blocked ? LAND_PICKUP_FALLBACK_X : x,
-        z,
-      };
+      const id = `${area.id}-edge-${i + 1}-${k + 1}`;
+      return { id, kind, ...lootSpot(area, id, w.z - 25 - k * 30) };
     }),
   );
 }
