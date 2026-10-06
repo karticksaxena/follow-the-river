@@ -93,3 +93,17 @@ export async function loadArm(): Promise<THREE.Object3D> {
   arm.traverse((n) => (n.frustumCulled = false));
   return arm;
 }
+
+/** Warm-up: the arm on, held up in front of its camera (not at the lens, where it is clipped), so it compiles on screen; returns the undo. */
+export function warmArm(arm: THREE.Object3D): () => void {
+  const { visible, position, quaternion } = arm;
+  const was = { visible, position: position.clone(), quaternion: quaternion.clone() };
+  arm.visible = true;
+  arm.position.set(0.15, -0.2, -0.6);
+  arm.quaternion.setFromAxisAngle(UP, Math.PI); // fingers (+Z) away from the camera
+  return () => {
+    arm.visible = was.visible;
+    arm.position.copy(was.position);
+    arm.quaternion.copy(was.quaternion);
+  };
+}

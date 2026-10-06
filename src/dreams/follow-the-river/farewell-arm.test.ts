@@ -1,7 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
 import { shoreFor } from './ending-farewell';
-import { handOnHer, placeArm } from './farewell-arm';
+import { handOnHer, placeArm, warmArm } from './farewell-arm';
 import { shotsFor } from './farewell-shots';
 
 function rig(): { camera: THREE.PerspectiveCamera; arm: THREE.Group } {
@@ -114,5 +114,21 @@ describe('the hand on her skin, seen from the kneel', () => {
     expect(down.normalize().dot(into)).toBeGreaterThan(0.99);
     expect(Math.abs(along.clone().normalize().dot(into))).toBeLessThan(0.05);
     expect(new THREE.Vector3(...shots.hand).sub(target).dot(into)).toBeCloseTo(0.07);
+  });
+});
+
+describe('warmArm', () => {
+  it('shows the arm in front of the camera and the undo puts it back', () => {
+    const { camera, arm } = rig();
+    arm.position.set(1, 2, 3);
+    arm.visible = false;
+    const undo = warmArm(arm);
+    expect(arm.visible).toBe(true);
+    const ahead = world(arm, new THREE.Vector3(0, 0, 0));
+    camera.worldToLocal(ahead);
+    expect(ahead.z).toBeLessThan(-0.3);
+    undo();
+    expect(arm.visible).toBe(false);
+    expect(arm.position.toArray()).toEqual([1, 2, 3]);
   });
 });

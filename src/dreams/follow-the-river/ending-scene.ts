@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { loadSkinned } from '../../engine/models';
-import { loadArm } from './farewell-arm';
+import { loadArm, warmArm } from './farewell-arm';
 import { TORCH_EXPOSURE, torchScale, WATCH } from './flashlight';
 import { createCharacter, type Character } from './intro-scene';
 import { characterUrl } from './kits';
@@ -232,14 +232,16 @@ export async function buildEndingScene(sys: Systems): Promise<EndingScene> {
       setWaterReflectionSharp(false);
     },
     warmShow() {
-      const shown = [mom.group, kartik.group, mom.pack, arm];
+      const shown = [mom.group, kartik.group, mom.pack];
       const before = shown.map((o) => o.visible);
       for (const o of shown) o.visible = true;
+      const undoArm = warmArm(arm);
       setWaterReflectionSharp(true); // the farewell's mirror is a bigger target: it builds now, not at the farewell
       moon.intensity = FAREWELL_LIGHT.moon.intensity;
       fill.intensity = FAREWELL_LIGHT.fill.intensity;
       return () => {
         shown.forEach((o, i) => (o.visible = before[i] ?? false));
+        undoArm();
         setWaterReflectionSharp(false);
         moon.intensity = fill.intensity = 0;
       };
