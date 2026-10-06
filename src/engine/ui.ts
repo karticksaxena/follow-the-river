@@ -1,5 +1,6 @@
 /** Small DOM helpers. Text always goes through textContent, never innerHTML. */
-import { createLoadingState } from './loader';
+import { DefaultLoadingManager } from 'three/webgpu';
+import { createLoadingState, trackProgress } from './loader';
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -45,10 +46,20 @@ export function createOverlay(root: HTMLElement): Overlay {
   const loader = el('div', 'loader');
   loader.append(el('div', 'loader-ring'), label);
   root.append(loader);
+  let base: string | null = null;
+  // Every GLTF/texture load goes through three's default manager: show its progress on the label.
+  trackProgress(
+    DefaultLoadingManager,
+    () => base,
+    (text) => void (label.textContent = text),
+  );
   let current: HTMLElement | null = null;
   let aside: HTMLElement | null = null;
   const state = createLoadingState(
-    (busy) => root.classList.toggle('loading', busy),
+    (busy) => {
+      root.classList.toggle('loading', busy);
+      if (!busy) base = null;
+    },
     (visible) => loader.classList.toggle('on', visible),
   );
   return {
@@ -68,6 +79,7 @@ export function createOverlay(root: HTMLElement): Overlay {
     },
     loading(text = 'Loading…') {
       label.textContent = text;
+      base = text;
       return state.start();
     },
     closePanel() {

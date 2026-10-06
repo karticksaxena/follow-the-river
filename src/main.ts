@@ -5,6 +5,7 @@ import { createAudioBus } from './engine/audio';
 import { isDesktop } from './engine/device';
 import { HIGH_PERFORMANCE_TIP, isWindows, shouldTipHighPerformance } from './engine/gpu-class';
 import { KeyState } from './engine/input';
+import { endBootLoader } from './engine/loader';
 import { showMessage, showPages, showUnsupported } from './engine/menus';
 import { browserStorage, createSaveStore } from './engine/save';
 import { clampSettings, isSettings, loadSettings } from './engine/settings';
@@ -95,4 +96,4 @@ async function boot(): Promise<void> {
   await goHome();
 }
 
-void boot();
+void boot().finally(() => endBootLoader(document));

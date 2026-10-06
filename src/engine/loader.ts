@@ -35,3 +35,61 @@ export function createLoadingState(
     },
   };
 }
+
+/** Loader label refresh at most this often while a download reports progress (ms). Tuning knob. */
+export const PROGRESS_INTERVAL_MS = 250;
+
+/** Integer percent of items loaded, clamped to 0..100 and never below `prev` (totals grow as items queue). */
+export function progressPercent(loaded: number, total: number, prev = 0): number {
+  const raw = total > 0 && Number.isFinite(loaded / total) ? Math.floor((loaded / total) * 100) : 0;
+  return Math.max(prev, Math.min(100, Math.max(0, raw)));
+}
+
+/** The label with a percent: "Falling asleep… 45%". */
+export const progressLabel = (base: string, percent: number): string => `${base} ${percent}%`;
+
+/** Shown once every download is done but shaders are still compiling: no number to sit at 100%. */
+export const READY_LABEL = 'Getting ready…';
+
+/** The slice of three's LoadingManager the tracker uses. */
+export interface ProgressSource {
+  onStart?: (url: string, loaded: number, total: number) => void;
+  onProgress?: (url: string, loaded: number, total: number) => void;
+  onLoad?: () => void;
+}
+
+/**
+ * Wires a loading manager to a label: percent while downloads run (throttled), `READY_LABEL` when they end.
+ * `text()` is the wait's base label, or null when no wait is on (then nothing is written).
+ */
+export function trackProgress(
+  source: ProgressSource,
+  text: () => string | null,
+  write: (label: string) => void,
+  now: () => number = () => performance.now(),
+): void {
+  let best = 0;
+  let last = -Infinity;
+  source.onStart = () => {
+    best = 0;
+    last = -Infinity;
+  };
+  source.onProgress = (_url: string, loaded: number, total: number) => {
+    const base = text();
+    const t = now();
+    if (base === null || t - last < PROGRESS_INTERVAL_MS) return;
+    last = t;
+    best = progressPercent(loaded, total, best);
+    write(progressLabel(base, best));
+  };
+  source.onLoad = () => {
+    if (text() !== null && best > 0) write(READY_LABEL);
+  };
+}
+
+/** Takes the page's first-paint loader (index.html) away; the title or an error message is ready behind it. */
+export function endBootLoader(doc: {
+  getElementById(id: string): { remove(): void } | null;
+}): void {
+  doc.getElementById('boot-loader')?.remove();
+}

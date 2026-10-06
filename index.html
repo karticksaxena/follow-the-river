@@ -5,9 +5,65 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Short first-person horror games made from real dreams." />
     <title>Kartik's Dreams</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+      }
+      #boot-loader {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #000;
+        color: #a9a6b8;
+        font:
+          20px/1.55 'Courier New',
+          monospace;
+      }
+      #boot-loader div {
+        width: 34px;
+        height: 34px;
+        border: 2px solid #2a2840;
+        border-top-color: #a9a6b8;
+        border-radius: 50%;
+        animation: boot-spin 1.6s linear infinite;
+      }
+      #boot-loader p {
+        margin: 0;
+        animation: boot-breathe 2.4s ease-in-out infinite;
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes boot-breathe {
+        50% {
+          opacity: 0.45;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-loader div {
+          animation-duration: 6s;
+        }
+        #boot-loader p {
+          animation-duration: 5s;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>
+    <div id="boot-loader">
+      <div></div>
+      <p>Loading…</p>
+    </div>
     <div id="overlay"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
